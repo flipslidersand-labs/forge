@@ -53,6 +53,17 @@ pip install -e ".[llm]"   # LLM 候補生成を使う場合（任意。anthropic
 > （例: ドライバが CUDA 12.x なら
 > `pip install torch --index-url https://download.pytorch.org/whl/cu121`）。
 
+## Discord 通知（オプション）
+
+最適化完了時や エラー時に Discord に通知するには、環境変数を設定：
+
+```bash
+export DISCORD_WEBHOOK_COMPLETION="https://discordapp.com/api/webhooks/..."
+export DISCORD_WEBHOOK_ERRORS="https://discordapp.com/api/webhooks/..."
+```
+
+設定しない場合は通知されません（処理に影響なし）。
+
 ## 使い方
 
 ### デコレータ
