@@ -162,10 +162,13 @@ class Orchestrator:
                 python_executable=self.python_executable,
             )
             for eb in extended:
-                self._progress(
-                    f"  extended: {eb.name} median={eb.benchmark.median_us:.1f}µs "
-                    f"p95={eb.benchmark.p95_us:.1f}µs compile={eb.compile_time_s:.1f}s"
-                )
+                if eb.failed:
+                    self._progress(f"  extended: {eb.name} FAILED: {eb.error}")
+                else:
+                    self._progress(
+                        f"  extended: {eb.name} median={eb.benchmark.median_us:.1f}µs "
+                        f"p95={eb.benchmark.p95_us:.1f}µs compile={eb.compile_time_s:.1f}s"
+                    )
 
         search = search or GridSearch()
         candidates = search.generate(spec, key.compute_capability, budget=budget)
@@ -265,10 +268,13 @@ class Orchestrator:
                 python_executable=self.python_executable,
             )
             for eb in extended:
-                self._progress(
-                    f"  extended: {eb.name} median={eb.benchmark.median_us:.1f}µs "
-                    f"p95={eb.benchmark.p95_us:.1f}µs compile={eb.compile_time_s:.1f}s"
-                )
+                if eb.failed:
+                    self._progress(f"  extended: {eb.name} FAILED: {eb.error}")
+                else:
+                    self._progress(
+                        f"  extended: {eb.name} median={eb.benchmark.median_us:.1f}µs "
+                        f"p95={eb.benchmark.p95_us:.1f}µs compile={eb.compile_time_s:.1f}s"
+                    )
 
         history: list[HistoryEntry] = []
         rounds: list[RoundResult] = []

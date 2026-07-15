@@ -123,3 +123,37 @@ class TestExtendedBaselineResult:
             {"name": "x", "benchmark": bench.to_dict()}
         )
         assert r.compile_time_s == 0.0
+
+    def test_error_field_roundtrip(self) -> None:
+        bench = BenchmarkResult.from_samples([0.0], warmup=0, repeat=1)
+        r = ExtendedBaselineResult(
+            name="torch.compile(reference)",
+            benchmark=bench,
+            compile_time_s=0.0,
+            error="RuntimeError: CUDA not available",
+        )
+        d = r.to_dict()
+        assert d["error"] == "RuntimeError: CUDA not available"
+        r2 = ExtendedBaselineResult.from_dict(d)
+        assert r2.error == "RuntimeError: CUDA not available"
+        assert r2.failed is True
+
+    def test_no_error_field_not_in_dict(self) -> None:
+        r = self._make()
+        d = r.to_dict()
+        assert "error" not in d
+
+    def test_failed_property_true_when_error(self) -> None:
+        bench = BenchmarkResult.from_samples([0.0], warmup=0, repeat=1)
+        r = ExtendedBaselineResult(name="x", benchmark=bench, error="something went wrong")
+        assert r.failed is True
+
+    def test_failed_property_false_when_success(self) -> None:
+        r = self._make()
+        assert r.failed is False
+
+    def test_from_dict_without_error_field_is_success(self) -> None:
+        bench = BenchmarkResult.from_samples([10.0], warmup=0, repeat=1)
+        r = ExtendedBaselineResult.from_dict({"name": "x", "benchmark": bench.to_dict()})
+        assert r.error is None
+        assert r.failed is False

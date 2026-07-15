@@ -11,18 +11,30 @@ from forge.benchmark.statistics import BenchmarkResult
 
 @dataclass
 class ExtendedBaselineResult:
-    """torch.compile 等の重い baseline を 1 回だけ計測した結果。"""
+    """torch.compile 等の重い baseline を 1 回だけ計測した結果。
+
+    計測に失敗した場合は ``error`` フィールドに理由が入り、``benchmark`` の値は
+    すべて 0 になる。利用側は ``eb.failed`` を確認してから数値を使うこと。
+    """
 
     name: str
     benchmark: BenchmarkResult
     compile_time_s: float = 0.0
+    error: str | None = None
+
+    @property
+    def failed(self) -> bool:
+        return self.error is not None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        d: dict[str, Any] = {
             "name": self.name,
             "benchmark": self.benchmark.to_dict(),
             "compile_time_s": self.compile_time_s,
         }
+        if self.error is not None:
+            d["error"] = self.error
+        return d
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> ExtendedBaselineResult:
@@ -30,6 +42,7 @@ class ExtendedBaselineResult:
             name=str(d["name"]),
             benchmark=BenchmarkResult.from_dict(d["benchmark"]),
             compile_time_s=float(d.get("compile_time_s", 0.0)),
+            error=d.get("error"),
         )
 
 
