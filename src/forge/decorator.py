@@ -12,6 +12,7 @@ from forge.ir.tensor_spec import TensorSpec
 from forge.lowering import identify
 from forge.orchestrator import Orchestrator
 from forge.runtime.loader import load_kernel_fn
+from forge.search.adoption import should_run_search
 from forge.search.candidate import CandidateGenerator
 
 
@@ -23,6 +24,7 @@ def optimize(
     repo: KernelRepository | None = None,
     search: CandidateGenerator | None = None,
     min_speedup: float = 1.03,
+    min_invocations: int = 0,
     python_executable: str | None = None,
     progress: Callable[[str], None] | None = None,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
@@ -34,7 +36,9 @@ def optimize(
     再探索するが SQLite キャッシュにヒットすれば即座に返る。
 
     判定不能・最適化で速くならない場合は元の eager 関数にフォールバックする。
-    backend/objective は将来拡張用の予約引数（現状は triton/latency 固定）。
+
+    objective="economic" かつ min_invocations > 0 のとき、探索コストが回収できない
+    と判断した場合は探索をスキップして eager にフォールバックする。
     """
 
     def deco(fn: Callable[..., Any]) -> Callable[..., Any]:
@@ -68,17 +72,25 @@ def optimize(
 
             key = tuple((tuple(t.shape), str(t.dtype)) for t in tensors)
             if key not in compiled:
-                compiled[key] = _build(
-                    op_type,
-                    tensors,
-                    constants,
-                    budget,
-                    repo,
-                    search,
-                    min_speedup,
-                    python_executable,
-                    progress,
-                )
+                # economic: eager を 1 回タイムしてから探索判断
+                if objective == "economic" and min_invocations > 0:
+                    baseline_us = _time_eager(fn, args, kwargs)
+                    search_cost_s = budget * 2.0  # 1 候補あたり 2 秒の保守的見積もり
+                    decision = should_run_search(min_invocations, search_cost_s, baseline_us)
+                    _log = progress or (lambda _m: None)
+                    _log(f"adoption: {decision.reason}")
+                    if not decision.should_search:
+                        compiled[key] = None
+                    else:
+                        compiled[key] = _build(
+                            op_type, tensors, constants, budget, repo, search,
+                            min_speedup, python_executable, progress,
+                        )
+                else:
+                    compiled[key] = _build(
+                        op_type, tensors, constants, budget, repo, search,
+                        min_speedup, python_executable, progress,
+                    )
             kfn = compiled[key]
             if kfn is None:
                 return fn(*args, **kwargs)
@@ -124,3 +136,16 @@ def _build(
         return None
     code = generate(spec, result.best_params)
     return load_kernel_fn(code)
+
+
+def _time_eager(fn: Callable[..., Any], args: tuple, kwargs: dict) -> float:
+    """eager 関数を 1 回実行して粗いレイテンシ（µs）を返す。"""
+    import time
+
+    import torch
+
+    torch.cuda.synchronize()
+    start = time.perf_counter()
+    fn(*args, **kwargs)
+    torch.cuda.synchronize()
+    return (time.perf_counter() - start) * 1e6
