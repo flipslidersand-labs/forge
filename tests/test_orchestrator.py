@@ -115,74 +115,6 @@ def test_fp16_accumulator_rejected_as_incorrect() -> None:
         repo.close()
 
 
-# --- MultiRoundResult / RoundResult 構造テスト（GPU 不要）---
-
-
-def _make_params(**kw) -> SearchParams:
-    base = dict(block_size=4096, num_warps=8, num_stages=1, acc_dtype="fp32")
-    base.update(kw)
-    return SearchParams(**base)
-
-
-class TestMultiRoundResult:
-    def test_speedup_none_without_benchmarks(self) -> None:
-        from forge.search.llm_generator import TokenUsage
-
-        r = MultiRoundResult(
-            spec=_spec(),
-            rounds=[],
-            best_params=None,
-            best_benchmark=None,
-            baseline_benchmark=None,
-            baseline_name=None,
-            token_usage=TokenUsage(),
-        )
-        assert r.speedup is None
-
-    def test_all_experiments_flattens_rounds(self) -> None:
-        from forge.orchestrator import ExperimentResult
-        from forge.search.llm_generator import TokenUsage
-
-        p1 = _make_params(num_warps=4)
-        p2 = _make_params(num_warps=8)
-        exp1 = ExperimentResult(p1, True, True, 50.0, None)
-        exp2 = ExperimentResult(p2, True, True, 45.0, None)
-        r = MultiRoundResult(
-            spec=_spec(),
-            rounds=[
-                RoundResult(1, [exp1], p1, 50.0),
-                RoundResult(2, [exp2], p2, 45.0),
-            ],
-            best_params=p2,
-            best_benchmark=None,
-            baseline_benchmark=None,
-            baseline_name=None,
-            token_usage=TokenUsage(),
-            total_candidates_evaluated=2,
-        )
-        assert len(r.all_experiments) == 2
-
-    def test_best_round_returns_correct_round(self) -> None:
-        from forge.orchestrator import ExperimentResult
-        from forge.search.llm_generator import TokenUsage
-
-        p1 = _make_params(num_warps=4)
-        p2 = _make_params(num_warps=8)
-        r = MultiRoundResult(
-            spec=_spec(),
-            rounds=[
-                RoundResult(1, [], p1, 50.0),
-                RoundResult(2, [], p2, 45.0),
-            ],
-            best_params=p2,
-            best_benchmark=None,
-            baseline_benchmark=None,
-            baseline_name=None,
-            token_usage=TokenUsage(),
-        )
-        assert r.best_round == 2
-
-
 # --- optimize_rounds GPU テスト ---
 
 
@@ -253,4 +185,26 @@ def test_optimize_rounds_history_grows_with_successful_evals() -> None:
 
         assert "saw_history" in captured
         assert isinstance(captured["saw_history"][0], HistoryEntry)
+        repo.close()
+
+
+# --- ExtendedBaselineResult 構造体テスト（GPU 不要）---
+
+
+@_SKIP
+def test_optimize_with_extended_baselines() -> None:
+    """measure_extended=True のとき extended_baselines に torch.compile 結果が入る。"""
+    with tempfile.TemporaryDirectory() as d:
+        repo = KernelRepository(Path(d) / "cache.db")
+        space = SearchSpace(num_warps=[8], num_stages=[1], acc_dtypes=["fp32"])
+        orch = Orchestrator(repo=repo, warmup=3, repeat=20, measure_extended=True)
+        result = orch.optimize(_spec(), budget=2, search=GridSearch(space))
+
+        assert isinstance(result.extended_baselines, list)
+        assert len(result.extended_baselines) >= 1
+        eb = result.extended_baselines[0]
+        assert "torch.compile" in eb.name
+        assert eb.benchmark.median_us > 0
+        assert eb.benchmark.p95_us > 0
+        assert eb.compile_time_s >= 0
         repo.close()

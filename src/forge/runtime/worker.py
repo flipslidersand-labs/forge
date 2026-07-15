@@ -10,6 +10,30 @@ from forge.benchmark.statistics import BenchmarkResult
 
 
 @dataclass
+class ExtendedBaselineResult:
+    """torch.compile 等の重い baseline を 1 回だけ計測した結果。"""
+
+    name: str
+    benchmark: BenchmarkResult
+    compile_time_s: float = 0.0
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "benchmark": self.benchmark.to_dict(),
+            "compile_time_s": self.compile_time_s,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> ExtendedBaselineResult:
+        return cls(
+            name=str(d["name"]),
+            benchmark=BenchmarkResult.from_dict(d["benchmark"]),
+            compile_time_s=float(d.get("compile_time_s", 0.0)),
+        )
+
+
+@dataclass
 class WorkerResult:
     success: bool
     correct: bool = False
@@ -93,3 +117,51 @@ def run_in_worker(
         return WorkerResult.from_dict(json.loads(proc.stdout.strip().splitlines()[-1]))
     except (json.JSONDecodeError, IndexError):
         return WorkerResult(success=False, error=f"bad worker output: {proc.stdout[:200]!r}")
+
+
+def run_extended_baseline_in_worker(
+    op_type: str,
+    benchmark_input: list[dict[str, Any]],
+    constants: dict[str, Any],
+    warmup: int = 25,
+    repeat: int = 200,
+    timeout_s: float = 180.0,
+    python_executable: str | None = None,
+) -> list[ExtendedBaselineResult]:
+    """torch.compile(reference) を subprocess で 1 回だけ計測する。
+
+    GPU 必須。torch.compile の初回コンパイル時間も記録する。
+    失敗した場合は空リストを返す（探索は継続できる）。
+    """
+    payload = json.dumps(
+        {
+            "op_type": op_type,
+            "benchmark_input": benchmark_input,
+            "constants": constants,
+            "task": "extended_baseline",
+            "warmup": warmup,
+            "repeat": repeat,
+        }
+    )
+    exe = python_executable or sys.executable
+    try:
+        proc = subprocess.run(
+            [exe, "-m", "forge.runtime._worker_entry"],
+            input=payload,
+            capture_output=True,
+            text=True,
+            timeout=timeout_s,
+        )
+    except subprocess.TimeoutExpired:
+        return []
+
+    if proc.returncode != 0:
+        return []
+
+    try:
+        result = json.loads(proc.stdout.strip().splitlines()[-1])
+        if not result.get("success"):
+            return []
+        return [ExtendedBaselineResult.from_dict(b) for b in result.get("baselines", [])]
+    except (json.JSONDecodeError, IndexError, KeyError):
+        return []

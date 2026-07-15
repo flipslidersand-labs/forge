@@ -10,7 +10,12 @@ from forge.cache.key import CacheKey
 from forge.cache.repository import CachedKernel, KernelRepository
 from forge.codegen.triton_codegen import generate
 from forge.ir.kernel_spec import KernelSpec
-from forge.runtime.worker import WorkerResult, run_in_worker
+from forge.runtime.worker import (
+    ExtendedBaselineResult,
+    WorkerResult,
+    run_extended_baseline_in_worker,
+    run_in_worker,
+)
 from forge.search.candidate import CandidateGenerator, HistoryEntry
 from forge.search.grid import GridSearch
 from forge.search.params import SearchParams
@@ -40,6 +45,7 @@ class SearchResult:
     baseline_benchmark: BenchmarkResult | None
     baseline_name: str | None
     experiments: list[ExperimentResult]
+    extended_baselines: list[ExtendedBaselineResult] = field(default_factory=list)
 
     @property
     def speedup(self) -> float | None:
@@ -70,6 +76,7 @@ class MultiRoundResult:
     baseline_name: str | None
     token_usage: TokenUsage | None
     total_candidates_evaluated: int = field(default=0)
+    extended_baselines: list[ExtendedBaselineResult] = field(default_factory=list)
 
     @property
     def speedup(self) -> float | None:
@@ -105,6 +112,7 @@ class Orchestrator:
         repeat: int = 200,
         timeout_s: float = 60.0,
         progress: Callable[[str], None] | None = None,
+        measure_extended: bool = False,
     ) -> None:
         self.repo = repo or KernelRepository()
         self.python_executable = python_executable
@@ -113,6 +121,7 @@ class Orchestrator:
         self.repeat = repeat
         self.timeout_s = timeout_s
         self._progress = progress or (lambda _msg: None)
+        self.measure_extended = measure_extended
 
     def optimize(
         self,
@@ -137,13 +146,30 @@ class Orchestrator:
                 experiments=[],
             )
 
-        search = search or GridSearch()
-        candidates = search.generate(spec, key.compute_capability, budget=budget)
-        self._progress(f"searching {len(candidates)} candidates (cc {key.compute_capability})")
-
         bench_input = primary_input(spec)
         cases = correctness_cases(spec)
         tol = get_tolerance(spec.op_type).to_dict()
+
+        extended: list[ExtendedBaselineResult] = []
+        if self.measure_extended:
+            self._progress("measuring extended baselines (torch.compile) …")
+            extended = run_extended_baseline_in_worker(
+                spec.op_type,
+                bench_input,
+                spec.constants,
+                warmup=self.warmup,
+                repeat=self.repeat,
+                python_executable=self.python_executable,
+            )
+            for eb in extended:
+                self._progress(
+                    f"  extended: {eb.name} median={eb.benchmark.median_us:.1f}µs "
+                    f"p95={eb.benchmark.p95_us:.1f}µs compile={eb.compile_time_s:.1f}s"
+                )
+
+        search = search or GridSearch()
+        candidates = search.generate(spec, key.compute_capability, budget=budget)
+        self._progress(f"searching {len(candidates)} candidates (cc {key.compute_capability})")
 
         experiments: list[ExperimentResult] = []
         best_params: SearchParams | None = None
@@ -191,6 +217,7 @@ class Orchestrator:
             baseline_benchmark=baseline_bench,
             baseline_name=baseline_name,
             experiments=experiments,
+            extended_baselines=extended,
         )
 
     def optimize_rounds(
@@ -225,6 +252,23 @@ class Orchestrator:
         bench_input = primary_input(spec)
         cases = correctness_cases(spec)
         tol = get_tolerance(spec.op_type).to_dict()
+
+        extended: list[ExtendedBaselineResult] = []
+        if self.measure_extended:
+            self._progress("measuring extended baselines (torch.compile) …")
+            extended = run_extended_baseline_in_worker(
+                spec.op_type,
+                bench_input,
+                spec.constants,
+                warmup=self.warmup,
+                repeat=self.repeat,
+                python_executable=self.python_executable,
+            )
+            for eb in extended:
+                self._progress(
+                    f"  extended: {eb.name} median={eb.benchmark.median_us:.1f}µs "
+                    f"p95={eb.benchmark.p95_us:.1f}µs compile={eb.compile_time_s:.1f}s"
+                )
 
         history: list[HistoryEntry] = []
         rounds: list[RoundResult] = []
@@ -313,6 +357,7 @@ class Orchestrator:
             baseline_name=baseline_name,
             token_usage=llm.token_usage,
             total_candidates_evaluated=total,
+            extended_baselines=extended,
         )
 
     def _eval_one(
