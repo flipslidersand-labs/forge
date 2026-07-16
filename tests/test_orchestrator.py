@@ -2,6 +2,7 @@
 
 import tempfile
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 import torch
@@ -9,7 +10,7 @@ import torch
 from forge.cache.repository import KernelRepository
 from forge.ir.kernel_spec import KernelSpec
 from forge.ir.tensor_spec import TensorSpec
-from forge.orchestrator import Orchestrator
+from forge.orchestrator import Orchestrator, SearchResult
 from forge.search.grid import GridSearch
 from forge.search.space import SearchSpace
 
@@ -96,6 +97,47 @@ def test_search_across_variants_all_correct() -> None:
         assert tried_variants == {"single_row", "multi_row", "two_pass"}
         assert all(e.correct for e in result.experiments)
         assert result.best_params is not None
+        repo.close()
+
+
+def test_economic_objective_records_search_cost_s() -> None:
+    """objective="economic" 時に search_cost_s = len(candidates) * per_candidate_s が記録される。GPU 不要。"""
+    spec = _spec()
+
+    # 候補生成だけ行い、GPU 実行は行わない mock
+    mock_candidates = [MagicMock() for _ in range(5)]
+    mock_search = MagicMock()
+    mock_search.generate.return_value = mock_candidates
+
+    messages: list[str] = []
+
+    with tempfile.TemporaryDirectory() as d:
+        repo = KernelRepository(Path(d) / "cache.db")
+        orch = Orchestrator(repo=repo, progress=messages.append)
+
+        with patch("forge.orchestrator.generate", side_effect=ValueError("skip")) as _mock_gen:
+            result = orch.optimize(
+                spec,
+                budget=5,
+                search=mock_search,
+                use_cache=False,
+                objective="economic",
+                per_candidate_s=3.5,
+            )
+
+    assert result.search_cost_s == pytest.approx(5 * 3.5)
+    assert any("economic" in m for m in messages)
+    assert any("17.5" in m for m in messages)
+
+
+@_SKIP
+def test_economic_objective_search_cost_none_for_latency() -> None:
+    """objective="latency"（デフォルト）では search_cost_s は None のまま。"""
+    with tempfile.TemporaryDirectory() as d:
+        repo = KernelRepository(Path(d) / "cache.db")
+        orch = _orch(repo)
+        result = orch.optimize(_spec(), budget=4, search=_search(), objective="latency")
+        assert result.search_cost_s is None
         repo.close()
 
 

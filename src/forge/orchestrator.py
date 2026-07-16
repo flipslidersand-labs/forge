@@ -36,6 +36,7 @@ class SearchResult:
     baseline_benchmark: BenchmarkResult | None
     baseline_name: str | None
     experiments: list[ExperimentResult]
+    search_cost_s: float | None = None
 
     @property
     def speedup(self) -> float | None:
@@ -74,6 +75,8 @@ class Orchestrator:
         budget: int = 50,
         search: CandidateGenerator | None = None,
         use_cache: bool = True,
+        objective: str = "latency",
+        per_candidate_s: float = 2.0,
     ) -> SearchResult:
         spec.validate()
         key = CacheKey.from_spec_and_env(spec)
@@ -94,6 +97,11 @@ class Orchestrator:
         search = search or GridSearch()
         candidates = search.generate(spec, key.compute_capability, budget=budget)
         self._progress(f"searching {len(candidates)} candidates (cc {key.compute_capability})")
+
+        search_cost_s: float | None = None
+        if objective == "economic":
+            search_cost_s = len(candidates) * per_candidate_s
+            self._progress(f"economic: estimated search cost {search_cost_s:.1f}s ({len(candidates)} x {per_candidate_s}s/candidate)")
 
         bench_input = primary_input(spec)
         cases = correctness_cases(spec)
@@ -175,4 +183,5 @@ class Orchestrator:
             baseline_benchmark=baseline_bench,
             baseline_name=baseline_name,
             experiments=experiments,
+            search_cost_s=search_cost_s,
         )

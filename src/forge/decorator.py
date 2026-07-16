@@ -23,6 +23,7 @@ def optimize(
     repo: KernelRepository | None = None,
     search: CandidateGenerator | None = None,
     min_speedup: float = 1.03,
+    per_candidate_s: float = 2.0,
     python_executable: str | None = None,
     progress: Callable[[str], None] | None = None,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
@@ -34,7 +35,8 @@ def optimize(
     再探索するが SQLite キャッシュにヒットすれば即座に返る。
 
     判定不能・最適化で速くならない場合は元の eager 関数にフォールバックする。
-    backend/objective は将来拡張用の予約引数（現状は triton/latency 固定）。
+    backend は将来拡張用の予約引数（現状は triton 固定）。
+    objective="economic" 時は per_candidate_s を使って推定探索コストを SearchResult に記録する。
     """
 
     def deco(fn: Callable[..., Any]) -> Callable[..., Any]:
@@ -76,6 +78,8 @@ def optimize(
                     repo,
                     search,
                     min_speedup,
+                    objective,
+                    per_candidate_s,
                     python_executable,
                     progress,
                 )
@@ -98,6 +102,8 @@ def _build(
     repo: KernelRepository | None,
     search: CandidateGenerator | None,
     min_speedup: float,
+    objective: str,
+    per_candidate_s: float,
     python_executable: str | None,
     progress: Callable[[str], None] | None,
 ) -> Callable[..., Any] | None:
@@ -119,7 +125,7 @@ def _build(
         python_executable=python_executable,
         progress=progress or (lambda _m: None),
     )
-    result = orch.optimize(spec, budget=budget, search=search)
+    result = orch.optimize(spec, budget=budget, search=search, objective=objective, per_candidate_s=per_candidate_s)
     if result.best_params is None:
         return None
     code = generate(spec, result.best_params)
