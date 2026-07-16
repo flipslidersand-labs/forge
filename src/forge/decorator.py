@@ -138,14 +138,33 @@ def _build(
     return load_kernel_fn(code)
 
 
-def _time_eager(fn: Callable[..., Any], args: tuple, kwargs: dict) -> float:
-    """eager 関数を 1 回実行して粗いレイテンシ（µs）を返す。"""
-    import time
+def _time_eager(
+    fn: Callable[..., Any],
+    args: tuple,
+    kwargs: dict,
+    warmup: int = 3,
+    repeat: int = 10,
+) -> float:
+    """eager 関数を warmup + repeat 回 CUDA Event で計測し中央値（µs）を返す。
+
+    単一計測は ±10-20% のノイズがあるため、中央値を使って安定した推定を得る。
+    """
+    import statistics
 
     import torch
 
+    for _ in range(warmup):
+        fn(*args, **kwargs)
     torch.cuda.synchronize()
-    start = time.perf_counter()
-    fn(*args, **kwargs)
-    torch.cuda.synchronize()
-    return (time.perf_counter() - start) * 1e6
+
+    samples: list[float] = []
+    for _ in range(repeat):
+        start = torch.cuda.Event(enable_timing=True)
+        end = torch.cuda.Event(enable_timing=True)
+        start.record()
+        fn(*args, **kwargs)
+        end.record()
+        torch.cuda.synchronize()
+        samples.append(start.elapsed_time(end) * 1000.0)  # ms -> µs
+
+    return statistics.median(samples)
