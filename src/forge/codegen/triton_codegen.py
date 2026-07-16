@@ -33,6 +33,7 @@ _TEMPLATES = {
     ("layernorm", "single_row"): "layernorm.py.jinja",
     ("layernorm", "multi_row"): "layernorm_multi_row.py.jinja",
     ("gelu", "elementwise"): "gelu.py.jinja",
+    ("attention", "attention"): "attention.py.jinja",
 }
 
 
@@ -49,16 +50,19 @@ def generate(spec: KernelSpec, params: SearchParams) -> str:
 
     out_dtype_str = spec.output_specs[0].dtype_str()
     template = _env().get_template(_TEMPLATES[tkey])
-    return template.render(
-        variant=params.variant,
-        block_size=params.block_size,
-        num_warps=params.num_warps,
-        num_stages=params.num_stages,
-        acc_dtype=params.acc_dtype,
-        rows_per_program=params.rows_per_program,
-        acc_tl=acc_dtype_to_tl(params.acc_dtype),
-        out_tl=torch_dtype_str_to_tl(out_dtype_str),
-    )
+    ctx: dict[str, object] = {
+        "variant": params.variant,
+        "block_size": params.block_size,
+        "num_warps": params.num_warps,
+        "num_stages": params.num_stages,
+        "acc_dtype": params.acc_dtype,
+        "rows_per_program": params.rows_per_program,
+        "acc_tl": acc_dtype_to_tl(params.acc_dtype),
+        "out_tl": torch_dtype_str_to_tl(out_dtype_str),
+    }
+    if spec.op_type == "attention":
+        ctx["causal"] = spec.constants.get("causal", True)
+    return template.render(**ctx)
 
 
 def generate_rmsnorm(spec: KernelSpec, params: SearchParams) -> str:

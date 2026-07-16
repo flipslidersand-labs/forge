@@ -5,11 +5,12 @@ from dataclasses import dataclass
 # 演算ごとのメタデータ。SearchSpace（block 制約）と validation（入力構成）が参照する。
 #   reduction:   行ごとに last-dim を縮約。BLOCK は N 以上（single/multi_row）。出力は入力同形。
 #   elementwise: 要素ごと。flat に numel をタイル分割するため BLOCK は N に縛られない。
+#   attention:   Flash Attention。Q/K/V [B,H,S,D]。block_size = BLOCK_M = BLOCK_N（正方タイル）。
 
 
 @dataclass(frozen=True)
 class OpInfo:
-    kind: str  # "reduction" | "elementwise"
+    kind: str  # "reduction" | "elementwise" | "attention"
     n_tensor_inputs: int  # kernel_fn に渡す tensor 入力数
 
 
@@ -18,6 +19,7 @@ OP_INFO: dict[str, OpInfo] = {
     "softmax": OpInfo(kind="reduction", n_tensor_inputs=1),  # x
     "layernorm": OpInfo(kind="reduction", n_tensor_inputs=3),  # x, weight, bias
     "gelu": OpInfo(kind="elementwise", n_tensor_inputs=1),  # x
+    "attention": OpInfo(kind="attention", n_tensor_inputs=3),  # q, k, v
 }
 
 

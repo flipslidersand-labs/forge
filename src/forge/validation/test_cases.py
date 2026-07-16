@@ -50,11 +50,32 @@ def _layernorm_inputs(
     ]
 
 
+def _attention_inputs(
+    batch: int,
+    heads: int,
+    seq: int,
+    head_dim: int,
+    dtype: str,
+    scale: float = 1.0,
+    seed: int = 0,
+) -> list[dict[str, Any]]:
+    # attention は q, k, v の 3 入力。いずれも [B, H, S, D]。
+    shape = [batch, heads, seq, head_dim]
+    return [
+        {"shape": shape, "dtype": dtype, "init": "randn", "scale": scale, "seed": seed},
+        {"shape": shape, "dtype": dtype, "init": "randn", "scale": scale, "seed": seed + 1},
+        {"shape": shape, "dtype": dtype, "init": "randn", "scale": scale, "seed": seed + 2},
+    ]
+
+
 def primary_input(spec: KernelSpec) -> list[dict[str, Any]]:
     """ベンチマークに使う代表入力（spec の shape そのまま）。"""
     x = spec.input_specs[0]
-    m, n = x.shape
     dt = x.dtype_str()
+    if spec.op_type == "attention":
+        b, h, s, d = x.shape
+        return _attention_inputs(b, h, s, d, dt)
+    m, n = x.shape
     if spec.op_type == "rmsnorm":
         return _rmsnorm_inputs(m, n, dt)
     if spec.op_type in ("softmax", "gelu"):
@@ -69,10 +90,32 @@ def correctness_cases(spec: KernelSpec) -> list[dict[str, Any]]:
 
     block_size は hidden_size(N) に対して調律されるため N は固定し、行数 M と
     数値分布を変える。各ケースは worker が tensor を組み立てる input_specs を持つ。
+    attention は head_dim(D) を固定し、seq_len(S) と数値分布を変える。
     """
     x = spec.input_specs[0]
-    _, n = x.shape
     dt = x.dtype_str()
+
+    if spec.op_type == "attention":
+        b, h, s, d = x.shape
+        return [
+            {"name": "basic", "input_specs": _attention_inputs(b, h, s, d, dt)},
+            # seq_len が BLOCK_M の倍数でない場合のマスク動作
+            {"name": "odd_seq", "input_specs": _attention_inputs(b, h, s + 7, d, dt, seed=3)},
+            # 数値スケールが大きい場合の softmax オーバーフロー耐性
+            {
+                "name": "large_values",
+                "input_specs": _attention_inputs(b, h, s, d, dt, scale=10.0, seed=5),
+            },
+            # 小さいスケール（アンダーフロー耐性）
+            {
+                "name": "small_values",
+                "input_specs": _attention_inputs(b, h, s, d, dt, scale=1e-3, seed=7),
+            },
+            # バッチサイズ=1 の境界ケース
+            {"name": "single_batch", "input_specs": _attention_inputs(1, h, s, d, dt, seed=9)},
+        ]
+
+    _, n = x.shape
 
     if spec.op_type == "rmsnorm":
         return [

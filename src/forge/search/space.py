@@ -4,7 +4,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 
 from forge.ir.kernel_spec import KernelSpec
-from forge.ops import is_elementwise
+from forge.ops import get_op_info
 
 from .params import SearchParams
 
@@ -40,6 +40,8 @@ class SearchSpace:
 
     block_sizes: list[int] = field(default_factory=lambda: [512, 1024, 2048, 4096, 8192])
     elementwise_blocks: list[int] = field(default_factory=lambda: [256, 512, 1024, 2048])
+    # Flash Attention の BLOCK_M 候補。head_dim の倍数かつ 2 のべき乗。
+    attention_blocks: list[int] = field(default_factory=lambda: [16, 32, 64, 128])
     num_warps: list[int] = field(default_factory=lambda: [4, 8, 16])
     num_stages: list[int] = field(default_factory=lambda: [1, 2, 3])
     acc_dtypes: list[str] = field(default_factory=lambda: ["fp32", "fp16"])
@@ -56,6 +58,26 @@ class SearchSpace:
 
     def _rows_for_variant(self, variant: str) -> list[int]:
         return self.rows_per_program if variant == "multi_row" else [1]
+
+    def _enumerate_attention(self, stages: list[int]) -> Iterator[SearchParams]:
+        """Flash Attention 用の探索空間。BLOCK_M = BLOCK_N = block_size（正方タイル）。"""
+        seen: set[tuple] = set()
+        for block in sorted(set(self.attention_blocks)):
+            for warps in self.num_warps:
+                for stage in stages:
+                    for acc in self.acc_dtypes:
+                        key = (block, warps, stage, acc)
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        yield SearchParams(
+                            block_size=block,
+                            num_warps=warps,
+                            num_stages=stage,
+                            acc_dtype=acc,
+                            variant="attention",
+                            rows_per_program=1,
+                        )
 
     def _enumerate_elementwise(self, stages: list[int]) -> Iterator[SearchParams]:
         seen: set[tuple] = set()
@@ -85,9 +107,12 @@ class SearchSpace:
         cc = _cc_to_int(compute_capability)
         stages = self.num_stages if cc >= _MIN_CC_FOR_PIPELINING else [1]
 
-        # elementwise op は flat タイルのみ（行 variant を使わない）
-        if is_elementwise(spec.op_type):
+        op_kind = get_op_info(spec.op_type).kind
+        if op_kind == "elementwise":
             yield from self._enumerate_elementwise(stages)
+            return
+        if op_kind == "attention":
+            yield from self._enumerate_attention(stages)
             return
 
         seen: set[tuple] = set()
