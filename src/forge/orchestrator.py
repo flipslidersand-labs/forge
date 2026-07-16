@@ -199,9 +199,7 @@ class Orchestrator:
                         f"{label}/{params.acc_dtype} -> {cand_bench.median_us:.1f}us BEST"
                     )
                 else:
-                    self._progress(
-                        f"{label}/{params.acc_dtype} -> {cand_bench.median_us:.1f}us"
-                    )
+                    self._progress(f"{label}/{params.acc_dtype} -> {cand_bench.median_us:.1f}us")
             experiments.append(exp)
 
         if best_params is not None and best_bench is not None:
@@ -297,7 +295,8 @@ class Orchestrator:
                 f"(history={len(history)})"
             )
             candidates = llm.generate(
-                spec, key.compute_capability,
+                spec,
+                key.compute_capability,
                 budget=candidates_per_round,
                 history=history,
             )
@@ -328,9 +327,7 @@ class Orchestrator:
                     if improved:
                         overall_best_params, overall_best_bench = params, cand_bench
                         exp.is_best = True
-                        self._progress(
-                            f"  [r{round_num}.{i}] {cand_bench.median_us:.1f}us BEST"
-                        )
+                        self._progress(f"  [r{round_num}.{i}] {cand_bench.median_us:.1f}us BEST")
                     if round_best_us is None or cand_bench.median_us < round_best_us:
                         round_best_params = params
                         round_best_us = cand_bench.median_us
