@@ -16,6 +16,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
+    "pytest-cov>=5.0",
     "hypothesis>=6.100",
     "ruff>=0.4",
     "pyright>=1.1",
@@ -48,3 +49,14 @@ include = ["src/forge"]
 testpaths = ["tests"]
 addopts = "-v"
 markers = ["gpu: requires NVIDIA GPU (skip with -m 'not gpu')"]
+
+[tool.coverage.run]
+source = ["src/forge"]
+omit = ["*/tests/*", "*/__pycache__/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]
