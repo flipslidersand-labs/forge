@@ -149,7 +149,7 @@ def test_optimize_rounds_finds_best_and_accumulates_history() -> None:
         assert len(result.rounds) == 3
         # history は前ラウンドの成功結果が積み上がる
         assert history_per_round[0] == 0   # round1: 空
-        assert history_per_round[1] >= 0   # round2: round1 の結果
+        assert history_per_round[1] >= 1   # round1 の成功 1 件が history に入っているはず
         assert history_per_round[2] >= history_per_round[1]
         # 少なくとも 1 つの有効な結果があるはず
         assert result.best_params is not None
@@ -188,7 +188,7 @@ def test_optimize_rounds_history_grows_with_successful_evals() -> None:
         repo.close()
 
 
-# --- ExtendedBaselineResult 構造体テスト（GPU 不要）---
+# --- ExtendedBaselineResult GPU テスト ---
 
 
 @_SKIP
