@@ -58,6 +58,9 @@ class OllamaGenerator:
         self.model = model
         self.host = host
 
+    def reset_usage(self) -> None:
+        """LLMGenerator との互換用。OllamaGenerator はトークン追跡をしないため no-op。"""
+
     def generate(
         self,
         spec: KernelSpec,
