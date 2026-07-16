@@ -36,7 +36,7 @@ jobs:
       - name: Install dependencies (CPU torch)
         run: |
           pip install torch --index-url https://download.pytorch.org/whl/cpu
-          pip install -e ".[dev,llm]"
+          pip install -e ".[dev,llm,ollama]"
       - name: Run tests (non-GPU)
         run: pytest -k "not gpu" -q
 
