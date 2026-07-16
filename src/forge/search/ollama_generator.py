@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
 from forge.ir.kernel_spec import KernelSpec
 from forge.search.llm_generator import LLMGenerator, build_prompt
@@ -67,7 +67,7 @@ class OllamaGenerator:
     ) -> list[SearchParams]:
         n = budget or 12
         prompt = build_prompt(spec, compute_capability, n, history or [])
-        raw = self._propose(spec, prompt)
+        raw = self._propose(prompt)
         out: list[SearchParams] = []
         seen: set[SearchParams] = set()
         for d in raw:
@@ -77,7 +77,7 @@ class OllamaGenerator:
                 out.append(params)
         return out[:n]
 
-    def _propose(self, spec: KernelSpec, prompt: str) -> list[dict[str, Any]]:
+    def _propose(self, prompt: str) -> list[dict[str, Any]]:
         import ollama
 
         try:
@@ -92,5 +92,5 @@ class OllamaGenerator:
             content = resp.message.content or ""
             proposal = _Proposal.model_validate_json(content)
             return [c.model_dump() for c in proposal.candidates]
-        except (ValidationError, ValueError, Exception):
+        except Exception:
             return []
