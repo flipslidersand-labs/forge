@@ -10,6 +10,7 @@ class BenchmarkResult:
     median_us: float = 0.0
     p20_us: float = 0.0
     p80_us: float = 0.0
+    p95_us: float = 0.0
     warmup_count: int = 0
     measure_count: int = 0
 
@@ -18,11 +19,13 @@ class BenchmarkResult:
         if not samples_us:
             raise ValueError("samples_us must not be empty")
         s = sorted(samples_us)
+        n = len(s)
         return cls(
             samples_us=s,
             median_us=statistics.median(s),
-            p20_us=s[int(len(s) * 0.2)],
-            p80_us=s[min(int(len(s) * 0.8), len(s) - 1)],
+            p20_us=s[int(n * 0.2)],
+            p80_us=s[min(int(n * 0.8), n - 1)],
+            p95_us=s[min(int(n * 0.95), n - 1)],
             warmup_count=warmup,
             measure_count=repeat,
         )
@@ -32,6 +35,7 @@ class BenchmarkResult:
             "median_us": self.median_us,
             "p20_us": self.p20_us,
             "p80_us": self.p80_us,
+            "p95_us": self.p95_us,
             "warmup_count": self.warmup_count,
             "measure_count": self.measure_count,
         }
@@ -43,6 +47,7 @@ class BenchmarkResult:
             median_us=float(d["median_us"]),  # type: ignore[arg-type]
             p20_us=float(d["p20_us"]),  # type: ignore[arg-type]
             p80_us=float(d["p80_us"]),  # type: ignore[arg-type]
+            p95_us=float(d.get("p95_us", 0.0)),  # type: ignore[arg-type]
             warmup_count=int(d.get("warmup_count", 0)),  # type: ignore[arg-type]
             measure_count=int(d.get("measure_count", 0)),  # type: ignore[arg-type]
         )

@@ -6,7 +6,7 @@ from forge.ir.kernel_spec import KernelSpec
 from forge.ir.tensor_spec import TensorSpec
 from forge.search.candidate import CandidateGenerator, HistoryEntry
 from forge.search.grid import GridSearch
-from forge.search.llm_generator import LLMGenerator, build_prompt
+from forge.search.llm_generator import LLMGenerator, TokenUsage, build_prompt
 from forge.search.params import SearchParams
 from forge.search.random_search import RandomSearch
 
@@ -153,3 +153,55 @@ class TestBuildPrompt:
         hist = [HistoryEntry(SearchParams(4096, 8, 1, "fp32"), correct=True, median_us=60.0)]
         p = build_prompt(spec(), "8.9", 12, hist)
         assert "60.0us" in p
+
+
+class TestTokenUsage:
+    def test_initial_zero(self) -> None:
+        gen = LLMGenerator(propose_fn=lambda *a: [])
+        assert gen.token_usage.input_tokens == 0
+        assert gen.token_usage.output_tokens == 0
+        assert gen.token_usage.total == 0
+
+    def test_total_is_sum(self) -> None:
+        usage = TokenUsage(input_tokens=100, output_tokens=50)
+        assert usage.total == 150
+
+    def test_add_from_response_with_usage(self) -> None:
+        class FakeUsage:
+            input_tokens = 300
+            output_tokens = 150
+
+        class FakeResp:
+            usage = FakeUsage()
+
+        gen = LLMGenerator(propose_fn=lambda *a: [])
+        gen.token_usage._add_from_response(FakeResp())
+        assert gen.token_usage.input_tokens == 300
+        assert gen.token_usage.output_tokens == 150
+
+    def test_add_from_response_accumulates(self) -> None:
+        class FakeUsage:
+            input_tokens = 100
+            output_tokens = 50
+
+        class FakeResp:
+            usage = FakeUsage()
+
+        gen = LLMGenerator(propose_fn=lambda *a: [])
+        gen.token_usage._add_from_response(FakeResp())
+        gen.token_usage._add_from_response(FakeResp())
+        assert gen.token_usage.total == 300
+
+    def test_add_from_response_no_usage_attr(self) -> None:
+        class FakeResp:
+            pass
+
+        gen = LLMGenerator(propose_fn=lambda *a: [])
+        gen.token_usage._add_from_response(FakeResp())  # should not raise
+        assert gen.token_usage.total == 0
+
+    def test_independent_per_generator_instance(self) -> None:
+        g1 = LLMGenerator(propose_fn=lambda *a: [])
+        g2 = LLMGenerator(propose_fn=lambda *a: [])
+        g1.token_usage.input_tokens = 100
+        assert g2.token_usage.input_tokens == 0

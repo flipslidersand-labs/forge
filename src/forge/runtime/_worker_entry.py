@@ -33,6 +33,48 @@ def _build_tensor(spec: dict[str, Any], torch: Any):
     raise ValueError(f"unknown init: {init}")
 
 
+def _measure_extended_baselines(payload: dict, torch, measure, get_reference) -> None:
+    """task="extended_baseline": torch.compile(reference) を 1 回計測して JSON 出力。"""
+    import time
+
+    op_type = payload["op_type"]
+    constants = payload.get("constants", {})
+    warmup = int(payload.get("warmup", 25))
+    repeat = int(payload.get("repeat", 200))
+
+    bench_tensors = [_build_tensor(s, torch) for s in payload["benchmark_input"]]
+    ref_fn = get_reference(op_type)
+    baselines = []
+
+    # torch.compile(reference)
+    try:
+        compiled_fn = torch.compile(ref_fn)
+        t0 = time.perf_counter()
+        compiled_fn(*bench_tensors, **constants)  # 初回: compile が走る
+        torch.cuda.synchronize()
+        compile_time_s = time.perf_counter() - t0
+
+        result = measure(lambda: compiled_fn(*bench_tensors, **constants), warmup, repeat)
+        baselines.append(
+            {
+                "name": "torch.compile(reference)",
+                "benchmark": result.to_dict(),
+                "compile_time_s": compile_time_s,
+            }
+        )
+    except Exception as e:  # noqa: BLE001
+        baselines.append(
+            {
+                "name": "torch.compile(reference)",
+                "benchmark": {"median_us": 0.0, "p20_us": 0.0, "p80_us": 0.0, "p95_us": 0.0},
+                "compile_time_s": 0.0,
+                "error": str(e),
+            }
+        )
+
+    print(json.dumps({"success": True, "task": "extended_baseline", "baselines": baselines}))
+
+
 def main() -> None:
     payload = json.loads(sys.stdin.read())
     try:
@@ -46,6 +88,10 @@ def main() -> None:
         constants = payload.get("constants", {})
         task = payload.get("task", "full")
         tol = payload.get("tolerance", {"atol": 2e-3, "rtol": 1e-2, "equal_nan": False})
+
+        if task == "extended_baseline":
+            _measure_extended_baselines(payload, torch, measure, get_reference)
+            return
 
         kernel_fn = load_kernel_fn(payload["kernel_code"])
         reference = get_reference(op_type)
