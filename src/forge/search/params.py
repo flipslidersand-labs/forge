@@ -7,7 +7,8 @@ from dataclasses import asdict, dataclass
 #   multi_row   : 1 program = ROWS 行、BLOCK_SIZE >= N（小さい N で occupancy 改善）
 #   two_pass    : BLOCK_SIZE をタイルとして N をループ。BLOCK_SIZE < N を許容（大きい N 向け）
 #   elementwise : flat に numel をタイル分割。BLOCK_SIZE は N に縛られない（elementwise op）
-SUPPORTED_VARIANTS = ("single_row", "multi_row", "two_pass", "elementwise")
+#   attention   : Flash Attention。block_size = BLOCK_M = BLOCK_N（正方タイル）。
+SUPPORTED_VARIANTS = ("single_row", "multi_row", "two_pass", "elementwise", "attention")
 SUPPORTED_ACC_DTYPES = ("fp32", "fp16")
 
 
@@ -44,7 +45,7 @@ class SearchParams:
             raise ValueError(f"block_size must be a positive power of 2, got {self.block_size}")
         if self.rows_per_program < 1:
             raise ValueError(f"rows_per_program must be >= 1, got {self.rows_per_program}")
-        if self.variant != "multi_row" and self.rows_per_program != 1:
+        if self.variant not in ("multi_row", "attention") and self.rows_per_program != 1:
             raise ValueError("rows_per_program > 1 is only valid for variant='multi_row'")
 
     def to_dict(self) -> dict[str, object]:

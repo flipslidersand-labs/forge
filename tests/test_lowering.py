@@ -37,6 +37,14 @@ class TestIdentify:
 
         assert identify(gelu) == "gelu"
 
+    def test_recognizes_attention(self) -> None:
+        import torch.nn.functional as F
+
+        def attention(q, k, v):
+            return F.scaled_dot_product_attention(q, k, v, is_causal=True)
+
+        assert identify(attention) == "attention"
+
     def test_unrelated_op_returns_none(self) -> None:
         def relu(x):
             return torch.relu(x)

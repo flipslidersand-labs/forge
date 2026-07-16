@@ -23,6 +23,9 @@ TOLERANCE: dict[str, Tolerance] = {
     # layernorm は rmsnorm 同様 fp16 縮約誤差で 2e-3。gelu は exact(erf) で誤差小。
     "layernorm": Tolerance(atol=2e-3, rtol=1e-2, equal_nan=False),
     "gelu": Tolerance(atol=2e-3, rtol=1e-2, equal_nan=False),
+    # attention: fp16 の O(S) 縮約誤差。Flash Attention のオンライン softmax は
+    # 参照実装（full materialization）と最大 1e-2 程度のずれが生じる。
+    "attention": Tolerance(atol=1e-2, rtol=1e-2, equal_nan=False),
 }
 
 
