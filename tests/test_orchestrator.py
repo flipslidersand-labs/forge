@@ -123,14 +123,17 @@ def test_optimize_rounds_finds_best_and_accumulates_history() -> None:
     """3 ラウンドで LLM (fake) が history を受け取りながら探索し、有効な結果を返す。"""
     history_per_round: list[int] = []
 
+    _warps_by_round = [8, 4, 2]
+
     def _propose(spec, cc, n, history):
         history_per_round.append(len(history))
-        # 単一の valid な候補を毎回返す
+        # ラウンドごとに異なる num_warps を返して重複排除をトリガーしない
+        warps = _warps_by_round[len(history_per_round) - 1]
         return [
             dict(
                 base_variant="single_row",
                 block_size=4096,
-                num_warps=8,
+                num_warps=warps,
                 num_stages=1,
                 acc_dtype="fp32",
                 rows_per_program=1,
@@ -204,7 +207,9 @@ def test_optimize_with_extended_baselines() -> None:
         assert len(result.extended_baselines) >= 1
         eb = result.extended_baselines[0]
         assert "torch.compile" in eb.name
-        assert eb.benchmark.median_us > 0
-        assert eb.benchmark.p95_us > 0
         assert eb.compile_time_s >= 0
+        # cc < 7.0 (例: GTX 1080) では torch.compile が失敗するため failed 時はスキップ
+        if not eb.failed:
+            assert eb.benchmark.median_us > 0
+            assert eb.benchmark.p95_us > 0
         repo.close()
