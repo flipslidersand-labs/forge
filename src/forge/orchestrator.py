@@ -189,13 +189,19 @@ class Orchestrator:
                 baseline_bench, baseline_name = bl_bench, bl_name
 
             if exp.correct and cand_bench is not None:
-                improved = best_bench is None or is_improvement(cand_bench, best_bench, self.min_speedup)
+                improved = best_bench is None or is_improvement(
+                    cand_bench, best_bench, self.min_speedup
+                )
                 if improved:
                     best_params, best_bench = params, cand_bench
                     exp.is_best = True
-                    self._progress(f"{label}/{params.acc_dtype} -> {cand_bench.median_us:.1f}us BEST")
+                    self._progress(
+                        f"{label}/{params.acc_dtype} -> {cand_bench.median_us:.1f}us BEST"
+                    )
                 else:
-                    self._progress(f"{label}/{params.acc_dtype} -> {cand_bench.median_us:.1f}us")
+                    self._progress(
+                        f"{label}/{params.acc_dtype} -> {cand_bench.median_us:.1f}us"
+                    )
             experiments.append(exp)
 
         if best_params is not None and best_bench is not None:
@@ -307,7 +313,9 @@ class Orchestrator:
                     baseline_bench, baseline_name = bl_bench, bl_name
 
                 if exp.correct and cand_bench is not None:
-                    history.append(HistoryEntry(params=params, correct=True, median_us=cand_bench.median_us))
+                    history.append(
+                        HistoryEntry(params=params, correct=True, median_us=cand_bench.median_us)
+                    )
                     improved = overall_best_bench is None or is_improvement(
                         cand_bench, overall_best_bench, self.min_speedup
                     )
@@ -351,7 +359,9 @@ class Orchestrator:
                     created_at=datetime.now(UTC),
                 ),
             )
-            self._progress(f"cached best: {overall_best_params} ({overall_best_bench.median_us:.1f}us)")
+            self._progress(
+                f"cached best: {overall_best_params} ({overall_best_bench.median_us:.1f}us)"
+            )
 
         total = sum(len(r.experiments) for r in rounds)
         return MultiRoundResult(
