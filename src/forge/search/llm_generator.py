@@ -32,6 +32,7 @@ class TokenUsage:
             self.input_tokens += getattr(usage, "input_tokens", 0)
             self.output_tokens += getattr(usage, "output_tokens", 0)
 
+
 _SYSTEM = (
     "You are a GPU kernel autotuning assistant. You propose Triton kernel "
     "configurations for an RMSNorm kernel and a one-line hypothesis for each. "

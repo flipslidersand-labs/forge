@@ -11,9 +11,9 @@ class TestBenchmarkResult:
     def test_from_samples_percentiles(self) -> None:
         r = make_result([float(i) for i in range(1, 101)])  # 1..100
         assert r.median_us == 50.5
-        assert r.p20_us == 21.0   # samples[20]
-        assert r.p80_us == 81.0   # samples[80]
-        assert r.p95_us == 96.0   # samples[95]
+        assert r.p20_us == 21.0  # samples[20]
+        assert r.p80_us == 81.0  # samples[80]
+        assert r.p95_us == 96.0  # samples[95]
 
     def test_from_samples_sorts(self) -> None:
         r = make_result([5.0, 1.0, 3.0, 2.0, 4.0])
