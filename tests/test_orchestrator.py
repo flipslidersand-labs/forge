@@ -9,11 +9,10 @@ import torch
 from forge.cache.repository import KernelRepository
 from forge.ir.kernel_spec import KernelSpec
 from forge.ir.tensor_spec import TensorSpec
-from forge.orchestrator import MultiRoundResult, Orchestrator, RoundResult
+from forge.orchestrator import MultiRoundResult, Orchestrator
 from forge.search.candidate import HistoryEntry
 from forge.search.grid import GridSearch
 from forge.search.llm_generator import LLMGenerator
-from forge.search.params import SearchParams
 from forge.search.space import SearchSpace
 
 pytestmark = pytest.mark.gpu
@@ -148,8 +147,8 @@ def test_optimize_rounds_finds_best_and_accumulates_history() -> None:
         assert isinstance(result, MultiRoundResult)
         assert len(result.rounds) == 3
         # history は前ラウンドの成功結果が積み上がる
-        assert history_per_round[0] == 0   # round1: 空
-        assert history_per_round[1] >= 1   # round1 の成功 1 件が history に入っているはず
+        assert history_per_round[0] == 0  # round1: 空
+        assert history_per_round[1] >= 1  # round1 の成功 1 件が history に入っているはず
         assert history_per_round[2] >= history_per_round[1]
         # 少なくとも 1 つの有効な結果があるはず
         assert result.best_params is not None

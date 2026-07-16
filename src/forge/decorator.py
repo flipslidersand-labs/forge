@@ -85,13 +85,27 @@ def optimize(
                         compiled[key] = None
                     else:
                         compiled[key] = _build(
-                            op_type, tensors, constants, budget, repo, search,
-                            min_speedup, python_executable, progress,
+                            op_type,
+                            tensors,
+                            constants,
+                            budget,
+                            repo,
+                            search,
+                            min_speedup,
+                            python_executable,
+                            progress,
                         )
                 else:
                     compiled[key] = _build(
-                        op_type, tensors, constants, budget, repo, search,
-                        min_speedup, python_executable, progress,
+                        op_type,
+                        tensors,
+                        constants,
+                        budget,
+                        repo,
+                        search,
+                        min_speedup,
+                        python_executable,
+                        progress,
                     )
             kfn = compiled[key]
             if kfn is None:

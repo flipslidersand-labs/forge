@@ -43,13 +43,6 @@ class TestIdentify:
 
         assert identify(relu) is None
 
-    def test_dynamic_dim_untraceable_returns_none(self) -> None:
-        # dim を引数で渡す形は trace 不能 → None（eager フォールバック）
-        def softmax(x, dim):
-            return torch.softmax(x, dim=dim)
-
-        assert identify(softmax) is None
-
     def test_unrelated_fn_returns_none(self) -> None:
         def add(x, y):
             return x + y

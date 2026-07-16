@@ -119,9 +119,7 @@ class TestExtendedBaselineResult:
 
     def test_compile_time_defaults_to_zero(self) -> None:
         bench = BenchmarkResult.from_samples([10.0], warmup=0, repeat=1)
-        r = ExtendedBaselineResult.from_dict(
-            {"name": "x", "benchmark": bench.to_dict()}
-        )
+        r = ExtendedBaselineResult.from_dict({"name": "x", "benchmark": bench.to_dict()})
         assert r.compile_time_s == 0.0
 
     def test_error_field_roundtrip(self) -> None:

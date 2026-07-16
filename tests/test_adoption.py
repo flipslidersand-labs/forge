@@ -2,8 +2,6 @@
 
 import inspect
 
-import pytest
-
 from forge.decorator import optimize
 from forge.search.adoption import AdoptionDecision, should_run_search
 
@@ -120,7 +118,9 @@ class TestPerCandidateS:
         invocations = 50_000  # 20000 < 50000 < 10M なので分岐が明確
 
         d_cheap = should_run_search(invocations, budget * 0.1, baseline_us, expected_speedup=2.0)
-        d_expensive = should_run_search(invocations, budget * 50.0, baseline_us, expected_speedup=2.0)
+        d_expensive = should_run_search(
+            invocations, budget * 50.0, baseline_us, expected_speedup=2.0
+        )
 
         assert d_cheap.should_search is True
         assert d_expensive.should_search is False
