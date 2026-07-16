@@ -282,12 +282,14 @@ class Orchestrator:
                         f"p95={eb.benchmark.p95_us:.1f}µs compile={eb.compile_time_s:.1f}s"
                     )
 
+        llm.reset_usage()
         history: list[HistoryEntry] = []
         rounds: list[RoundResult] = []
         overall_best_params: SearchParams | None = None
         overall_best_bench: BenchmarkResult | None = None
         baseline_bench: BenchmarkResult | None = None
         baseline_name: str | None = None
+        seen_params: set[SearchParams] = set()
 
         for round_num in range(1, n_rounds + 1):
             self._progress(
@@ -305,6 +307,10 @@ class Orchestrator:
             round_best_us: float | None = None
 
             for i, params in enumerate(candidates, 1):
+                if params in seen_params:
+                    self._progress(f"  [r{round_num}.{i}] skip duplicate: {params.block_size}/{params.num_warps}")
+                    continue
+                seen_params.add(params)
                 label = f"  [r{round_num}.{i}] {params.block_size}/{params.num_warps}"
                 exp, cand_bench, bl_bench, bl_name = self._eval_one(
                     spec, params, bench_input, cases, tol, label

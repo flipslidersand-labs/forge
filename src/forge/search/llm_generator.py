@@ -64,6 +64,10 @@ class LLMGenerator:
         self._propose_fn = propose_fn
         self.token_usage = TokenUsage()
 
+    def reset_usage(self) -> None:
+        """token_usage を初期化する。複数 spec にまたがって再利用する場合に呼ぶ。"""
+        self.token_usage = TokenUsage()
+
     def generate(
         self,
         spec: KernelSpec,
