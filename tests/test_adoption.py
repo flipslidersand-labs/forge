@@ -1,7 +1,10 @@
 """adoption モジュールのオフラインテスト。GPU 不要。"""
 
+import inspect
+
 import pytest
 
+from forge.decorator import optimize
 from forge.search.adoption import AdoptionDecision, should_run_search
 
 
@@ -95,3 +98,29 @@ class TestShouldRunSearch:
     def test_reason_mentions_break_even(self) -> None:
         decision = should_run_search(100, 10.0, 50.0)
         assert "break" in decision.reason.lower() or "skip" in decision.reason.lower()
+
+
+class TestPerCandidateS:
+    """optimize() デコレータの per_candidate_s パラメータのオフラインテスト。"""
+
+    def test_optimize_accepts_per_candidate_s(self) -> None:
+        sig = inspect.signature(optimize)
+        assert "per_candidate_s" in sig.parameters
+
+    def test_per_candidate_s_default_is_2(self) -> None:
+        sig = inspect.signature(optimize)
+        assert sig.parameters["per_candidate_s"].default == 2.0
+
+    def test_search_cost_scales_with_per_candidate_s(self) -> None:
+        # budget=10, baseline=100µs, speedup=2.0 → saved=50µs/call
+        # per_candidate_s=0.1 → search_cost_s=1.0 → break_even=1e6/50=20000
+        # per_candidate_s=50.0 → search_cost_s=500 → break_even=500e6/50=10M
+        budget = 10
+        baseline_us = 100.0
+        invocations = 50_000  # 20000 < 50000 < 10M なので分岐が明確
+
+        d_cheap = should_run_search(invocations, budget * 0.1, baseline_us, expected_speedup=2.0)
+        d_expensive = should_run_search(invocations, budget * 50.0, baseline_us, expected_speedup=2.0)
+
+        assert d_cheap.should_search is True
+        assert d_expensive.should_search is False

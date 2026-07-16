@@ -25,6 +25,7 @@ def optimize(
     search: CandidateGenerator | None = None,
     min_speedup: float = 1.03,
     min_invocations: int = 0,
+    per_candidate_s: float = 2.0,
     python_executable: str | None = None,
     progress: Callable[[str], None] | None = None,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
@@ -39,6 +40,7 @@ def optimize(
 
     objective="economic" かつ min_invocations > 0 のとき、探索コストが回収できない
     と判断した場合は探索をスキップして eager にフォールバックする。
+    per_candidate_s は 1 候補あたりの探索コスト見積もり（秒）。GPU の速度に応じて調整する。
     """
 
     def deco(fn: Callable[..., Any]) -> Callable[..., Any]:
@@ -75,7 +77,7 @@ def optimize(
                 # economic: eager を 1 回タイムしてから探索判断
                 if objective == "economic" and min_invocations > 0:
                     baseline_us = _time_eager(fn, args, kwargs)
-                    search_cost_s = budget * 2.0  # 1 候補あたり 2 秒の保守的見積もり
+                    search_cost_s = budget * per_candidate_s
                     decision = should_run_search(min_invocations, search_cost_s, baseline_us)
                     _log = progress or (lambda _m: None)
                     _log(f"adoption: {decision.reason}")
