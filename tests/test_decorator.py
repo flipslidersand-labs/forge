@@ -159,3 +159,67 @@ def test_decorated_softmax_matches_eager() -> None:
         # softmax は単一行の確率分布 → 各行の和が ~1
         assert torch.allclose(out.float().sum(-1), torch.ones(256, device="cuda"), atol=1e-2)
         repo.close()
+
+
+@_SKIP
+def test_decorated_sdpa_matches_eager() -> None:
+    import torch.nn.functional as F
+    from forge.search.space import SearchSpace
+
+    space = SearchSpace(
+        num_warps=[4],
+        num_stages=[1],
+        acc_dtypes=["fp32"],
+        variants=["flash"],
+        attention_seq_blocks=[64],
+    )
+    with tempfile.TemporaryDirectory() as d:
+        repo = KernelRepository(Path(d) / "cache.db")
+
+        @forge.optimize(budget=4, repo=repo, search=GridSearch(space))
+        def sdpa(q, k, v):
+            return F.scaled_dot_product_attention(q, k, v)
+
+        B, S, D = 2, 128, 64
+        q = torch.randn(B, S, D, dtype=torch.float16, device="cuda")
+        k = torch.randn(B, S, D, dtype=torch.float16, device="cuda")
+        v = torch.randn(B, S, D, dtype=torch.float16, device="cuda")
+
+        out = sdpa(q, k, v)
+        ref = F.scaled_dot_product_attention(q.float(), k.float(), v.float()).to(torch.float16)
+        assert out.shape == ref.shape
+        assert torch.allclose(out.float(), ref.float(), atol=5e-3, rtol=1e-2)
+        repo.close()
+
+
+@_SKIP
+def test_decorated_sdpa_causal_matches_eager() -> None:
+    import torch.nn.functional as F
+    from forge.search.space import SearchSpace
+
+    space = SearchSpace(
+        num_warps=[4],
+        num_stages=[1],
+        acc_dtypes=["fp32"],
+        variants=["flash"],
+        attention_seq_blocks=[64],
+    )
+    with tempfile.TemporaryDirectory() as d:
+        repo = KernelRepository(Path(d) / "cache.db")
+
+        @forge.optimize(budget=4, repo=repo, search=GridSearch(space))
+        def sdpa_causal(q, k, v, is_causal=False):
+            return F.scaled_dot_product_attention(q, k, v, is_causal=is_causal)
+
+        B, S, D = 2, 128, 64
+        q = torch.randn(B, S, D, dtype=torch.float16, device="cuda")
+        k = torch.randn(B, S, D, dtype=torch.float16, device="cuda")
+        v = torch.randn(B, S, D, dtype=torch.float16, device="cuda")
+
+        out = sdpa_causal(q, k, v, is_causal=True)
+        ref = F.scaled_dot_product_attention(
+            q.float(), k.float(), v.float(), is_causal=True
+        ).to(torch.float16)
+        assert out.shape == ref.shape
+        assert torch.allclose(out.float(), ref.float(), atol=5e-3, rtol=1e-2)
+        repo.close()

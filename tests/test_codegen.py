@@ -191,3 +191,57 @@ class TestSearchParams:
     def test_roundtrip_dict(self) -> None:
         p = default_params()
         assert SearchParams.from_dict(p.to_dict()) == p
+
+
+def sdpa_spec(S: int = 256, D: int = 64, is_causal: bool = False) -> KernelSpec:
+    q_spec = TensorSpec(shape=(4, S, D), dtype=torch.float16, is_contiguous=True)
+    return KernelSpec(
+        op_type="scaled_dot_product_attention",
+        input_specs=(q_spec, q_spec, q_spec),
+        output_specs=(q_spec,),
+        constants={"is_causal": is_causal},
+        graph_hash="sdpa_v1",
+        constraints=(),
+    )
+
+
+def sdpa_params(**kw: object) -> SearchParams:
+    base = dict(block_size=64, num_warps=4, num_stages=1, acc_dtype="fp32", variant="flash")
+    base.update(kw)
+    return SearchParams(**base)  # type: ignore[arg-type]
+
+
+class TestSdpaCodegen:
+    def test_valid_python(self) -> None:
+        code = generate(sdpa_spec(), sdpa_params())
+        compile(code, "<gen>", "exec")
+
+    def test_contains_flash_attention_markers(self) -> None:
+        code = generate(sdpa_spec(), sdpa_params())
+        assert "op=scaled_dot_product_attention variant=flash" in code
+        assert "_sdpa_kernel" in code
+        assert "def kernel_fn(q, k, v" in code
+
+    def test_head_dim_embedded(self) -> None:
+        code = generate(sdpa_spec(D=64), sdpa_params())
+        assert "HEAD_DIM=64" in code
+
+    def test_block_size_embedded(self) -> None:
+        code = generate(sdpa_spec(), sdpa_params(block_size=128))
+        compile(code, "<gen>", "exec")
+        assert "BLOCK_S=128" in code
+
+    def test_non_causal_has_no_causal_flag(self) -> None:
+        code = generate(sdpa_spec(is_causal=False), sdpa_params())
+        assert "IS_CAUSAL=False" in code
+
+    def test_causal_sets_flag(self) -> None:
+        code = generate(sdpa_spec(is_causal=True), sdpa_params())
+        assert "IS_CAUSAL=True" in code
+
+    def test_online_softmax_accumulators(self) -> None:
+        code = generate(sdpa_spec(), sdpa_params())
+        # Flash Attention 2 のオンライン softmax に必須の変数
+        assert "m_i" in code
+        assert "l_i" in code
+        assert "acc" in code
