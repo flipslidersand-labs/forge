@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from forge.benchmark.statistics import BenchmarkResult, is_improvement
 from forge.cache.key import CacheKey
@@ -383,8 +383,8 @@ class Orchestrator:
         self,
         spec: KernelSpec,
         params: SearchParams,
-        bench_input: object,
-        cases: object,
+        bench_input: list[dict[str, Any]],
+        cases: list[dict[str, Any]] | None,
         tol: dict,
         label: str,
     ) -> tuple[ExperimentResult, BenchmarkResult | None, BenchmarkResult | None, str | None]:

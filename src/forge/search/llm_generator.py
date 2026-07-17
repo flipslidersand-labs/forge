@@ -119,7 +119,7 @@ class LLMGenerator:
         n: int,
         history: list[HistoryEntry],
     ) -> list[dict[str, Any]]:
-        import anthropic
+        import anthropic  # type: ignore[import]
         from pydantic import BaseModel
 
         class Candidate(BaseModel):
@@ -146,6 +146,8 @@ class LLMGenerator:
         )
         self.token_usage._add_from_response(resp)
         proposal = resp.parsed_output
+        if proposal is None:
+            return []
         return [c.model_dump() for c in proposal.candidates]
 
 
