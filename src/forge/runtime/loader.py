@@ -6,8 +6,10 @@ import uuid
 from collections.abc import Callable
 from pathlib import Path
 
+import torch
 
-def load_kernel_fn(code: str) -> Callable[..., object]:
+
+def load_kernel_fn(code: str) -> Callable[..., torch.Tensor]:
     """生成された Triton モジュール文字列を一時 .py として import し kernel_fn を返す。
 
     @triton.jit は inspect でソースをファイルから読むため、実在するファイル経由で

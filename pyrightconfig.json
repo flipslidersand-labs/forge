@@ -1,0 +1,16 @@
+{
+  "include": ["src"],
+  "pythonVersion": "3.12",
+  "typeCheckingMode": "standard",
+  "reportMissingTypeStubs": "none",
+  "reportMissingModuleSource": "none",
+  "reportUnknownMemberType": "none",
+  "reportUnknownVariableType": "none",
+  "reportUnknownArgumentType": "none",
+  "reportUnknownParameterType": "none",
+  "reportUnknownLambdaType": "none",
+  "ignore": [
+    "src/forge/search/llm_generator.py",
+    "src/forge/search/ollama_generator.py"
+  ]
+}
