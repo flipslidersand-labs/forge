@@ -219,9 +219,9 @@ def test_decorated_sdpa_causal_matches_eager() -> None:
         v = torch.randn(B, S, D, dtype=torch.float16, device="cuda")
 
         out = sdpa_causal(q, k, v, is_causal=True)
-        ref = F.scaled_dot_product_attention(
-            q.float(), k.float(), v.float(), is_causal=True
-        ).to(torch.float16)
+        ref = F.scaled_dot_product_attention(q.float(), k.float(), v.float(), is_causal=True).to(
+            torch.float16
+        )
         assert out.shape == ref.shape
         assert torch.allclose(out.float(), ref.float(), atol=5e-3, rtol=1e-2)
         repo.close()
