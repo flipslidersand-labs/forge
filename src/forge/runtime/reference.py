@@ -31,11 +31,20 @@ def gelu_reference(x: torch.Tensor) -> torch.Tensor:
     return torch.nn.functional.gelu(x.float()).to(x.dtype)
 
 
+def attention_reference(
+    q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool = True
+) -> torch.Tensor:
+    return torch.nn.functional.scaled_dot_product_attention(
+        q.float(), k.float(), v.float(), is_causal=causal
+    ).to(q.dtype)
+
+
 REFERENCE_IMPLS: dict[str, Callable[..., torch.Tensor]] = {
     "rmsnorm": rmsnorm_reference,
     "softmax": softmax_reference,
     "layernorm": layernorm_reference,
     "gelu": gelu_reference,
+    "attention": attention_reference,
 }
 
 
@@ -71,11 +80,18 @@ def _gelu_baseline(x: torch.Tensor) -> torch.Tensor:
     return torch.nn.functional.gelu(x)
 
 
+def _attention_baseline(
+    q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool = True
+) -> torch.Tensor:
+    return torch.nn.functional.scaled_dot_product_attention(q, k, v, is_causal=causal)
+
+
 BASELINE_IMPLS: dict[str, Callable[..., torch.Tensor]] = {
     "rmsnorm": _rmsnorm_baseline,
     "softmax": _softmax_baseline,
     "layernorm": _layernorm_baseline,
     "gelu": _gelu_baseline,
+    "attention": _attention_baseline,
 }
 
 
@@ -86,7 +102,12 @@ def get_baseline(op_type: str) -> Callable[..., torch.Tensor]:
     return BASELINE_IMPLS[op_type]
 
 
-_BASELINE_NAMES = {"softmax": "F.softmax", "layernorm": "F.layer_norm", "gelu": "F.gelu"}
+_BASELINE_NAMES = {
+    "softmax": "F.softmax",
+    "layernorm": "F.layer_norm",
+    "gelu": "F.gelu",
+    "attention": "F.scaled_dot_product_attention",
+}
 
 
 def baseline_name(op_type: str) -> str:
