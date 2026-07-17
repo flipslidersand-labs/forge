@@ -119,7 +119,7 @@ class LLMGenerator:
         n: int,
         history: list[HistoryEntry],
     ) -> list[dict[str, Any]]:
-        import anthropic
+        import anthropic  # type: ignore[import]
         from pydantic import BaseModel
 
         class Candidate(BaseModel):

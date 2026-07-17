@@ -46,7 +46,7 @@ def optimize(
     def deco(fn: Callable[..., Any]) -> Callable[..., Any]:
         sig = inspect.signature(fn)
         # shape シグネチャ -> in-process カーネル (or None=eager)
-        compiled: dict[tuple, Callable[..., Any] | None] = {}
+        compiled: dict[tuple[Any, ...], Callable[..., Any] | None] = {}
         op_type_box: list[
             str | None
         ] = []  # 一度だけ判定（[] 未判定 / [None] 不可 / [str] 判定済み）

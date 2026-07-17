@@ -81,7 +81,7 @@ class OllamaGenerator:
         return out[:n]
 
     def _propose(self, prompt: str) -> list[dict[str, Any]]:
-        import ollama
+        import ollama  # type: ignore[import]
 
         try:
             resp = ollama.Client(host=self.host).chat(

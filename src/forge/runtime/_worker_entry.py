@@ -104,8 +104,8 @@ def main() -> None:
         max_abs_diff = 0.0
         for case in cases:
             tensors = [_build_tensor(s, torch) for s in case["input_specs"]]
-            out_c = kernel_fn(*tensors, **constants)
-            out_r = reference(*tensors, **constants)
+            out_c: Any = kernel_fn(*tensors, **constants)
+            out_r: Any = reference(*tensors, **constants)
             torch.cuda.synchronize()
             diff = (out_c.float() - out_r.float()).abs().max().item()
             max_abs_diff = max(max_abs_diff, diff)
