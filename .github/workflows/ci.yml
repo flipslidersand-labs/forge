@@ -59,11 +59,5 @@ jobs:
         run: |
           pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install -e ".[dev,llm,ollama]"
-      - name: pyright (baseline 124 errors)
-        run: |
-          count=$(pyright src/ --outputjson 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['summary']['errorCount'])" 2>/dev/null || pyright src/ 2>&1 | grep -c " error:" || echo 0)
-          echo "pyright errors: $count"
-          if [ "$count" -gt 124 ]; then
-            echo "エラー数が baseline (124) を超えました: $count"
-            exit 1
-          fi
+      - name: pyright (0 errors)
+        run: pyright src/

@@ -106,6 +106,7 @@ def main() -> None:
             tensors = [_build_tensor(s, torch) for s in case["input_specs"]]
             out_c = kernel_fn(*tensors, **constants)
             out_r = reference(*tensors, **constants)
+            assert isinstance(out_c, torch.Tensor) and isinstance(out_r, torch.Tensor)
             torch.cuda.synchronize()
             diff = (out_c.float() - out_r.float()).abs().max().item()
             max_abs_diff = max(max_abs_diff, diff)
