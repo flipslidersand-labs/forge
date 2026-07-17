@@ -164,6 +164,7 @@ def test_decorated_softmax_matches_eager() -> None:
 @_SKIP
 def test_decorated_sdpa_matches_eager() -> None:
     import torch.nn.functional as F
+
     from forge.search.space import SearchSpace
 
     space = SearchSpace(
@@ -195,6 +196,7 @@ def test_decorated_sdpa_matches_eager() -> None:
 @_SKIP
 def test_decorated_sdpa_causal_matches_eager() -> None:
     import torch.nn.functional as F
+
     from forge.search.space import SearchSpace
 
     space = SearchSpace(
