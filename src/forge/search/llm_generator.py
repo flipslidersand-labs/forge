@@ -146,6 +146,8 @@ class LLMGenerator:
         )
         self.token_usage._add_from_response(resp)
         proposal = resp.parsed_output
+        if proposal is None:
+            return []
         return [c.model_dump() for c in proposal.candidates]
 
 
