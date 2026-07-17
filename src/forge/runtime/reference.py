@@ -93,7 +93,9 @@ def _sdpa_baseline(
     scale: float | None = None,
     is_causal: bool = False,
 ) -> torch.Tensor:
-    return torch.nn.functional.scaled_dot_product_attention(q, k, v, scale=scale, is_causal=is_causal)
+    return torch.nn.functional.scaled_dot_product_attention(
+        q, k, v, scale=scale, is_causal=is_causal
+    )
 
 
 BASELINE_IMPLS: dict[str, Callable[..., torch.Tensor]] = {

@@ -59,6 +59,36 @@ class TestIdentify:
         assert identify(dynamic) is None
 
 
+class TestSdpaIdentify:
+    def test_recognizes_sdpa(self) -> None:
+        import torch.nn.functional as F
+
+        def attn(q, k, v):
+            return F.scaled_dot_product_attention(q, k, v)
+
+        assert identify(attn) == "scaled_dot_product_attention"
+
+    def test_recognizes_sdpa_causal(self) -> None:
+        import torch.nn.functional as F
+
+        def attn_causal(q, k, v):
+            return F.scaled_dot_product_attention(q, k, v, is_causal=True)
+
+        assert identify(attn_causal) == "scaled_dot_product_attention"
+
+    def test_sdpa_pattern_count(self) -> None:
+        from collections import Counter
+
+        import torch.nn.functional as F
+
+        def attn(q, k, v):
+            return F.scaled_dot_product_attention(q, k, v)
+
+        graph = torch.fx.symbolic_trace(attn).graph
+        counts = graph_op_counts(graph)
+        assert counts == Counter({"scaled_dot_product_attention": 1})
+
+
 class TestRegistry:
     def test_graph_op_counts_rmsnorm(self) -> None:
         graph = torch.fx.symbolic_trace(rmsnorm).graph
