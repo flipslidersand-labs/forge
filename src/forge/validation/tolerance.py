@@ -23,6 +23,8 @@ TOLERANCE: dict[str, Tolerance] = {
     # layernorm は rmsnorm 同様 fp16 縮約誤差で 2e-3。gelu は exact(erf) で誤差小。
     "layernorm": Tolerance(atol=2e-3, rtol=1e-2, equal_nan=False),
     "gelu": Tolerance(atol=2e-3, rtol=1e-2, equal_nan=False),
+    # SDPA は Q@K^T softmax @V の 3 op 合成。fp16 matmul 誤差が累積するため atol を緩める。
+    "scaled_dot_product_attention": Tolerance(atol=5e-3, rtol=1e-2, equal_nan=False),
 }
 
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from . import attention as _attention  # noqa: F401 — パターン登録の副作用
 from . import gelu as _gelu  # noqa: F401 — パターン登録の副作用
 from . import layernorm as _layernorm  # noqa: F401 — パターン登録の副作用
 from . import rmsnorm as _rmsnorm  # noqa: F401 — パターン登録の副作用
