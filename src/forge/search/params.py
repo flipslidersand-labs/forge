@@ -45,7 +45,7 @@ class SearchParams:
             raise ValueError(f"block_size must be a positive power of 2, got {self.block_size}")
         if self.rows_per_program < 1:
             raise ValueError(f"rows_per_program must be >= 1, got {self.rows_per_program}")
-        if self.variant not in ("multi_row", "attention") and self.rows_per_program != 1:
+        if self.variant != "multi_row" and self.rows_per_program != 1:
             raise ValueError("rows_per_program > 1 is only valid for variant='multi_row'")
 
     def to_dict(self) -> dict[str, object]:

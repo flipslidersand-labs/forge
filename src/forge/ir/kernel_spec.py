@@ -23,3 +23,9 @@ class KernelSpec:
             )
         if not self.input_specs:
             raise ValueError("input_specs must not be empty")
+        if self.op_type == "attention":
+            d = self.input_specs[0].shape[-1]
+            if d == 0 or (d & (d - 1)) != 0:
+                raise ValueError(
+                    f"attention requires head_dim (last dim of Q) to be a power of 2, got {d}"
+                )
