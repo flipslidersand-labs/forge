@@ -11,6 +11,22 @@ def rmsnorm(x, weight, eps=1e-6):
 
 
 class TestIdentify:
+    def test_recognizes_scaled_dot_product_attention(self) -> None:
+        import torch.nn.functional as F
+
+        def sdpa(q, k, v):
+            return F.scaled_dot_product_attention(q, k, v)
+
+        assert identify(sdpa) == "scaled_dot_product_attention"
+
+    def test_recognizes_sdpa_causal(self) -> None:
+        import torch.nn.functional as F
+
+        def sdpa_causal(q, k, v):
+            return F.scaled_dot_product_attention(q, k, v, is_causal=True)
+
+        assert identify(sdpa_causal) == "scaled_dot_product_attention"
+
     def test_recognizes_rmsnorm(self) -> None:
         assert identify(rmsnorm) == "rmsnorm"
 

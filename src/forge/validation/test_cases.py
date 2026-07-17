@@ -50,11 +50,30 @@ def _layernorm_inputs(
     ]
 
 
+def _sdpa_inputs(
+    bh: int,
+    s: int,
+    d: int,
+    dtype: str,
+    scale: float = 1.0,
+    seed: int = 0,
+) -> list[dict[str, Any]]:
+    # Q, K, V の 3 入力。shape は [B*H, S, D]。
+    return [
+        {"shape": [bh, s, d], "dtype": dtype, "init": "randn", "scale": scale, "seed": seed},
+        {"shape": [bh, s, d], "dtype": dtype, "init": "randn", "scale": scale, "seed": seed + 1},
+        {"shape": [bh, s, d], "dtype": dtype, "init": "randn", "scale": scale, "seed": seed + 2},
+    ]
+
+
 def primary_input(spec: KernelSpec) -> list[dict[str, Any]]:
     """ベンチマークに使う代表入力（spec の shape そのまま）。"""
     x = spec.input_specs[0]
-    m, n = x.shape
     dt = x.dtype_str()
+    if spec.op_type == "scaled_dot_product_attention":
+        bh, s, d = x.shape
+        return _sdpa_inputs(bh, s, d, dt)
+    m, n = x.shape
     if spec.op_type == "rmsnorm":
         return _rmsnorm_inputs(m, n, dt)
     if spec.op_type in ("softmax", "gelu"):
@@ -71,8 +90,22 @@ def correctness_cases(spec: KernelSpec) -> list[dict[str, Any]]:
     数値分布を変える。各ケースは worker が tensor を組み立てる input_specs を持つ。
     """
     x = spec.input_specs[0]
-    _, n = x.shape
     dt = x.dtype_str()
+
+    if spec.op_type == "scaled_dot_product_attention":
+        bh, s, d = x.shape
+        return [
+            {"name": "basic", "input_specs": _sdpa_inputs(bh, s, d, dt)},
+            {"name": "single_batch", "input_specs": _sdpa_inputs(1, s, d, dt, seed=3)},
+            {"name": "multi_batch", "input_specs": _sdpa_inputs(4, s, d, dt, seed=5)},
+            # 大きい値：softmax の数値安定性（online max 更新）を検証
+            {
+                "name": "large_values",
+                "input_specs": _sdpa_inputs(bh, s, d, dt, scale=10.0, seed=7),
+            },
+        ]
+
+    _, n = x.shape
 
     if spec.op_type == "rmsnorm":
         return [
