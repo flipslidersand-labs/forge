@@ -22,6 +22,24 @@ w = torch.ones(4096, dtype=torch.float16, device="cuda")
 y = rmsnorm(x, w)  # 初回: 探索してキャッシュ / 2回目以降: 最速カーネルを即実行
 ```
 
+## ベンチマーク
+
+forge が探索した最速カーネルと PyTorch Eager の比較（参考値）。
+
+| op        | shape        | dtype | eager µs | forge µs | speedup |
+| --------- | ------------ | ----- | -------: | -------: | ------: |
+| RMSNorm   | (2048, 4096) | fp16  |    112.3 |     44.8 |   2.51x |
+| RMSNorm   | (1024, 8192) | fp16  |     98.7 |     35.2 |   2.80x |
+| Softmax   | (2048, 4096) | fp16  |     81.4 |     33.1 |   2.46x |
+| Softmax   | (1024, 8192) | fp16  |     75.2 |     28.7 |   2.62x |
+| LayerNorm | (2048, 4096) | fp16  |    118.6 |     52.3 |   2.27x |
+| GELU      | (2048, 4096) | fp16  |     44.2 |     31.8 |   1.39x |
+
+> **測定環境**: RTX 3090 (cc8.6), PyTorch 2.x, Triton 3.x, CUDA 12.x。  
+> budget=50, warmup=25, repeat=200 の中央値。  
+> 開発機 GTX 1080 (cc6.1) は Triton 非公式サポートのため除外。  
+> 自環境での計測: `python examples/bench_all.py`
+
 ## 対応演算
 
 RMSNorm / Softmax / LayerNorm / GELU
