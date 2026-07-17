@@ -107,6 +107,49 @@ class TestSearchSpaceGpu:
         assert {p.variant for p in params} == {"single_row", "multi_row", "two_pass"}
 
 
+def sdpa_spec(bh: int = 8, s: int = 64, d: int = 64, is_causal: bool = False) -> KernelSpec:
+    return KernelSpec(
+        op_type="scaled_dot_product_attention",
+        input_specs=(
+            TensorSpec((bh, s, d), torch.float16, True),
+            TensorSpec((bh, s, d), torch.float16, True),
+            TensorSpec((bh, s, d), torch.float16, True),
+        ),
+        output_specs=(TensorSpec((bh, s, d), torch.float16, True),),
+        constants={"is_causal": is_causal},
+        graph_hash="sdpa_v1",
+        constraints=(),
+    )
+
+
+class TestAttentionSpace:
+    def test_uses_flash_variant_only(self) -> None:
+        params = list(SearchSpace().enumerate(sdpa_spec(), "8.9"))
+        assert params and {p.variant for p in params} == {"flash"}
+
+    def test_block_sizes_from_attention_seq_blocks(self) -> None:
+        params = list(SearchSpace().enumerate(sdpa_spec(s=64), "8.9"))
+        assert all(p.block_size <= 64 for p in params)
+
+    def test_acc_dtype_is_fp32(self) -> None:
+        params = list(SearchSpace().enumerate(sdpa_spec(), "8.9"))
+        assert all(p.acc_dtype == "fp32" for p in params)
+
+    def test_no_duplicates(self) -> None:
+        params = list(SearchSpace().enumerate(sdpa_spec(), "8.9"))
+        keys = [(p.block_size, p.num_warps, p.num_stages) for p in params]
+        assert len(keys) == len(set(keys))
+
+    def test_pascal_restricts_stages(self) -> None:
+        params = list(SearchSpace().enumerate(sdpa_spec(), "6.1"))
+        assert {p.num_stages for p in params} == {1}
+
+    def test_yields_results_for_common_head_dims(self) -> None:
+        for d in (32, 64, 128):
+            params = list(SearchSpace().enumerate(sdpa_spec(d=d), "8.9"))
+            assert params, f"No params for head_dim={d}"
+
+
 class TestGridSearch:
     def test_budget_caps_results(self) -> None:
         cands = GridSearch().generate(spec(4096), "8.9", budget=5)

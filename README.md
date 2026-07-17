@@ -24,7 +24,7 @@ y = rmsnorm(x, w)  # 初回: 探索してキャッシュ / 2回目以降: 最速
 
 ## 対応演算
 
-RMSNorm / Softmax / LayerNorm / GELU
+RMSNorm / Softmax / LayerNorm / GELU / ScaledDotProductAttention（Flash Attention 2 スタイル）
 
 ## 仕組み
 
@@ -122,7 +122,8 @@ tests/              CPU テスト + GPU テスト（@pytest.mark.gpu）
 
 ## 既知の制約
 
-- 判定できる演算は上記 4 種のみ。未対応・trace 不能（動的 dim 等）は eager フォールバック
+- 判定できる演算は上記 5 種のみ。未対応・trace 不能（動的 dim 等）は eager フォールバック
+- SDPA は attn_mask / dropout / enable_gqa 非対応。head_dim は 2 のべき乗 ≥ 16 が必須
 - GELU は exact（erf）のみ。tanh 近似の関数は許容誤差を超えて eager になり得る
 - 演算は標準的な式の形のみ認識（torch.fx の call_function 多重集合でマッチ）
 - 開発・検証は GTX 1080（compute capability 6.1、Triton 公式サポート外）で実施

@@ -175,6 +175,71 @@ class TestVariantCodegen:
         assert a == b
 
 
+def sdpa_spec(bh: int = 8, s: int = 64, d: int = 64, is_causal: bool = False) -> KernelSpec:
+    return KernelSpec(
+        op_type="scaled_dot_product_attention",
+        input_specs=(
+            TensorSpec(shape=(bh, s, d), dtype=torch.float16, is_contiguous=True),
+            TensorSpec(shape=(bh, s, d), dtype=torch.float16, is_contiguous=True),
+            TensorSpec(shape=(bh, s, d), dtype=torch.float16, is_contiguous=True),
+        ),
+        output_specs=(TensorSpec(shape=(bh, s, d), dtype=torch.float16, is_contiguous=True),),
+        constants={"is_causal": is_causal},
+        graph_hash="sdpa_v1",
+        constraints=(),
+    )
+
+
+def flash_params(block_size: int = 64, num_warps: int = 4, num_stages: int = 1) -> SearchParams:
+    return SearchParams(
+        block_size=block_size,
+        num_warps=num_warps,
+        num_stages=num_stages,
+        acc_dtype="fp32",
+        variant="flash",
+    )
+
+
+class TestSdpaCodegen:
+    def test_non_causal_valid_python(self) -> None:
+        code = generate(sdpa_spec(is_causal=False), flash_params())
+        compile(code, "<gen>", "exec")
+        assert "op=scaled_dot_product_attention variant=flash" in code
+        assert "IS_CAUSAL=False" in code
+
+    def test_causal_valid_python(self) -> None:
+        code = generate(sdpa_spec(is_causal=True), flash_params())
+        compile(code, "<gen>", "exec")
+        assert "IS_CAUSAL=True" in code
+
+    def test_head_dim_baked_in(self) -> None:
+        code = generate(sdpa_spec(d=64), flash_params())
+        assert "HEAD_DIM=64" in code
+
+    def test_block_size_embedded(self) -> None:
+        code = generate(sdpa_spec(), flash_params(block_size=128))
+        assert "BLOCK_S=128" in code
+        assert "cdiv(S, 128)" in code
+
+    def test_contains_flash_attention_structure(self) -> None:
+        code = generate(sdpa_spec(), flash_params())
+        assert "tl.dot" in code
+        assert "tl.exp" in code
+        assert "tl.max" in code
+        assert "def kernel_fn(q, k, v" in code
+
+    def test_unknown_template_raises(self) -> None:
+        import pytest
+
+        with pytest.raises(ValueError, match="No codegen template"):
+            generate(sdpa_spec(), default_params(variant="single_row"))
+
+    def test_flash_variant_accepted_by_search_params(self) -> None:
+        p = flash_params()
+        assert p.variant == "flash"
+        assert SearchParams.from_dict(p.to_dict()) == p
+
+
 class TestSearchParams:
     def test_rejects_non_power_of_2_block_size(self) -> None:
         import pytest
