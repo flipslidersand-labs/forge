@@ -65,6 +65,9 @@ class SearchSpace:
         block_size はシーケンス長（S）のタイルサイズ。tl.dot 制約上 ≥ 16 かつ
         head_dim も 16 の倍数である必要がある。acc_dtype は fp32 固定（精度優先）。
         """
+        d = spec.input_specs[0].shape[-1]
+        if d <= 0 or d % 16 != 0:
+            return
         s = spec.input_specs[0].shape[-2]
         valid = sorted({b for b in self.attention_seq_blocks if b <= s})
         if not valid:
