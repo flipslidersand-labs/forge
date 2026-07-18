@@ -108,6 +108,10 @@ class TestSearchSpace:
         for p in params:
             assert p.block_size <= 16
 
+    def test_head_dim_not_multiple_of_16_yields_nothing(self) -> None:
+        params = list(SearchSpace().enumerate(_sdpa_spec(d=65), "8.9"))
+        assert params == []
+
 
 class TestSearchParams:
     def test_flash_variant_accepted(self) -> None:
