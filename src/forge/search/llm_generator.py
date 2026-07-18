@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from typing import Any
 
 from forge.ir.kernel_spec import KernelSpec
@@ -12,6 +13,25 @@ from .params import SUPPORTED_ACC_DTYPES, SUPPORTED_VARIANTS, SearchParams
 ProposeFn = Callable[[KernelSpec, str, int, list[HistoryEntry]], list[dict[str, Any]]]
 
 DEFAULT_MODEL = "claude-opus-4-8"
+
+
+@dataclass
+class TokenUsage:
+    """Anthropic API トークン使用量の累積カウンタ。"""
+
+    input_tokens: int = field(default=0)
+    output_tokens: int = field(default=0)
+
+    @property
+    def total(self) -> int:
+        return self.input_tokens + self.output_tokens
+
+    def _add_from_response(self, resp: Any) -> None:
+        usage = getattr(resp, "usage", None)
+        if usage is not None:
+            self.input_tokens += getattr(usage, "input_tokens", 0)
+            self.output_tokens += getattr(usage, "output_tokens", 0)
+
 
 _SYSTEM = (
     "You are a GPU kernel autotuning assistant. You propose Triton kernel "
@@ -43,6 +63,11 @@ class LLMGenerator:
         self.client = client
         self.default_n = default_n
         self._propose_fn = propose_fn
+        self.token_usage = TokenUsage()
+
+    def reset_usage(self) -> None:
+        """token_usage を初期化する。複数 spec にまたがって再利用する場合に呼ぶ。"""
+        self.token_usage = TokenUsage()
 
     def generate(
         self,
@@ -94,7 +119,7 @@ class LLMGenerator:
         n: int,
         history: list[HistoryEntry],
     ) -> list[dict[str, Any]]:
-        import anthropic
+        import anthropic  # type: ignore[import]
         from pydantic import BaseModel
 
         class Candidate(BaseModel):
@@ -119,7 +144,10 @@ class LLMGenerator:
             messages=[{"role": "user", "content": prompt}],
             output_format=Proposal,
         )
+        self.token_usage._add_from_response(resp)
         proposal = resp.parsed_output
+        if proposal is None:
+            return []
         return [c.model_dump() for c in proposal.candidates]
 
 

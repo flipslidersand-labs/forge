@@ -33,13 +33,14 @@ _TEMPLATES = {
     ("layernorm", "single_row"): "layernorm.py.jinja",
     ("layernorm", "multi_row"): "layernorm_multi_row.py.jinja",
     ("gelu", "elementwise"): "gelu.py.jinja",
+    ("scaled_dot_product_attention", "flash"): "sdpa.py.jinja",
 }
 
 
 def generate(spec: KernelSpec, params: SearchParams) -> str:
     """KernelSpec + SearchParams から完全な standalone Triton モジュールを生成する。
 
-    生成コードは ``kernel_fn(x, weight, eps)`` を公開し、subprocess worker が
+    生成コードは ``kernel_fn(...)`` を公開し、subprocess worker が
     一時 .py ファイルとして実行する（@triton.jit はソースをファイルから読むため
     インライン exec では動かない — Issue #3 参照）。
     """
@@ -49,7 +50,8 @@ def generate(spec: KernelSpec, params: SearchParams) -> str:
 
     out_dtype_str = spec.output_specs[0].dtype_str()
     template = _env().get_template(_TEMPLATES[tkey])
-    return template.render(
+
+    render_kwargs: dict[str, object] = dict(
         variant=params.variant,
         block_size=params.block_size,
         num_warps=params.num_warps,
@@ -59,6 +61,13 @@ def generate(spec: KernelSpec, params: SearchParams) -> str:
         acc_tl=acc_dtype_to_tl(params.acc_dtype),
         out_tl=torch_dtype_str_to_tl(out_dtype_str),
     )
+
+    if spec.op_type == "scaled_dot_product_attention":
+        # head_dim は Q の最終次元（[B*H, S, D] の D）
+        render_kwargs["head_dim"] = spec.input_specs[0].shape[-1]
+        render_kwargs["is_causal"] = bool(spec.constants.get("is_causal", False))
+
+    return template.render(**render_kwargs)
 
 
 def generate_rmsnorm(spec: KernelSpec, params: SearchParams) -> str:

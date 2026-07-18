@@ -4,7 +4,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 
 from forge.ir.kernel_spec import KernelSpec
-from forge.ops import is_elementwise
+from forge.ops import is_elementwise, is_matmul
 
 from .params import SearchParams
 
@@ -40,6 +40,8 @@ class SearchSpace:
 
     block_sizes: list[int] = field(default_factory=lambda: [512, 1024, 2048, 4096, 8192])
     elementwise_blocks: list[int] = field(default_factory=lambda: [256, 512, 1024, 2048])
+    # attention 用シーケンスブロックサイズ。tl.dot 制約上 16 の倍数かつ ≥ 16 が必須。
+    attention_seq_blocks: list[int] = field(default_factory=lambda: [64, 128])
     num_warps: list[int] = field(default_factory=lambda: [4, 8, 16])
     num_stages: list[int] = field(default_factory=lambda: [1, 2, 3])
     acc_dtypes: list[str] = field(default_factory=lambda: ["fp32", "fp16"])
@@ -56,6 +58,34 @@ class SearchSpace:
 
     def _rows_for_variant(self, variant: str) -> list[int]:
         return self.rows_per_program if variant == "multi_row" else [1]
+
+    def _enumerate_matmul(self, spec: KernelSpec, stages: list[int]) -> Iterator[SearchParams]:
+        """Attention 系 matmul op 向けの探索空間。
+
+        block_size はシーケンス長（S）のタイルサイズ。tl.dot 制約上 ≥ 16 かつ
+        head_dim も 16 の倍数である必要がある。acc_dtype は fp32 固定（精度優先）。
+        """
+        s = spec.input_specs[0].shape[-2]
+        valid = sorted({b for b in self.attention_seq_blocks if b <= s})
+        if not valid:
+            valid = [min(64, _next_pow2(s))]
+
+        seen: set[tuple] = set()
+        for block in valid:
+            for warps in self.num_warps:
+                for stage in stages:
+                    key = (block, warps, stage)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    yield SearchParams(
+                        block_size=block,
+                        num_warps=warps,
+                        num_stages=stage,
+                        acc_dtype="fp32",
+                        variant="flash",
+                        rows_per_program=1,
+                    )
 
     def _enumerate_elementwise(self, stages: list[int]) -> Iterator[SearchParams]:
         seen: set[tuple] = set()
@@ -88,6 +118,11 @@ class SearchSpace:
         # elementwise op は flat タイルのみ（行 variant を使わない）
         if is_elementwise(spec.op_type):
             yield from self._enumerate_elementwise(stages)
+            return
+
+        # matmul (attention) op は flash variant のみ
+        if is_matmul(spec.op_type):
+            yield from self._enumerate_matmul(spec, stages)
             return
 
         seen: set[tuple] = set()

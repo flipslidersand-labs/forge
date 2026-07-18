@@ -9,8 +9,10 @@ import torch
 from forge.cache.repository import KernelRepository
 from forge.ir.kernel_spec import KernelSpec
 from forge.ir.tensor_spec import TensorSpec
-from forge.orchestrator import Orchestrator
+from forge.orchestrator import MultiRoundResult, Orchestrator
+from forge.search.candidate import HistoryEntry
 from forge.search.grid import GridSearch
+from forge.search.llm_generator import LLMGenerator
 from forge.search.space import SearchSpace
 
 pytestmark = pytest.mark.gpu
@@ -109,4 +111,99 @@ def test_fp16_accumulator_rejected_as_incorrect() -> None:
         result = orch.optimize(_spec(), budget=4, search=GridSearch(space))
         assert result.best_params is None  # fp16 acc は全滅
         assert all(not e.correct for e in result.experiments)
+        repo.close()
+
+
+# --- optimize_rounds GPU テスト ---
+
+
+@_SKIP
+def test_optimize_rounds_finds_best_and_accumulates_history() -> None:
+    """3 ラウンドで LLM (fake) が history を受け取りながら探索し、有効な結果を返す。"""
+    history_per_round: list[int] = []
+
+    def _propose(spec, cc, n, history):
+        history_per_round.append(len(history))
+        # 単一の valid な候補を毎回返す
+        return [
+            dict(
+                base_variant="single_row",
+                block_size=4096,
+                num_warps=8,
+                num_stages=1,
+                acc_dtype="fp32",
+                rows_per_program=1,
+                hypothesis="test",
+            )
+        ]
+
+    with tempfile.TemporaryDirectory() as d:
+        repo = KernelRepository(Path(d) / "cache.db")
+        orch = Orchestrator(repo=repo, warmup=3, repeat=20)
+        llm = LLMGenerator(propose_fn=_propose)
+
+        result = orch.optimize_rounds(_spec(), llm=llm, n_rounds=3, candidates_per_round=1)
+
+        assert isinstance(result, MultiRoundResult)
+        assert len(result.rounds) == 3
+        # history は前ラウンドの成功結果が積み上がる
+        assert history_per_round[0] == 0  # round1: 空
+        assert history_per_round[1] >= 1  # round1 の成功 1 件が history に入っているはず
+        assert history_per_round[2] >= history_per_round[1]
+        # 少なくとも 1 つの有効な結果があるはず
+        assert result.best_params is not None
+        assert result.total_candidates_evaluated == 3
+        repo.close()
+
+
+@_SKIP
+def test_optimize_rounds_history_grows_with_successful_evals() -> None:
+    """成功した eval が次ラウンドの history に渡されることを確認。"""
+    captured = {}
+
+    def _propose(spec, cc, n, history):
+        if history:
+            captured["saw_history"] = history
+        return [
+            dict(
+                base_variant="single_row",
+                block_size=4096,
+                num_warps=8,
+                num_stages=1,
+                acc_dtype="fp32",
+                rows_per_program=1,
+                hypothesis="test",
+            )
+        ]
+
+    with tempfile.TemporaryDirectory() as d:
+        repo = KernelRepository(Path(d) / "cache.db")
+        orch = Orchestrator(repo=repo, warmup=3, repeat=20)
+        llm = LLMGenerator(propose_fn=_propose)
+        orch.optimize_rounds(_spec(), llm=llm, n_rounds=2, candidates_per_round=1)
+
+        assert "saw_history" in captured
+        assert isinstance(captured["saw_history"][0], HistoryEntry)
+        repo.close()
+
+
+# --- ExtendedBaselineResult GPU テスト ---
+
+
+@_SKIP
+def test_optimize_with_extended_baselines() -> None:
+    """measure_extended=True のとき extended_baselines に torch.compile 結果が入る。"""
+    with tempfile.TemporaryDirectory() as d:
+        repo = KernelRepository(Path(d) / "cache.db")
+        space = SearchSpace(num_warps=[8], num_stages=[1], acc_dtypes=["fp32"])
+        orch = Orchestrator(repo=repo, warmup=3, repeat=20, measure_extended=True)
+        result = orch.optimize(_spec(), budget=2, search=GridSearch(space))
+
+        assert isinstance(result.extended_baselines, list)
+        assert len(result.extended_baselines) >= 1
+        eb = result.extended_baselines[0]
+        assert "torch.compile" in eb.name
+        assert eb.benchmark.median_us > 0
+        assert eb.benchmark.p95_us > 0
+        assert eb.compile_time_s >= 0
         repo.close()

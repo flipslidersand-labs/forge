@@ -1,5 +1,8 @@
 # forge
 
+[![CI](https://github.com/flipslidersand/forge/actions/workflows/ci.yml/badge.svg)](https://github.com/flipslidersand/forge/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/flipslidersand/forge/graph/badge.svg)](https://codecov.io/gh/flipslidersand/forge)
+
 PyTorch 演算に対し、Triton カーネルの実装方式とパラメータを自動探索し、
 正確性・測定ノイズ・環境差を考慮した上で最速実装をキャッシュ再利用する
 GPU カーネル自動最適化エンジン。
@@ -19,9 +22,29 @@ w = torch.ones(4096, dtype=torch.float16, device="cuda")
 y = rmsnorm(x, w)  # 初回: 探索してキャッシュ / 2回目以降: 最速カーネルを即実行
 ```
 
+## ベンチマーク
+
+forge が探索した最速カーネルと PyTorch Eager の比較（実測値）。
+
+| op          | shape        | dtype | PyTorch Eager (µs) | forge (µs) |    speedup |
+| ----------- | ------------ | ----- | -----------------: | ---------: | ---------: |
+| RMSNorm     | (2048, 4096) | fp16  |             1672.9 |      149.5 | **11.19x** |
+| RMSNorm     | (1024, 8192) | fp16  |             1675.3 |      211.5 |  **7.92x** |
+| Softmax     | (2048, 4096) | fp16  |              791.2 |      193.5 |  **4.09x** |
+| Softmax     | (1024, 8192) | fp16  |              819.2 |      146.4 |  **5.59x** |
+| LayerNorm   | (2048, 4096) | fp16  |              949.0 |      961.5 |      0.99x |
+| GELU        | (2048, 4096) | fp16  |              241.7 |      181.9 |  **1.33x** |
+| SDPA        | (8, 64, 64)  | fp16  |              193.6 |      206.5 |      0.94x |
+| SDPA causal | (8, 64, 64)  | fp16  |              248.9 |      278.9 |      0.89x |
+
+> **測定環境**: GTX 1080 (cc6.1, Triton 公式サポート外), PyTorch 2.13.0+cu126, Triton 3.7.1。  
+> budget=50, warmup=25, repeat=200 の中央値。Baseline は `F.rms_norm` / `F.softmax` / `F.layer_norm` / `F.gelu` / `F.scaled_dot_product_attention`。  
+> LayerNorm・SDPA は本 GPU・shape では eager と同等以下（forge はフォールバックせず正直に報告）。  
+> 自環境での計測: `.venv/bin/python examples/bench_all.py`
+
 ## 対応演算
 
-RMSNorm / Softmax / LayerNorm / GELU
+RMSNorm / Softmax / LayerNorm / GELU / ScaledDotProductAttention（Flash Attention 2 スタイル・causal マスク対応）
 
 ## 仕組み
 
@@ -130,7 +153,8 @@ tests/              CPU テスト + GPU テスト（@pytest.mark.gpu）
 
 ## 既知の制約
 
-- 判定できる演算は上記 4 種のみ。未対応・trace 不能（動的 dim 等）は eager フォールバック
+- 判定できる演算は上記 5 種のみ。未対応・trace 不能（動的 dim 等）は eager フォールバック
+- SDPA は attn_mask / dropout / enable_gqa 非対応。head_dim は 2 のべき乗 ≥ 16 が必須
 - GELU は exact（erf）のみ。tanh 近似の関数は許容誤差を超えて eager になり得る
 - 演算は標準的な式の形のみ認識（torch.fx の call_function 多重集合でマッチ）
 - 開発・検証は GTX 1080（compute capability 6.1、Triton 公式サポート外）で実施
@@ -139,6 +163,6 @@ tests/              CPU テスト + GPU テスト（@pytest.mark.gpu）
 
 GitHub Issues を参照:
 
-- #9 baseline 拡張（torch.compile / `@triton.autotune` を公平比較に追加）
-- #10 ライブ LLM 反復探索（history フィードバックループ）
-- #11 探索コスト考慮の採用判定
+- #28 pyright 型エラー解消
+- #29 pytest-cov カバレッジ計測・バッジ追加
+- #30 対応 op 拡張（FlashAttention 系・大 SDPA shape での最適化）
