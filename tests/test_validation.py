@@ -20,6 +20,57 @@ def spec(n: int = 4096) -> KernelSpec:
     )
 
 
+def sdpa_spec(bh: int = 8, s: int = 64, d: int = 64, is_causal: bool = False) -> KernelSpec:
+    return KernelSpec(
+        op_type="scaled_dot_product_attention",
+        input_specs=(
+            TensorSpec((bh, s, d), torch.float16, True),
+            TensorSpec((bh, s, d), torch.float16, True),
+            TensorSpec((bh, s, d), torch.float16, True),
+        ),
+        output_specs=(TensorSpec((bh, s, d), torch.float16, True),),
+        constants={"is_causal": is_causal},
+        graph_hash="sdpa_v1",
+        constraints=(),
+    )
+
+
+class TestSdpaValidation:
+    def test_primary_input_three_tensors(self) -> None:
+        inp = primary_input(sdpa_spec())
+        assert len(inp) == 3
+        assert all(s["shape"] == [8, 64, 64] for s in inp)
+        assert all(s["init"] == "randn" for s in inp)
+
+    def test_correctness_cases_has_four_cases(self) -> None:
+        cases = correctness_cases(sdpa_spec())
+        assert len(cases) == 4
+
+    def test_correctness_cases_names(self) -> None:
+        names = {c["name"] for c in correctness_cases(sdpa_spec())}
+        assert {"basic", "single_batch", "multi_batch", "large_values"} == names
+
+    def test_correctness_cases_all_have_three_inputs(self) -> None:
+        for case in correctness_cases(sdpa_spec()):
+            assert len(case["input_specs"]) == 3
+
+    def test_correctness_cases_keep_seq_and_head_dim(self) -> None:
+        cases = correctness_cases(sdpa_spec(s=64, d=64))
+        for case in cases:
+            for inp in case["input_specs"]:
+                assert inp["shape"][1] == 64  # seq_len preserved
+                assert inp["shape"][2] == 64  # head_dim preserved
+
+    def test_sdpa_tolerance_defined(self) -> None:
+        tol = get_tolerance("scaled_dot_product_attention")
+        assert tol.atol >= 5e-3
+
+    def test_sdpa_tolerance_relaxed_vs_rmsnorm(self) -> None:
+        sdpa_tol = get_tolerance("scaled_dot_product_attention")
+        rmsnorm_tol = get_tolerance("rmsnorm")
+        assert sdpa_tol.atol >= rmsnorm_tol.atol
+
+
 class TestTolerance:
     def test_rmsnorm_atol_relaxed(self) -> None:
         # #4 実測 1.95e-3 を通すため atol >= 2e-3

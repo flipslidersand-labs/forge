@@ -7,7 +7,8 @@ from dataclasses import asdict, dataclass
 #   multi_row   : 1 program = ROWS 行、BLOCK_SIZE >= N（小さい N で occupancy 改善）
 #   two_pass    : BLOCK_SIZE をタイルとして N をループ。BLOCK_SIZE < N を許容（大きい N 向け）
 #   elementwise : flat に numel をタイル分割。BLOCK_SIZE は N に縛られない（elementwise op）
-SUPPORTED_VARIANTS = ("single_row", "multi_row", "two_pass", "elementwise")
+#   flash       : Flash Attention 2 スタイル（scaled_dot_product_attention 専用）
+SUPPORTED_VARIANTS = ("single_row", "multi_row", "two_pass", "elementwise", "flash")
 SUPPORTED_ACC_DTYPES = ("fp32", "fp16")
 
 
