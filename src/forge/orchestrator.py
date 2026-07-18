@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -10,6 +11,7 @@ from forge.cache.key import CacheKey
 from forge.cache.repository import CachedKernel, KernelRepository
 from forge.codegen.triton_codegen import generate
 from forge.ir.kernel_spec import KernelSpec
+from forge.notifiers.discord import DiscordNotifier
 from forge.runtime.worker import (
     ExtendedBaselineResult,
     WorkerResult,
@@ -113,6 +115,7 @@ class Orchestrator:
         timeout_s: float = 60.0,
         progress: Callable[[str], None] | None = None,
         measure_extended: bool = False,
+        notifier: DiscordNotifier | None = None,
     ) -> None:
         self.repo = repo or KernelRepository()
         self.python_executable = python_executable
@@ -122,6 +125,7 @@ class Orchestrator:
         self.timeout_s = timeout_s
         self._progress = progress or (lambda _msg: None)
         self.measure_extended = measure_extended
+        self.notifier = notifier or DiscordNotifier()
 
     def optimize(
         self,
@@ -132,10 +136,12 @@ class Orchestrator:
     ) -> SearchResult:
         spec.validate()
         key = CacheKey.from_spec_and_env(spec)
+        start_time = time.time()
 
         if use_cache and (cached := self.repo.get(key)) is not None:
             self._progress(f"cache HIT: {cached.params}")
             bench = BenchmarkResult.from_dict(cached.benchmark_json)
+            self.notifier.send_cache_hit(spec.op_type)
             return SearchResult(
                 spec=spec,
                 cache_hit=True,
@@ -215,6 +221,29 @@ class Orchestrator:
                 ),
             )
             self._progress(f"cached best: {best_params} ({best_bench.median_us:.1f}us)")
+
+            # Send Discord notification
+            duration_seconds = time.time() - start_time
+            self.notifier.send_optimization_complete(
+                op_name=spec.op_type,
+                best_time=best_bench.median_us / 1000.0,  # Convert us to ms
+                num_candidates=len(candidates),
+                duration_seconds=duration_seconds,
+            )
+        else:
+            # No successful optimization found, notify error
+            duration_seconds = time.time() - start_time
+            if experiments:
+                error_msg = (
+                    f"No successful candidates found after exploring {len(candidates)} options"
+                )
+            else:
+                error_msg = "No candidates to explore"
+            self.notifier.send_optimization_error(
+                op_name=spec.op_type,
+                error_message=error_msg,
+                error_type="OPTIMIZATION_FAILED",
+            )
 
         return SearchResult(
             spec=spec,
