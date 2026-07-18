@@ -234,7 +234,9 @@ class Orchestrator:
             # No successful optimization found, notify error
             duration_seconds = time.time() - start_time
             if experiments:
-                error_msg = f"No successful candidates found after exploring {len(candidates)} options"
+                error_msg = (
+                    f"No successful candidates found after exploring {len(candidates)} options"
+                )
             else:
                 error_msg = "No candidates to explore"
             self.notifier.send_optimization_error(
