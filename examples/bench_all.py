@@ -156,14 +156,18 @@ def main() -> None:
     # ── Markdown 出力（stdout） ───────────────────────────────────────────────────
     print(f"\n**測定環境**: {device_name} (cc{cc}), PyTorch {tv}, Triton {trv}。")
     print(f"budget={BUDGET}, warmup={WARMUP}, repeat={REPEAT} の中央値。")
-    baselines = "`F.rms_norm` / `torch.softmax` / `F.layer_norm` / `F.gelu` / `F.scaled_dot_product_attention`"
+    baselines = (
+        "`F.rms_norm` / `torch.softmax` / `F.layer_norm`"
+        " / `F.gelu` / `F.scaled_dot_product_attention`"
+    )
     print(f"Baseline: {baselines}。")
     print()
     print("| op | shape | dtype | eager µs | forge µs | speedup |")
     print("| --- | --- | --- | ---: | ---: | ---: |")
     for op, shape, eager_us, forge_us, speedup in rows:
         marker = " ✅" if speedup >= 1.1 else (" ⚠️" if speedup < 0.95 else "")
-        print(f"| {op} | {shape} | fp16 | {eager_us:.1f} | {forge_us:.1f} | {speedup:.2f}x{marker} |")
+        cols = f"| {op} | {shape} | fp16 | {eager_us:.1f} | {forge_us:.1f}"
+        print(f"{cols} | {speedup:.2f}x{marker} |")
 
 
 if __name__ == "__main__":
