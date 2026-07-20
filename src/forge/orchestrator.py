@@ -79,6 +79,7 @@ class MultiRoundResult:
     token_usage: TokenUsage | None
     total_candidates_evaluated: int = field(default=0)
     extended_baselines: list[ExtendedBaselineResult] = field(default_factory=list)
+    total_benchmark_time_s: float = field(default=0.0)  # コスト計測用
 
     @property
     def speedup(self) -> float | None:
@@ -283,6 +284,7 @@ class Orchestrator:
                 baseline_benchmark=None,
                 baseline_name=None,
                 token_usage=llm.token_usage,
+                total_benchmark_time_s=0.0,
             )
 
         bench_input = primary_input(spec)
@@ -317,6 +319,8 @@ class Orchestrator:
         baseline_bench: BenchmarkResult | None = None
         baseline_name: str | None = None
         seen_params: set[SearchParams] = set()
+        total_benchmark_time_s = 0.0
+        round_start_time = time.time()
 
         for round_num in range(1, n_rounds + 1):
             self._progress(
@@ -365,6 +369,8 @@ class Orchestrator:
 
                 round_experiments.append(exp)
 
+            round_elapsed = time.time() - round_start_time
+            total_benchmark_time_s += round_elapsed
             rounds.append(
                 RoundResult(
                     round_num=round_num,
@@ -374,10 +380,11 @@ class Orchestrator:
                 )
             )
             self._progress(
-                f"  round {round_num} done: best={round_best_us:.1f}us"
+                f"  round {round_num} done: best={round_best_us:.1f}us (time={round_elapsed:.1f}s)"
                 if round_best_us is not None
-                else f"  round {round_num} done: no valid candidates"
+                else f"  round {round_num} done: no valid candidates (time={round_elapsed:.1f}s)"
             )
+            round_start_time = time.time()
 
         if overall_best_params is not None and overall_best_bench is not None:
             code = generate(spec, overall_best_params)
@@ -406,6 +413,7 @@ class Orchestrator:
             token_usage=llm.token_usage,
             total_candidates_evaluated=total,
             extended_baselines=extended,
+            total_benchmark_time_s=total_benchmark_time_s,
         )
 
     def _eval_one(

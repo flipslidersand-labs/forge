@@ -114,11 +114,54 @@ from forge.orchestrator import Orchestrator
 .venv/bin/python examples/decorator_demo.py
 ```
 
-### LLM 候補生成（任意）
+### LLM 候補生成 + マルチラウンド探索（任意）
 
 `forge.search.llm_generator.LLMGenerator` は Claude（`claude-opus-4-8`）に
 構造化された候補パラメータを出させる探索器。実 API 利用には `ANTHROPIC_API_KEY`
 が必要（`pip install -e ".[llm]"`）。テストは `propose_fn` 注入でオフライン実行できる。
+
+マルチラウンド探索は `Orchestrator.optimize_rounds()` で実装：
+
+```python
+from forge.orchestrator import Orchestrator, MultiRoundResult
+from forge.search.llm_generator import LLMGenerator
+
+llm = LLMGenerator()  # claude-opus-4-8 を使用
+orch = Orchestrator()
+result: MultiRoundResult = orch.optimize_rounds(
+    spec=spec,
+    llm=llm,
+    n_rounds=3,  # 3 ラウンド
+    candidates_per_round=12,  # 各ラウンドで 12 候補を提案
+)
+# result.best_params で最速カーネルを取得
+# result.token_usage で Anthropic API の総トークン数を確認
+# result.total_benchmark_time_s で GPU ベンチマーク時間を確認
+```
+
+### コスト考慮判定（パレート最適化）
+
+`forge.benchmark.pareto` モジュールは、速度と探索コスト（API トークン数・GPU 時間）
+のトレードオフを可視化：
+
+```python
+from forge.benchmark.pareto import CandidateWithCost, ParetoFrontier
+
+# 複数候補をコスト情報付きで評価
+candidates = [
+    CandidateWithCost(params=p1, median_us=50.0, tokens_for_proposal=5000, ...),
+    CandidateWithCost(params=p2, median_us=80.0, tokens_for_proposal=2000, ...),
+]
+frontier = ParetoFrontier(candidates)
+# frontier.frontier に パレート最適な候補のみ
+recommended = frontier.recommend()  # スコアが最高の候補を推奨
+```
+
+**利用例**:
+
+- 候補 A: `7.8µs`（高速、token cost 高）
+- 候補 B: `8.2µs`（中速、token cost 低）
+  → 両者とも Pareto 最適。用途に応じて選択可能
 
 ## テスト
 
