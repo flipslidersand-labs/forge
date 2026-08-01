@@ -2,13 +2,27 @@ name: CI
 
 on:
   push:
-    branches: [master, "feat/**", "fix/**", "ci/**"]
+    branches: [master, 'feat/**', 'fix/**', 'hotfix/**', 'refactor/**']
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/*.md'
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [master]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/*.md'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   lint:
     name: Lint
+    if: github.event.pull_request.draft == false && github.actor != 'github-actions[bot]'
     runs-on: arc-dev-nodee
     steps:
       - uses: actions/checkout@v4
@@ -24,6 +38,7 @@ jobs:
 
   test:
     name: Test (Python ${{ matrix.python-version }})
+    if: github.event.pull_request.draft == false && github.actor != 'github-actions[bot]'
     runs-on: arc-dev-nodee
     strategy:
       matrix:
@@ -49,6 +64,7 @@ jobs:
 
   typecheck:
     name: Type check
+    if: github.event.pull_request.draft == false && github.actor != 'github-actions[bot]'
     runs-on: arc-dev-nodee
     steps:
       - uses: actions/checkout@v4
