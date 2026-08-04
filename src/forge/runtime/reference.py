@@ -45,12 +45,19 @@ def sdpa_reference(
     return out.to(q.dtype)
 
 
+def linear_reference(
+    x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor | None = None
+) -> torch.Tensor:
+    return torch.nn.functional.linear(x.float(), weight.float(), bias.float() if bias is not None else None).to(x.dtype)
+
+
 REFERENCE_IMPLS: dict[str, Callable[..., torch.Tensor]] = {
     "rmsnorm": rmsnorm_reference,
     "softmax": softmax_reference,
     "layernorm": layernorm_reference,
     "gelu": gelu_reference,
     "scaled_dot_product_attention": sdpa_reference,
+    "linear": linear_reference,
 }
 
 
@@ -98,12 +105,19 @@ def _sdpa_baseline(
     )
 
 
+def _linear_baseline(
+    x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor | None = None
+) -> torch.Tensor:
+    return torch.nn.functional.linear(x, weight, bias)
+
+
 BASELINE_IMPLS: dict[str, Callable[..., torch.Tensor]] = {
     "rmsnorm": _rmsnorm_baseline,
     "softmax": _softmax_baseline,
     "layernorm": _layernorm_baseline,
     "gelu": _gelu_baseline,
     "scaled_dot_product_attention": _sdpa_baseline,
+    "linear": _linear_baseline,
 }
 
 
@@ -119,6 +133,7 @@ _BASELINE_NAMES = {
     "layernorm": "F.layer_norm",
     "gelu": "F.gelu",
     "scaled_dot_product_attention": "F.scaled_dot_product_attention",
+    "linear": "F.linear",
 }
 
 

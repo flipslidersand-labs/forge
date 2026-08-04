@@ -20,6 +20,8 @@ OP_INFO: dict[str, OpInfo] = {
     "gelu": OpInfo(kind="elementwise", n_tensor_inputs=1),  # x
     # Q, K, V の 3D テンソル [B*H, S, D]。block_size は S（シーケンス長）に対応。
     "scaled_dot_product_attention": OpInfo(kind="matmul", n_tensor_inputs=3),
+    # x:[M,K], weight:[N,K], bias:[N] → out:[M,N]。F.linear は weight が転置済みで渡る。
+    "linear": OpInfo(kind="gemm", n_tensor_inputs=3),
 }
 
 
@@ -35,3 +37,7 @@ def is_elementwise(op_type: str) -> bool:
 
 def is_matmul(op_type: str) -> bool:
     return get_op_info(op_type).kind == "matmul"
+
+
+def is_gemm(op_type: str) -> bool:
+    return get_op_info(op_type).kind == "gemm"

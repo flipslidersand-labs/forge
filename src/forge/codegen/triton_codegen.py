@@ -37,6 +37,7 @@ _TEMPLATES = {
     ("gelu", "elementwise"): "gelu.py.jinja",
     ("scaled_dot_product_attention", "flash"): "sdpa.py.jinja",
     ("scaled_dot_product_attention", "flash_causal_opt"): "sdpa_causal_opt.py.jinja",
+    ("linear", "gemm"): "linear.py.jinja",
 }
 
 
@@ -69,6 +70,10 @@ def generate(spec: KernelSpec, params: SearchParams) -> str:
         # head_dim は Q の最終次元（[B*H, S, D] の D）
         render_kwargs["head_dim"] = spec.input_specs[0].shape[-1]
         render_kwargs["is_causal"] = bool(spec.constants.get("is_causal", False))
+
+    if spec.op_type == "linear":
+        # BLOCK_K は constants["block_k"] で渡す（SearchSpace が決定）。未指定時は 32。
+        render_kwargs["block_k"] = int(spec.constants.get("block_k", 32))
 
     return template.render(**render_kwargs)
 
