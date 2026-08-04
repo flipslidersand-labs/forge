@@ -1,5 +1,4 @@
 """Linear op の統合ユニットテスト（GPU 不要）。"""
-
 from __future__ import annotations
 
 import torch
@@ -145,7 +144,7 @@ class TestValidation:
         assert len(inputs) == 3
         assert inputs[0]["shape"] == [2048, 4096]  # x
         assert inputs[1]["shape"] == [4096, 4096]  # weight [N, K]
-        assert inputs[2]["shape"] == [4096]  # bias
+        assert inputs[2]["shape"] == [4096]         # bias
 
     def test_correctness_cases_count(self) -> None:
         cases = correctness_cases(_linear_spec())
