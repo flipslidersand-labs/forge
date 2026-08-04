@@ -41,7 +41,8 @@ class SearchSpace:
     block_sizes: list[int] = field(default_factory=lambda: [512, 1024, 2048, 4096, 8192])
     elementwise_blocks: list[int] = field(default_factory=lambda: [256, 512, 1024, 2048])
     # attention 用シーケンスブロックサイズ。tl.dot 制約上 16 の倍数かつ ≥ 16 が必須。
-    attention_seq_blocks: list[int] = field(default_factory=lambda: [64, 128])
+    # 小 shape (S=64) では BLOCK_S=16/32 で CTA 数が増え GPU 利用率が上がる。
+    attention_seq_blocks: list[int] = field(default_factory=lambda: [16, 32, 64, 128])
     num_warps: list[int] = field(default_factory=lambda: [4, 8, 16, 32])
     num_stages: list[int] = field(default_factory=lambda: [1, 2, 3])
     acc_dtypes: list[str] = field(default_factory=lambda: ["fp32", "fp16"])
@@ -76,21 +77,22 @@ class SearchSpace:
             valid = [min(64, _next_pow2(s))]
 
         seen: set[tuple] = set()
-        for block in valid:
-            for warps in self.num_warps:
-                for stage in stages:
-                    key = (block, warps, stage)
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                    yield SearchParams(
-                        block_size=block,
-                        num_warps=warps,
-                        num_stages=stage,
-                        acc_dtype="fp32",
-                        variant="flash",
-                        rows_per_program=1,
-                    )
+        for variant in ("flash", "flash_causal_opt"):
+            for block in valid:
+                for warps in self.num_warps:
+                    for stage in stages:
+                        key = (variant, block, warps, stage)
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        yield SearchParams(
+                            block_size=block,
+                            num_warps=warps,
+                            num_stages=stage,
+                            acc_dtype="fp32",
+                            variant=variant,
+                            rows_per_program=1,
+                        )
 
     def _enumerate_elementwise(self, stages: list[int]) -> Iterator[SearchParams]:
         seen: set[tuple] = set()
