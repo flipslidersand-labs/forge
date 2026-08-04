@@ -3,23 +3,46 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "forge"
+name = "forge-kernel"
 version = "0.1.0"
 description = "Automatic GPU kernel optimizer for PyTorch operations"
+readme = "README.md"
+license = { text = "MIT" }
 requires-python = ">=3.11"
+authors = [{ name = "flipslidersand" }]
+keywords = ["triton", "gpu", "pytorch", "kernel", "optimization", "autotuning"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: System :: Hardware",
+]
 dependencies = [
     "torch>=2.3",
-    "triton>=3.0",
     "jinja2>=3.1",
 ]
 
+[project.urls]
+Homepage = "https://github.com/flipslidersand/forge"
+Repository = "https://github.com/flipslidersand/forge"
+Issues = "https://github.com/flipslidersand/forge/issues"
+
 [project.optional-dependencies]
+gpu = [
+    "triton>=3.0",
+]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
     "hypothesis>=6.100",
     "ruff>=0.4",
     "pyright>=1.1",
+    "build>=1.0",
 ]
 llm = [
     "anthropic>=0.69",
