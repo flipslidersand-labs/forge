@@ -42,11 +42,11 @@ class SearchSpace:
     elementwise_blocks: list[int] = field(default_factory=lambda: [256, 512, 1024, 2048])
     # attention 用シーケンスブロックサイズ。tl.dot 制約上 16 の倍数かつ ≥ 16 が必須。
     attention_seq_blocks: list[int] = field(default_factory=lambda: [64, 128])
-    num_warps: list[int] = field(default_factory=lambda: [4, 8, 16])
+    num_warps: list[int] = field(default_factory=lambda: [4, 8, 16, 32])
     num_stages: list[int] = field(default_factory=lambda: [1, 2, 3])
     acc_dtypes: list[str] = field(default_factory=lambda: ["fp32", "fp16"])
-    variants: list[str] = field(default_factory=lambda: ["single_row", "multi_row", "two_pass"])
-    rows_per_program: list[int] = field(default_factory=lambda: [2, 4])
+    variants: list[str] = field(default_factory=lambda: ["single_row", "multi_row", "two_pass", "welford"])
+    rows_per_program: list[int] = field(default_factory=lambda: [2, 4, 8, 16])
 
     def _blocks_for_variant(self, variant: str, n: int) -> list[int]:
         if variant == "two_pass":

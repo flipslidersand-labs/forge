@@ -73,7 +73,7 @@ class TestSearchSpaceBlocks:
 
     def test_multi_row_has_rows_gt_1(self) -> None:
         params = list(single("multi_row").enumerate(spec(4096), "8.9"))
-        assert params and {p.rows_per_program for p in params} == {2, 4}
+        assert params and {p.rows_per_program for p in params} == {2, 4, 8, 16}
 
     def test_non_multi_row_keeps_rows_1(self) -> None:
         for v in ("single_row", "two_pass"):
@@ -156,9 +156,9 @@ class TestGridSearch:
         assert len(cands) == 5
 
     def test_single_row_pascal_count(self) -> None:
-        # single_row, cc6.1: blocks{4096,8192} x warps{4,8,16} x stages{1} x acc{fp32,fp16} = 12
+        # single_row, cc6.1: blocks{4096,8192} x warps{4,8,16,32} x stages{1} x acc{fp32,fp16} = 16
         cands = GridSearch(single("single_row")).generate(spec(4096), "6.1")
-        assert len(cands) == 12
+        assert len(cands) == 16
 
     def test_variants_expand_space(self) -> None:
         single_only = GridSearch(single("single_row")).generate(spec(4096), "6.1")

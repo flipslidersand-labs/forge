@@ -32,6 +32,8 @@ _TEMPLATES = {
     # softmax two_pass はオンライン softmax が必要なため未対応（orchestrator がスキップ）
     ("layernorm", "single_row"): "layernorm.py.jinja",
     ("layernorm", "multi_row"): "layernorm_multi_row.py.jinja",
+    ("layernorm", "two_pass"): "layernorm_two_pass.py.jinja",
+    ("layernorm", "welford"): "layernorm_welford.py.jinja",
     ("gelu", "elementwise"): "gelu.py.jinja",
     ("scaled_dot_product_attention", "flash"): "sdpa.py.jinja",
 }
