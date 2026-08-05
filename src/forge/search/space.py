@@ -45,7 +45,9 @@ class SearchSpace:
     num_warps: list[int] = field(default_factory=lambda: [4, 8, 16, 32])
     num_stages: list[int] = field(default_factory=lambda: [1, 2, 3])
     acc_dtypes: list[str] = field(default_factory=lambda: ["fp32", "fp16"])
-    variants: list[str] = field(default_factory=lambda: ["single_row", "multi_row", "two_pass", "welford"])
+    variants: list[str] = field(
+        default_factory=lambda: ["single_row", "multi_row", "two_pass", "welford"]
+    )
     rows_per_program: list[int] = field(default_factory=lambda: [2, 4, 8, 16])
 
     def _blocks_for_variant(self, variant: str, n: int) -> list[int]:
