@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import pytest
-
 from forge.benchmark.pareto import (
     CandidateWithCost,
     ParetoFrontier,
-    tokens_to_cost,
     time_to_cost_s,
+    tokens_to_cost,
 )
 from forge.search.params import SearchParams
 

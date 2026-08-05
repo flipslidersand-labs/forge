@@ -73,9 +73,8 @@ class CandidateWithCost:
                 continue
             # other が self より「速度が同等以上＆コストが低い」または「速度が高速＆コスト同等」？
             speed_better_or_equal = other.median_us <= self.median_us
-            cost_lower_or_equal = (
-                (other.tokens_for_proposal + other.benchmark_time_ms / 100)
-                <= (self.tokens_for_proposal + self.benchmark_time_ms / 100)
+            cost_lower_or_equal = (other.tokens_for_proposal + other.benchmark_time_ms / 100) <= (
+                self.tokens_for_proposal + self.benchmark_time_ms / 100
             )
             if speed_better_or_equal and cost_lower_or_equal:
                 # other のほうが優れている
