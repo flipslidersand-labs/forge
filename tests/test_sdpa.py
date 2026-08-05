@@ -164,7 +164,9 @@ class TestCodegen:
         from forge.codegen.triton_codegen import generate
         from forge.search.params import SearchParams
 
-        p = SearchParams(block_size=64, num_warps=4, num_stages=1, acc_dtype="fp32", variant="flash_causal_opt")
+        p = SearchParams(
+            block_size=64, num_warps=4, num_stages=1, acc_dtype="fp32", variant="flash_causal_opt"
+        )
         code = generate(_sdpa_spec(is_causal=True), p)
         compile(code, "<gen>", "exec")
         assert "flash_causal_opt" in code
@@ -174,7 +176,9 @@ class TestCodegen:
         from forge.codegen.triton_codegen import generate
         from forge.search.params import SearchParams
 
-        p = SearchParams(block_size=64, num_warps=4, num_stages=1, acc_dtype="fp32", variant="flash_causal_opt")
+        p = SearchParams(
+            block_size=64, num_warps=4, num_stages=1, acc_dtype="fp32", variant="flash_causal_opt"
+        )
         code = generate(_sdpa_spec(is_causal=False), p)
         compile(code, "<gen>", "exec")
 
@@ -182,7 +186,9 @@ class TestCodegen:
         from forge.codegen.triton_codegen import generate
         from forge.search.params import SearchParams
 
-        p = SearchParams(block_size=16, num_warps=4, num_stages=1, acc_dtype="fp32", variant="flash_causal_opt")
+        p = SearchParams(
+            block_size=16, num_warps=4, num_stages=1, acc_dtype="fp32", variant="flash_causal_opt"
+        )
         code = generate(_sdpa_spec(s=64, d=64, is_causal=True), p)
         compile(code, "<gen>", "exec")
         assert "BLOCK_S=16" in code
