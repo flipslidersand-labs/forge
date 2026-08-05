@@ -48,7 +48,8 @@ def sdpa_reference(
 def linear_reference(
     x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor | None = None
 ) -> torch.Tensor:
-    return torch.nn.functional.linear(x.float(), weight.float(), bias.float() if bias is not None else None).to(x.dtype)
+    b = bias.float() if bias is not None else None
+    return torch.nn.functional.linear(x.float(), weight.float(), b).to(x.dtype)
 
 
 REFERENCE_IMPLS: dict[str, Callable[..., torch.Tensor]] = {

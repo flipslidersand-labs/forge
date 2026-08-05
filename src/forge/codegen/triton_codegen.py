@@ -73,7 +73,7 @@ def generate(spec: KernelSpec, params: SearchParams) -> str:
 
     if spec.op_type == "linear":
         # BLOCK_K は constants["block_k"] で渡す（SearchSpace が決定）。未指定時は 32。
-        render_kwargs["block_k"] = int(spec.constants.get("block_k", 32))
+        render_kwargs["block_k"] = int(str(spec.constants.get("block_k", 32)))
 
     return template.render(**render_kwargs)
 

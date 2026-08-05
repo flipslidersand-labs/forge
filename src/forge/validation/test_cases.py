@@ -202,7 +202,7 @@ def correctness_cases(spec: KernelSpec) -> list[dict[str, Any]]:
             {"name": "basic", "input_specs": _linear_inputs(m, k, n_out, dt)},
             {"name": "single_row", "input_specs": _linear_inputs(1, k, n_out, dt)},
             {"name": "odd_rows", "input_specs": _linear_inputs(7, k, n_out, dt, seed=3)},
-            {"name": "large_values", "input_specs": _linear_inputs(64, k, n_out, dt, x_scale=10.0, seed=7)},
-            {"name": "zeros_bias", "input_specs": _linear_inputs(64, k, n_out, dt, b_init="zeros", seed=9)},
+            {"name": "large_values", "input_specs": _linear_inputs(64, k, n_out, dt, x_scale=10.0, seed=7)},  # noqa: E501
+            {"name": "zeros_bias", "input_specs": _linear_inputs(64, k, n_out, dt, b_init="zeros", seed=9)},  # noqa: E501
         ]
     raise ValueError(f"correctness_cases: unsupported op_type {spec.op_type!r}")
