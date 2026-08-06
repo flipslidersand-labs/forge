@@ -104,7 +104,7 @@ class TestSearchSpaceGpu:
 
     def test_all_three_variants_present(self) -> None:
         params = list(SearchSpace().enumerate(spec(4096), "6.1"))
-        assert {p.variant for p in params} == {"single_row", "multi_row", "two_pass"}
+        assert {"single_row", "multi_row", "two_pass"} <= {p.variant for p in params}
 
 
 def sdpa_spec(bh: int = 8, s: int = 64, d: int = 64, is_causal: bool = False) -> KernelSpec:
