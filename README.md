@@ -57,18 +57,29 @@ RMSNorm / Softmax / LayerNorm / GELU / ScaledDotProductAttention（Flash Attenti
 6. 2 回目以降は環境込み `CacheKey`（torch/triton/cuda/compute-capability）で
    ヒット → 探索ゼロ
 
+## インストール
+
+```bash
+# PyPI からインストール（GPU 実行には [gpu] extra が必要）
+pip install forge-kernel          # コアのみ（import だけなら GPU 不要）
+pip install "forge-kernel[gpu]"   # GPU カーネル実行フル機能（triton 含む）
+```
+
+> GPU なし環境では `import forge` は成功します。GPU 実行（`@forge.optimize` 実行）時のみエラーになります。
+
 ## 必要環境
 
-- NVIDIA GPU（compute capability は問わないが、Triton は 7.0+ が公式サポート）
-- Python 3.11+ / PyTorch 2.x（CUDA 対応ビルド）/ Triton 3.x
+- Python 3.11+
+- GPU 実行: NVIDIA GPU + PyTorch CUDA ビルド + Triton 3.x
+  - Triton 公式サポートは compute capability 7.0+（GTX 1080 / cc6.1 でも動作確認済み）
 
-## セットアップ
+## 開発環境セットアップ
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"   # コア + 開発ツール（pytest, ruff, pyright）
-pip install -e ".[llm]"   # LLM 候補生成を使う場合（任意。anthropic + pydantic）
+pip install -e ".[dev,gpu]"   # コア + GPU + 開発ツール（pytest, ruff, pyright）
+pip install -e ".[llm]"       # LLM 候補生成を使う場合（任意。anthropic + pydantic）
 ```
 
 > システム Python が externally-managed の場合は venv 必須。
