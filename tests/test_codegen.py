@@ -78,6 +78,27 @@ class TestLayerNormGeluCodegen:
         compile(code, "<gen>", "exec")
         assert "ROWS=2" in code
 
+    def test_layernorm_two_pass_valid(self) -> None:
+        p = default_params(variant="two_pass", block_size=1024)
+        code = generate(layernorm_spec(), p)
+        compile(code, "<gen>", "exec")
+        assert "op=layernorm variant=two_pass" in code
+        assert "for start in range(0, N, BLOCK_SIZE)" in code
+        assert "def kernel_fn(x, weight, bias, eps=1e-5)" in code
+
+    def test_layernorm_welford_valid(self) -> None:
+        code = generate(layernorm_spec(), default_params(variant="welford"))
+        compile(code, "<gen>", "exec")
+        assert "op=layernorm variant=welford" in code
+        assert "sum_x" in code and "sum_x2" in code
+        assert "tl.where" not in code  # welford は xc 中間ベクトル不要
+        assert "def kernel_fn(x, weight, bias, eps=1e-5)" in code
+
+    def test_layernorm_welford_num_warps_32(self) -> None:
+        code = generate(layernorm_spec(), default_params(variant="welford", num_warps=32))
+        compile(code, "<gen>", "exec")
+        assert "num_warps=32" in code
+
     def test_gelu_elementwise_valid(self) -> None:
         p = default_params(variant="elementwise", block_size=1024)
         code = generate(gelu_spec(), p)
