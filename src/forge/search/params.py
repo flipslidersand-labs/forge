@@ -16,6 +16,7 @@ SUPPORTED_VARIANTS = (
     "flash",
     "welford",
     "flash_causal_opt",
+    "gemm",
 )
 SUPPORTED_ACC_DTYPES = ("fp32", "fp16")
 

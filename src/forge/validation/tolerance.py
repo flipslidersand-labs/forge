@@ -25,6 +25,8 @@ TOLERANCE: dict[str, Tolerance] = {
     "gelu": Tolerance(atol=2e-3, rtol=1e-2, equal_nan=False),
     # SDPA は Q@K^T softmax @V の 3 op 合成。fp16 matmul 誤差が累積するため atol を緩める。
     "scaled_dot_product_attention": Tolerance(atol=5e-3, rtol=1e-2, equal_nan=False),
+    # linear: fp16 matmul 誤差（large K で累積）。atol=1e-2 で実用的。
+    "linear": Tolerance(atol=1e-2, rtol=1e-2, equal_nan=False),
 }
 
 

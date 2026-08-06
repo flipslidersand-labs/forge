@@ -4,7 +4,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 
 from forge.ir.kernel_spec import KernelSpec
-from forge.ops import is_elementwise, is_matmul
+from forge.ops import is_elementwise, is_gemm, is_matmul
 
 from .params import SearchParams
 
@@ -40,6 +40,10 @@ class SearchSpace:
 
     block_sizes: list[int] = field(default_factory=lambda: [512, 1024, 2048, 4096, 8192])
     elementwise_blocks: list[int] = field(default_factory=lambda: [256, 512, 1024, 2048])
+    # GEMM (linear) 用タイルサイズ。BLOCK_M=BLOCK_N で正方出力タイルを使う。
+    gemm_output_blocks: list[int] = field(default_factory=lambda: [64, 128])
+    # GEMM の K 次元タイルサイズ（tl.dot 制約上 16 以上の 2 のべき乗）。
+    gemm_k_blocks: list[int] = field(default_factory=lambda: [32, 64])
     # attention 用シーケンスブロックサイズ。tl.dot 制約上 16 の倍数かつ ≥ 16 が必須。
     # 小 shape (S=64) では BLOCK_S=16/32 で CTA 数が増え GPU 利用率が上がる。
     attention_seq_blocks: list[int] = field(default_factory=lambda: [16, 32, 64, 128])
@@ -113,6 +117,30 @@ class SearchSpace:
                             rows_per_program=1,
                         )
 
+    def _enumerate_gemm(self, stages: list[int]) -> Iterator[SearchParams]:
+        """GEMM (linear) 向け探索空間。BLOCK_M=BLOCK_N=block_size で探索。
+
+        BLOCK_K は codegen が spec.constants["block_k"]（デフォルト 32）から読む。
+        SearchParams に block_k フィールドがないため、MVP では BLOCK_K 固定で探索する。
+        """
+        seen: set[tuple] = set()
+        for block_mn in self.gemm_output_blocks:
+            for warps in self.num_warps:
+                for stage in stages:
+                    for acc in self.acc_dtypes:
+                        key = (block_mn, warps, stage, acc)
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        yield SearchParams(
+                            block_size=block_mn,
+                            num_warps=warps,
+                            num_stages=stage,
+                            acc_dtype=acc,
+                            variant="gemm",
+                            rows_per_program=1,
+                        )
+
     def enumerate(self, spec: KernelSpec, compute_capability: str) -> Iterator[SearchParams]:
         """spec と GPU に対して有効な SearchParams を列挙する。
 
@@ -130,6 +158,11 @@ class SearchSpace:
         # matmul (attention) op は flash variant のみ
         if is_matmul(spec.op_type):
             yield from self._enumerate_matmul(spec, stages)
+            return
+
+        # GEMM (linear) op は gemm variant
+        if is_gemm(spec.op_type):
+            yield from self._enumerate_gemm(stages)
             return
 
         seen: set[tuple] = set()

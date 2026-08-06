@@ -12,6 +12,9 @@ from . import (
     layernorm as _layernorm,  # noqa: F401 — パターン登録の副作用  # pyright: ignore[reportUnusedImport]
 )
 from . import (
+    linear as _linear,  # noqa: F401 — パターン登録の副作用  # pyright: ignore[reportUnusedImport]
+)
+from . import (
     rmsnorm as _rmsnorm,  # noqa: F401 — パターン登録の副作用  # pyright: ignore[reportUnusedImport]
 )
 from . import (
