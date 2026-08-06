@@ -123,9 +123,12 @@ def sdpa_spec(bh: int = 8, s: int = 64, d: int = 64, is_causal: bool = False) ->
 
 
 class TestAttentionSpace:
-    def test_uses_flash_variant_only(self) -> None:
+    def test_uses_flash_variants_only(self) -> None:
         params = list(SearchSpace().enumerate(sdpa_spec(), "8.9"))
-        assert params and {p.variant for p in params} == {"flash"}
+        assert params
+        assert {p.variant for p in params} <= {"flash", "flash_causal_opt"}
+        assert "flash" in {p.variant for p in params}
+        assert "flash_causal_opt" in {p.variant for p in params}
 
     def test_block_sizes_from_attention_seq_blocks(self) -> None:
         params = list(SearchSpace().enumerate(sdpa_spec(s=64), "8.9"))
@@ -137,7 +140,8 @@ class TestAttentionSpace:
 
     def test_no_duplicates(self) -> None:
         params = list(SearchSpace().enumerate(sdpa_spec(), "8.9"))
-        keys = [(p.block_size, p.num_warps, p.num_stages) for p in params]
+        # variant も含めた完全なキーで重複チェック
+        keys = [(p.variant, p.block_size, p.num_warps, p.num_stages) for p in params]
         assert len(keys) == len(set(keys))
 
     def test_pascal_restricts_stages(self) -> None:

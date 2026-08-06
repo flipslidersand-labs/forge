@@ -102,7 +102,8 @@ def _make_cases() -> list[tuple]:
         ))
 
     # SDPA: [B*H, S, D] 形式
-    for bh, s, d in [(8, 256, 64), (8, 512, 64)]:
+    # (32, 512, 64) は grid=(32, 8)=256 CTA → GTX 1080 (20SM) で高利用率
+    for bh, s, d in [(8, 256, 64), (8, 512, 64), (32, 512, 64)]:
         q = torch.randn(bh, s, d, dtype=torch.float16, device="cuda")
         k = torch.randn(bh, s, d, dtype=torch.float16, device="cuda")
         v = torch.randn(bh, s, d, dtype=torch.float16, device="cuda")
