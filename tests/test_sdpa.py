@@ -66,10 +66,17 @@ class TestOpInfo:
 
 
 class TestSearchSpace:
-    def test_flash_variant_only(self) -> None:
+    def test_flash_variants_only(self) -> None:
         params = list(SearchSpace().enumerate(_sdpa_spec(), "8.9"))
         assert params
-        assert {p.variant for p in params} == {"flash"}
+        assert {p.variant for p in params} <= {"flash", "flash_causal_opt"}
+        assert "flash" in {p.variant for p in params}
+        assert "flash_causal_opt" in {p.variant for p in params}
+
+    def test_attention_seq_blocks_includes_small_sizes(self) -> None:
+        params = list(SearchSpace().enumerate(_sdpa_spec(s=64), "8.9"))
+        blocks = {p.block_size for p in params}
+        assert 16 in blocks and 32 in blocks
 
     def test_custom_attention_seq_blocks(self) -> None:
         space = SearchSpace(attention_seq_blocks=[16, 32])
@@ -152,6 +159,39 @@ class TestCodegen:
 
         code = generate(_sdpa_spec(), _flash())
         assert "kernel_fn" in code
+
+    def test_causal_opt_variant_valid_python(self) -> None:
+        from forge.codegen.triton_codegen import generate
+        from forge.search.params import SearchParams
+
+        p = SearchParams(
+            block_size=64, num_warps=4, num_stages=1, acc_dtype="fp32", variant="flash_causal_opt"
+        )
+        code = generate(_sdpa_spec(is_causal=True), p)
+        compile(code, "<gen>", "exec")
+        assert "flash_causal_opt" in code
+        assert "safe_end" in code  # causal block-skip ロジック
+
+    def test_causal_opt_non_causal_valid_python(self) -> None:
+        from forge.codegen.triton_codegen import generate
+        from forge.search.params import SearchParams
+
+        p = SearchParams(
+            block_size=64, num_warps=4, num_stages=1, acc_dtype="fp32", variant="flash_causal_opt"
+        )
+        code = generate(_sdpa_spec(is_causal=False), p)
+        compile(code, "<gen>", "exec")
+
+    def test_causal_opt_small_block_valid(self) -> None:
+        from forge.codegen.triton_codegen import generate
+        from forge.search.params import SearchParams
+
+        p = SearchParams(
+            block_size=16, num_warps=4, num_stages=1, acc_dtype="fp32", variant="flash_causal_opt"
+        )
+        code = generate(_sdpa_spec(s=64, d=64, is_causal=True), p)
+        compile(code, "<gen>", "exec")
+        assert "BLOCK_S=16" in code
 
     def test_op_variant_annotation_in_header(self) -> None:
         from forge.codegen.triton_codegen import generate
