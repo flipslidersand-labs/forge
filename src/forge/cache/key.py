@@ -26,7 +26,7 @@ class CacheKey:
         import torch
 
         try:
-            import triton
+            import triton  # type: ignore[import-untyped]
 
             triton_ver = triton.__version__
         except ImportError:
