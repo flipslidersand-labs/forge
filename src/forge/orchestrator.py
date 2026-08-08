@@ -118,7 +118,12 @@ class Orchestrator:
         measure_extended: bool = False,
         notifier: DiscordNotifier | None = None,
     ) -> None:
-        self.repo = repo or KernelRepository()
+        if repo is None:
+            self.repo = KernelRepository()
+            self._owns_repo = True
+        else:
+            self.repo = repo
+            self._owns_repo = False
         self.python_executable = python_executable
         self.min_speedup = min_speedup
         self.warmup = warmup
@@ -127,6 +132,16 @@ class Orchestrator:
         self._progress = progress or (lambda _msg: None)
         self.measure_extended = measure_extended
         self.notifier = notifier or DiscordNotifier()
+
+    def close(self) -> None:
+        if self._owns_repo:
+            self.repo.close()
+
+    def __enter__(self) -> Orchestrator:
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.close()
 
     def optimize(
         self,
