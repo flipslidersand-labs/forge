@@ -153,6 +153,7 @@ class TestKernelRepository:
             assert result is not None
             # close() 後は接続が閉じている
             import sqlite3
+
             try:
                 repo.conn.execute("SELECT 1")
                 raise AssertionError("should have raised")
@@ -167,6 +168,7 @@ class TestKernelRepository:
             except ValueError:
                 pass
             import sqlite3
+
             try:
                 repo.conn.execute("SELECT 1")
                 raise AssertionError("should have raised")
