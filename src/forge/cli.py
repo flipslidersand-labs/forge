@@ -4,10 +4,10 @@ import argparse
 import json
 import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 from forge import __version__
-
-_DEFAULT_DB = "~/.forge/cache.db"
+from forge.cache.repository import DEFAULT_DB_PATH
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -23,19 +23,32 @@ def _build_parser() -> argparse.ArgumentParser:
 
     list_p = cache_sub.add_parser("list", help="キャッシュ済みカーネル一覧")
     list_p.add_argument("--json", action="store_true", help="JSON で出力")
-    list_p.add_argument("--db", default=_DEFAULT_DB, help="キャッシュ DB のパス")
+    list_p.add_argument("--db", default=DEFAULT_DB_PATH, help="キャッシュ DB のパス")
     list_p.set_defaults(func=_cmd_list)
 
     clear_p = cache_sub.add_parser("clear", help="全キャッシュ削除")
     clear_p.add_argument("--force", action="store_true", help="確認プロンプトなしで削除")
-    clear_p.add_argument("--db", default=_DEFAULT_DB, help="キャッシュ DB のパス")
+    clear_p.add_argument("--db", default=DEFAULT_DB_PATH, help="キャッシュ DB のパス")
     clear_p.set_defaults(func=_cmd_clear)
 
     return parser
 
 
+def _db_missing(db: str) -> bool:
+    """DB ファイルが存在しない場合 True。
+
+    KernelRepository.__init__ は mkdir + 空 DB 作成の副作用を持つため、
+    read 系コマンドは開く前に存在確認する（typo パスへの空 DB 散乱防止）。
+    """
+    return not Path(db).expanduser().exists()
+
+
 def _cmd_list(args: argparse.Namespace) -> int:
     from forge.cache.repository import KernelRepository
+
+    if _db_missing(args.db):
+        print(json.dumps([]) if args.json else "キャッシュは空です。(DB 未作成)")
+        return 0
 
     repo = KernelRepository(args.db)
     try:
@@ -72,8 +85,21 @@ def _cmd_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def _confirm(prompt: str) -> bool:
+    """y/N 確認。非対話 (EOF) と Ctrl-C は安全側 = No に倒す。"""
+    try:
+        return input(prompt).strip().lower() in ("y", "yes")
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return False
+
+
 def _cmd_clear(args: argparse.Namespace) -> int:
     from forge.cache.repository import KernelRepository
+
+    if _db_missing(args.db):
+        print("キャッシュは空です。(DB 未作成)")
+        return 0
 
     repo = KernelRepository(args.db)
     try:
@@ -81,11 +107,11 @@ def _cmd_clear(args: argparse.Namespace) -> int:
         if n == 0:
             print("キャッシュは空です。")
             return 0
-        if not args.force:
-            reply = input(f"{n} 件のキャッシュを削除します。よろしいですか? [y/N] ").strip().lower()
-            if reply not in ("y", "yes"):
-                print("中止しました。")
-                return 0
+        if not args.force and not _confirm(
+            f"{n} 件のキャッシュを削除します。よろしいですか? [y/N] "
+        ):
+            print("中止しました。")
+            return 0
         deleted = repo.clear()
     finally:
         repo.close()

@@ -8,6 +8,9 @@ from pathlib import Path
 
 from .key import CacheKey
 
+# CLI (forge.cli) と KernelRepository が共有する既定 DB パスの単一定義。
+DEFAULT_DB_PATH = "~/.forge/cache.db"
+
 
 @dataclass
 class CachedKernel:
@@ -31,7 +34,7 @@ class KernelSummary:
 
 
 class KernelRepository:
-    def __init__(self, path: str | Path = "~/.forge/cache.db") -> None:
+    def __init__(self, path: str | Path = DEFAULT_DB_PATH) -> None:
         db_path = Path(path).expanduser()
         db_path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(str(db_path))

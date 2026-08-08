@@ -103,3 +103,35 @@ def test_cache_clear_prompt_yes(tmp_path, capsys, monkeypatch) -> None:
 def test_no_subcommand_errors() -> None:
     with pytest.raises(SystemExit):
         main([])
+
+
+def test_cache_list_does_not_create_db(tmp_path, capsys) -> None:
+    # read-only の list が mkdir + 空 DB を作らないこと（typo パス対策）。
+    db = tmp_path / "no" / "such" / "cache.db"
+    rc = main(["cache", "list", "--db", str(db)])
+    assert rc == 0
+    assert "空" in capsys.readouterr().out
+    assert not db.exists()
+    assert not db.parent.exists()
+
+
+def test_cache_clear_does_not_create_db(tmp_path, capsys) -> None:
+    db = tmp_path / "missing.db"
+    rc = main(["cache", "clear", "--db", str(db)])
+    assert rc == 0
+    assert not db.exists()
+
+
+def test_cache_clear_eof_aborts(tmp_path, capsys, monkeypatch) -> None:
+    # 非対話 (stdin closed) では EOFError を握って安全側 = 中止。
+    db = tmp_path / "cache.db"
+    _seed(db, n=2)
+
+    def _raise_eof(_prompt: str) -> str:
+        raise EOFError
+
+    monkeypatch.setattr("builtins.input", _raise_eof)
+    rc = main(["cache", "clear", "--db", str(db)])
+    assert rc == 0
+    assert "中止" in capsys.readouterr().out
+    assert KernelRepository(db).count() == 2
