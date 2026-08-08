@@ -43,6 +43,9 @@ dev = [
     "ruff>=0.4",
     "pyright>=1.1",
     "build>=1.0",
+    # test_ollama_generator は ollama + pydantic を import/patch するため
+    # クリーン venv でも green にするよう ollama extra を取り込む
+    "forge-kernel[ollama]",
 ]
 llm = [
     "anthropic>=0.69",
