@@ -28,7 +28,17 @@ def _softmax_inputs(
     x_scale: float = 1.0,
     seed: int = 0,
 ) -> list[dict[str, Any]]:
-    # softmax / gelu は入力 x のみ
+    return [{"shape": [m, n], "dtype": dtype, "init": x_init, "scale": x_scale, "seed": seed}]
+
+
+def _gelu_inputs(
+    m: int,
+    n: int,
+    dtype: str,
+    x_init: str = "randn",
+    x_scale: float = 1.0,
+    seed: int = 0,
+) -> list[dict[str, Any]]:
     return [{"shape": [m, n], "dtype": dtype, "init": x_init, "scale": x_scale, "seed": seed}]
 
 
@@ -182,18 +192,18 @@ def correctness_cases(spec: KernelSpec) -> list[dict[str, Any]]:
         ]
     if spec.op_type == "gelu":
         return [
-            {"name": "basic", "input_specs": _softmax_inputs(2048, n, dt)},
-            {"name": "single_row", "input_specs": _softmax_inputs(1, n, dt)},
-            {"name": "odd_rows", "input_specs": _softmax_inputs(7, n, dt, seed=3)},
+            {"name": "basic", "input_specs": _gelu_inputs(2048, n, dt)},
+            {"name": "single_row", "input_specs": _gelu_inputs(1, n, dt)},
+            {"name": "odd_rows", "input_specs": _gelu_inputs(7, n, dt, seed=3)},
             {
                 "name": "large_values",
-                "input_specs": _softmax_inputs(64, n, dt, x_scale=10.0, seed=7),
+                "input_specs": _gelu_inputs(64, n, dt, x_scale=10.0, seed=7),
             },
             {
                 "name": "negative",
-                "input_specs": _softmax_inputs(64, n, dt, x_scale=-5.0, seed=9),
+                "input_specs": _gelu_inputs(64, n, dt, x_scale=-5.0, seed=9),
             },
-            {"name": "zeros", "input_specs": _softmax_inputs(8, n, dt, x_init="zeros")},
+            {"name": "zeros", "input_specs": _gelu_inputs(8, n, dt, x_init="zeros")},
         ]
     if spec.op_type == "linear":
         m, k = x.shape
