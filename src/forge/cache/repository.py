@@ -36,17 +36,6 @@ class KernelRepository:
                 benchmark_json  TEXT NOT NULL,
                 created_at      TEXT NOT NULL
             );
-            CREATE TABLE IF NOT EXISTS experiments (
-                id              INTEGER PRIMARY KEY AUTOINCREMENT,
-                cache_key_hash  TEXT NOT NULL,
-                params_json     TEXT NOT NULL,
-                validation_json TEXT NOT NULL,
-                benchmark_json  TEXT,
-                is_best         INTEGER NOT NULL,
-                created_at      TEXT NOT NULL
-            );
-            CREATE INDEX IF NOT EXISTS idx_experiments_key
-                ON experiments(cache_key_hash);
         """)
         self.conn.commit()
 
