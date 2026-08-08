@@ -36,6 +36,7 @@ class CandidateGenerator(Protocol):
 
     GridSearch / RandomSearch / LLMGenerator が実装する。history は過去の
     実験結果で、LLM 等のフィードバック型生成器が利用する（grid/random は無視）。
+    reset_usage() は複数 spec にまたがって再利用する場合に呼ぶ（no-op でよい）。
     """
 
     def generate(
@@ -45,3 +46,5 @@ class CandidateGenerator(Protocol):
         budget: int | None = None,
         history: list[HistoryEntry] | None = None,
     ) -> list[SearchParams]: ...
+
+    def reset_usage(self) -> None: ...

@@ -34,6 +34,9 @@ class RandomSearch:
             shuffled = shuffled[:budget]
         return shuffled
 
+    def reset_usage(self) -> None:
+        pass
+
 
 def _lcg_shuffle(items: list, seed: int) -> list:
     """線形合同法による決定的 Fisher-Yates シャッフル（外部乱数に依存しない）。"""
