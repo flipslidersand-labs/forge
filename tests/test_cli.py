@@ -1,0 +1,105 @@
+from __future__ import annotations
+
+import json
+from datetime import UTC, datetime
+from pathlib import Path
+
+import pytest
+
+from forge.cache.key import CacheKey
+from forge.cache.repository import CachedKernel, KernelRepository
+from forge.cli import main
+
+
+def _key(graph_hash: str = "rmsnorm_v1") -> CacheKey:
+    return CacheKey(
+        graph_hash=graph_hash,
+        shapes=((2048, 4096),),
+        dtypes=("float16",),
+        constants_hash="deadbeef",
+        compute_capability="8.9",
+        torch_version="2.3.0",
+        triton_version="3.0.0",
+        cuda_version="12.1",
+        library_version="0.1.0",
+    )
+
+
+def _seed(db: Path, n: int = 1) -> None:
+    repo = KernelRepository(db)
+    for i in range(n):
+        key = _key(f"rmsnorm_v{i}")
+        repo.put(
+            key,
+            CachedKernel(
+                cache_key=key,
+                params={"block_size": 1024},
+                kernel_code="def k(): pass",
+                benchmark_json={"median_us": 42.0 + i},
+                created_at=datetime.now(UTC),
+            ),
+        )
+    repo.close()
+
+
+def test_cache_list_empty(tmp_path, capsys) -> None:
+    db = tmp_path / "cache.db"
+    rc = main(["cache", "list", "--db", str(db)])
+    assert rc == 0
+    assert "空" in capsys.readouterr().out
+
+
+def test_cache_list_json(tmp_path, capsys) -> None:
+    db = tmp_path / "cache.db"
+    _seed(db, n=2)
+    rc = main(["cache", "list", "--json", "--db", str(db)])
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert len(payload) == 2
+    assert payload[0]["graph_hash"].startswith("rmsnorm_v")
+    assert payload[0]["median_us"] in (42.0, 43.0)
+
+
+def test_cache_list_table(tmp_path, capsys) -> None:
+    db = tmp_path / "cache.db"
+    _seed(db, n=1)
+    rc = main(["cache", "list", "--db", str(db)])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "graph_hash" in out
+    assert "2048x4096" in out
+    assert "1 件" in out
+
+
+def test_cache_clear_force(tmp_path, capsys) -> None:
+    db = tmp_path / "cache.db"
+    _seed(db, n=3)
+    rc = main(["cache", "clear", "--force", "--db", str(db)])
+    assert rc == 0
+    assert "3 件削除" in capsys.readouterr().out
+    assert KernelRepository(db).count() == 0
+
+
+def test_cache_clear_prompt_no(tmp_path, capsys, monkeypatch) -> None:
+    db = tmp_path / "cache.db"
+    _seed(db, n=2)
+    monkeypatch.setattr("builtins.input", lambda _prompt: "n")
+    rc = main(["cache", "clear", "--db", str(db)])
+    assert rc == 0
+    assert "中止" in capsys.readouterr().out
+    assert KernelRepository(db).count() == 2
+
+
+def test_cache_clear_prompt_yes(tmp_path, capsys, monkeypatch) -> None:
+    db = tmp_path / "cache.db"
+    _seed(db, n=2)
+    monkeypatch.setattr("builtins.input", lambda _prompt: "y")
+    rc = main(["cache", "clear", "--db", str(db)])
+    assert rc == 0
+    assert "2 件削除" in capsys.readouterr().out
+    assert KernelRepository(db).count() == 0
+
+
+def test_no_subcommand_errors() -> None:
+    with pytest.raises(SystemExit):
+        main([])
