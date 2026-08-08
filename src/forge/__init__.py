@@ -1,7 +1,6 @@
 """Forge — Automatic GPU kernel optimizer for PyTorch operations."""
 
+from forge._version import __version__
 from forge.decorator import optimize
-
-__version__ = "0.1.0"
 
 __all__ = ["optimize", "__version__"]
