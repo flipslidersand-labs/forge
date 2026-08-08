@@ -155,7 +155,7 @@ class TestKernelRepository:
             import sqlite3
             try:
                 repo.conn.execute("SELECT 1")
-                assert False, "should have raised"
+                raise AssertionError("should have raised")
             except sqlite3.ProgrammingError:
                 pass
 
@@ -169,6 +169,6 @@ class TestKernelRepository:
             import sqlite3
             try:
                 repo.conn.execute("SELECT 1")
-                assert False, "should have raised"
+                raise AssertionError("should have raised")
             except sqlite3.ProgrammingError:
                 pass
