@@ -197,7 +197,7 @@ class TestOrchestratorLifecycle:
                 repo_ref = orch.repo
             try:
                 repo_ref.conn.execute("SELECT 1")
-                assert False, "should have raised"
+                raise AssertionError("should have raised")
             except sqlite3.ProgrammingError:
                 pass
 
