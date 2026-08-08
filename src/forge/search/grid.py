@@ -28,3 +28,6 @@ class GridSearch:
         if budget is not None:
             candidates = candidates[:budget]
         return candidates
+
+    def reset_usage(self) -> None:
+        pass
