@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from functools import lru_cache
 from pathlib import Path
 
@@ -39,6 +40,25 @@ _TEMPLATES = {
     ("scaled_dot_product_attention", "flash_causal_opt"): "sdpa_causal_opt.py.jinja",
     ("linear", "gemm"): "linear.py.jinja",
 }
+
+
+def template_hash(op_type: str, template_dir: Path | None = None) -> str:
+    """op_type の全 Triton テンプレート内容から安定した 12 桁 hex ダイジェストを返す。
+
+    キャッシュキー (graph_hash) に埋め込むことで、テンプレートを修正すると
+    古いキャッシュが自動的に無効化される（Issue #93）。テンプレートファイルが
+    見つからない場合はファイル名のみをハッシュ対象とする（決定的）。
+    """
+    tdir = template_dir or _TEMPLATE_DIR
+    names = sorted(fname for (op, _variant), fname in _TEMPLATES.items() if op == op_type)
+    h = hashlib.sha256()
+    for name in names:
+        h.update(name.encode())
+        path = tdir / name
+        if path.exists():
+            h.update(b"\0")
+            h.update(path.read_bytes())
+    return h.hexdigest()[:12]
 
 
 def generate(spec: KernelSpec, params: SearchParams) -> str:
