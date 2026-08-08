@@ -4,9 +4,8 @@ import hashlib
 import json
 from dataclasses import asdict, dataclass
 
+from forge._version import __version__
 from forge.ir.kernel_spec import KernelSpec
-
-__version__ = "0.1.0"
 
 
 @dataclass(frozen=True)
