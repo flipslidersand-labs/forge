@@ -2,6 +2,20 @@ from __future__ import annotations
 
 import statistics
 from dataclasses import dataclass, field
+from typing import TypedDict
+
+
+class _BenchmarkResultDictRequired(TypedDict):
+    median_us: float
+    p20_us: float
+    p80_us: float
+
+
+class BenchmarkResultDict(_BenchmarkResultDictRequired, total=False):
+    p95_us: float
+    samples_us: list[float]
+    warmup_count: int
+    measure_count: int
 
 
 @dataclass
@@ -30,26 +44,26 @@ class BenchmarkResult:
             measure_count=repeat,
         )
 
-    def to_dict(self) -> dict[str, object]:
-        return {
-            "median_us": self.median_us,
-            "p20_us": self.p20_us,
-            "p80_us": self.p80_us,
-            "p95_us": self.p95_us,
-            "warmup_count": self.warmup_count,
-            "measure_count": self.measure_count,
-        }
+    def to_dict(self) -> BenchmarkResultDict:
+        return BenchmarkResultDict(
+            median_us=self.median_us,
+            p20_us=self.p20_us,
+            p80_us=self.p80_us,
+            p95_us=self.p95_us,
+            warmup_count=self.warmup_count,
+            measure_count=self.measure_count,
+        )
 
     @classmethod
-    def from_dict(cls, d: dict[str, object]) -> BenchmarkResult:
+    def from_dict(cls, d: BenchmarkResultDict) -> BenchmarkResult:
         return cls(
-            samples_us=list(d.get("samples_us", [])),  # type: ignore[arg-type]
-            median_us=float(d["median_us"]),  # type: ignore[arg-type]
-            p20_us=float(d["p20_us"]),  # type: ignore[arg-type]
-            p80_us=float(d["p80_us"]),  # type: ignore[arg-type]
-            p95_us=float(d.get("p95_us", 0.0)),  # type: ignore[arg-type]
-            warmup_count=int(d.get("warmup_count", 0)),  # type: ignore[arg-type]
-            measure_count=int(d.get("measure_count", 0)),  # type: ignore[arg-type]
+            samples_us=list(d.get("samples_us", [])),
+            median_us=float(d["median_us"]),
+            p20_us=float(d["p20_us"]),
+            p80_us=float(d["p80_us"]),
+            p95_us=float(d.get("p95_us", 0.0)),
+            warmup_count=int(d.get("warmup_count", 0)),
+            measure_count=int(d.get("measure_count", 0)),
         )
 
 
