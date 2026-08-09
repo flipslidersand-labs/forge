@@ -34,6 +34,7 @@ class OpDefinition:
 
 # --- reference / baseline 関数 ---
 
+
 def _rmsnorm_reference(x: torch.Tensor, weight: torch.Tensor, eps: float) -> torch.Tensor:
     x32 = x.float()
     rms = torch.rsqrt(torch.mean(x32 * x32, dim=-1, keepdim=True) + eps)
@@ -48,9 +49,9 @@ def _layernorm_reference(
     x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor, eps: float = 1e-5
 ) -> torch.Tensor:
     n = x.shape[-1]
-    return torch.nn.functional.layer_norm(
-        x.float(), (n,), weight.float(), bias.float(), eps
-    ).to(x.dtype)
+    return torch.nn.functional.layer_norm(x.float(), (n,), weight.float(), bias.float(), eps).to(
+        x.dtype
+    )
 
 
 def _gelu_reference(x: torch.Tensor) -> torch.Tensor:
@@ -118,37 +119,77 @@ def _linear_baseline(
 
 # --- primary_input / correctness_cases ヘルパ ---
 
+
 def _rmsnorm_inputs(m: int, n: int, dtype: str, **kw: Any) -> list[dict[str, Any]]:
     seed = kw.get("seed", 0)
     return [
-        {"shape": [m, n], "dtype": dtype, "init": kw.get("x_init", "randn"),
-         "scale": kw.get("x_scale", 1.0), "seed": seed},
-        {"shape": [n], "dtype": dtype, "init": kw.get("w_init", "ones"),
-         "scale": 1.0, "seed": seed + 1},
+        {
+            "shape": [m, n],
+            "dtype": dtype,
+            "init": kw.get("x_init", "randn"),
+            "scale": kw.get("x_scale", 1.0),
+            "seed": seed,
+        },
+        {
+            "shape": [n],
+            "dtype": dtype,
+            "init": kw.get("w_init", "ones"),
+            "scale": 1.0,
+            "seed": seed + 1,
+        },
     ]
 
 
 def _softmax_inputs(m: int, n: int, dtype: str, **kw: Any) -> list[dict[str, Any]]:
     seed = kw.get("seed", 0)
-    return [{"shape": [m, n], "dtype": dtype, "init": kw.get("x_init", "randn"),
-             "scale": kw.get("x_scale", 1.0), "seed": seed}]
+    return [
+        {
+            "shape": [m, n],
+            "dtype": dtype,
+            "init": kw.get("x_init", "randn"),
+            "scale": kw.get("x_scale", 1.0),
+            "seed": seed,
+        }
+    ]
 
 
 def _gelu_inputs(m: int, n: int, dtype: str, **kw: Any) -> list[dict[str, Any]]:
     seed = kw.get("seed", 0)
-    return [{"shape": [m, n], "dtype": dtype, "init": kw.get("x_init", "randn"),
-             "scale": kw.get("x_scale", 1.0), "seed": seed}]
+    return [
+        {
+            "shape": [m, n],
+            "dtype": dtype,
+            "init": kw.get("x_init", "randn"),
+            "scale": kw.get("x_scale", 1.0),
+            "seed": seed,
+        }
+    ]
 
 
 def _layernorm_inputs(m: int, n: int, dtype: str, **kw: Any) -> list[dict[str, Any]]:
     seed = kw.get("seed", 0)
     return [
-        {"shape": [m, n], "dtype": dtype, "init": kw.get("x_init", "randn"),
-         "scale": kw.get("x_scale", 1.0), "seed": seed},
-        {"shape": [n], "dtype": dtype, "init": kw.get("w_init", "ones"),
-         "scale": 1.0, "seed": seed + 1},
-        {"shape": [n], "dtype": dtype, "init": kw.get("b_init", "zeros"),
-         "scale": 1.0, "seed": seed + 2},
+        {
+            "shape": [m, n],
+            "dtype": dtype,
+            "init": kw.get("x_init", "randn"),
+            "scale": kw.get("x_scale", 1.0),
+            "seed": seed,
+        },
+        {
+            "shape": [n],
+            "dtype": dtype,
+            "init": kw.get("w_init", "ones"),
+            "scale": 1.0,
+            "seed": seed + 1,
+        },
+        {
+            "shape": [n],
+            "dtype": dtype,
+            "init": kw.get("b_init", "zeros"),
+            "scale": 1.0,
+            "seed": seed + 2,
+        },
     ]
 
 
@@ -165,16 +206,32 @@ def _sdpa_inputs(bh: int, s: int, d: int, dtype: str, **kw: Any) -> list[dict[st
 def _linear_inputs(m: int, k: int, n: int, dtype: str, **kw: Any) -> list[dict[str, Any]]:
     seed = kw.get("seed", 0)
     return [
-        {"shape": [m, k], "dtype": dtype, "init": kw.get("x_init", "randn"),
-         "scale": kw.get("x_scale", 0.1), "seed": seed},
-        {"shape": [n, k], "dtype": dtype, "init": kw.get("w_init", "randn"),
-         "scale": 0.1, "seed": seed + 1},
-        {"shape": [n], "dtype": dtype, "init": kw.get("b_init", "zeros"),
-         "scale": 0.0, "seed": seed + 2},
+        {
+            "shape": [m, k],
+            "dtype": dtype,
+            "init": kw.get("x_init", "randn"),
+            "scale": kw.get("x_scale", 0.1),
+            "seed": seed,
+        },
+        {
+            "shape": [n, k],
+            "dtype": dtype,
+            "init": kw.get("w_init", "randn"),
+            "scale": 0.1,
+            "seed": seed + 1,
+        },
+        {
+            "shape": [n],
+            "dtype": dtype,
+            "init": kw.get("b_init", "zeros"),
+            "scale": 0.0,
+            "seed": seed + 2,
+        },
     ]
 
 
 # --- primary_input_fn per op ---
+
 
 def _rmsnorm_primary(spec: KernelSpec) -> list[dict[str, Any]]:
     x = spec.input_specs[0]
@@ -215,6 +272,7 @@ def _linear_primary(spec: KernelSpec) -> list[dict[str, Any]]:
 
 # --- correctness_cases_fn per op ---
 
+
 def _rmsnorm_cases(spec: KernelSpec) -> list[dict[str, Any]]:
     x = spec.input_specs[0]
     _, n = x.shape
@@ -252,8 +310,14 @@ def _layernorm_cases(spec: KernelSpec) -> list[dict[str, Any]]:
         {"name": "basic", "input_specs": _layernorm_inputs(2048, n, dt)},
         {"name": "single_row", "input_specs": _layernorm_inputs(1, n, dt)},
         {"name": "odd_rows", "input_specs": _layernorm_inputs(7, n, dt, seed=3)},
-        {"name": "wb_randn", "input_specs": _layernorm_inputs(64, n, dt, w_init="randn", b_init="randn", seed=5)},
-        {"name": "large_values", "input_specs": _layernorm_inputs(64, n, dt, x_scale=100.0, seed=7)},
+        {
+            "name": "wb_randn",
+            "input_specs": _layernorm_inputs(64, n, dt, w_init="randn", b_init="randn", seed=5),
+        },
+        {
+            "name": "large_values",
+            "input_specs": _layernorm_inputs(64, n, dt, x_scale=100.0, seed=7),
+        },
         {"name": "zeros", "input_specs": _layernorm_inputs(8, n, dt, x_init="zeros")},
     ]
 
@@ -293,12 +357,19 @@ def _linear_cases(spec: KernelSpec) -> list[dict[str, Any]]:
         {"name": "basic", "input_specs": _linear_inputs(m, k, n_out, dt)},
         {"name": "single_row", "input_specs": _linear_inputs(1, k, n_out, dt)},
         {"name": "odd_rows", "input_specs": _linear_inputs(7, k, n_out, dt, seed=3)},
-        {"name": "large_values", "input_specs": _linear_inputs(64, k, n_out, dt, x_scale=10.0, seed=7)},
-        {"name": "zeros_bias", "input_specs": _linear_inputs(64, k, n_out, dt, b_init="zeros", seed=9)},
+        {
+            "name": "large_values",
+            "input_specs": _linear_inputs(64, k, n_out, dt, x_scale=10.0, seed=7),
+        },
+        {
+            "name": "zeros_bias",
+            "input_specs": _linear_inputs(64, k, n_out, dt, b_init="zeros", seed=9),
+        },
     ]
 
 
 # --- render_extra_kwargs_fn per op ---
+
 
 def _sdpa_render_kwargs(spec: KernelSpec) -> dict[str, Any]:
     return {
@@ -312,6 +383,7 @@ def _linear_render_kwargs(spec: KernelSpec) -> dict[str, Any]:
 
 
 # --- baseline_display_name helpers ---
+
 
 def _rmsnorm_baseline_name() -> str:
     if hasattr(torch.nn.functional, "rms_norm"):

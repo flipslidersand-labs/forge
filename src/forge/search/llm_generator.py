@@ -118,12 +118,17 @@ def build_prompt(
     history: list[HistoryEntry],
 ) -> str:
     x = spec.input_specs[0]
+    op_name = spec.op_type.replace("_", " ").title()
+    input_shape_desc = ", ".join(str(s.shape) for s in spec.input_specs)
     lines = [
-        f"Propose {n} distinct Triton RMSNorm kernel configurations.",
+        f"Propose {n} distinct Triton {op_name} kernel configurations.",
         "",
         f"GPU compute capability: {compute_capability}",
-        f"Input shape (rows x hidden): {x.shape}, dtype: {x.dtype_str()}",
-        f"eps: {spec.constants.get('eps')}",
+        f"Input shapes: {input_shape_desc}, dtype: {x.dtype_str()}",
+    ]
+    if spec.constants:
+        lines.append(f"Constants: {dict(spec.constants)}")
+    lines += [
         "",
         "Each candidate must specify:",
         f"- base_variant: one of {list(SUPPORTED_VARIANTS)}",
