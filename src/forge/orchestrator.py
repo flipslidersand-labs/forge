@@ -100,6 +100,19 @@ class MultiRoundResult:
         return [exp for r in self.rounds for exp in r.experiments]
 
 
+@dataclass
+class _SearchContext:
+    """optimize() / optimize_rounds() 共通の前処理結果。"""
+
+    spec: KernelSpec
+    key: CacheKey
+    bench_input: list[dict[str, Any]]
+    cases: list[dict[str, Any]] | None
+    tol: dict[str, Any]
+    extended: list[ExtendedBaselineResult]
+    start_time: float
+
+
 class Orchestrator:
     """KernelSpec を受け取り、探索 → 検証 → ベンチマーク → キャッシュの一連を回す。
 
@@ -142,6 +155,112 @@ class Orchestrator:
 
     def __exit__(self, *_: object) -> None:
         self.close()
+
+    # --- optimize()/optimize_rounds() 共通の前処理・後処理 ---
+
+    def _prepare(
+        self, spec: KernelSpec, use_cache: bool
+    ) -> tuple[_SearchContext, CachedKernel | None]:
+        """検証・キャッシュ照会・入力生成・extended baseline 計測をまとめて行う。
+
+        キャッシュヒット時は入力生成・extended 計測をスキップし、
+        (最小限の ctx, CachedKernel) を返す。ミス時は (完全な ctx, None)。
+        """
+        spec.validate()
+        key = CacheKey.from_spec_and_env(spec)
+        start_time = time.time()
+
+        if use_cache and (cached := self.repo.get(key)) is not None:
+            self._progress(f"cache HIT: {cached.params}")
+            ctx = _SearchContext(
+                spec=spec,
+                key=key,
+                bench_input=[],
+                cases=None,
+                tol={},
+                extended=[],
+                start_time=start_time,
+            )
+            return ctx, cached
+
+        bench_input = primary_input(spec)
+        cases = correctness_cases(spec)
+        tol = get_tolerance(spec.op_type).to_dict()
+
+        extended: list[ExtendedBaselineResult] = []
+        if self.measure_extended:
+            self._progress("measuring extended baselines (torch.compile) …")
+            extended = run_extended_baseline_in_worker(
+                spec.op_type,
+                bench_input,
+                spec.constants,
+                warmup=self.warmup,
+                repeat=self.repeat,
+                python_executable=self.python_executable,
+            )
+            for eb in extended:
+                if eb.failed:
+                    self._progress(f"  extended: {eb.name} FAILED: {eb.error}")
+                else:
+                    self._progress(
+                        f"  extended: {eb.name} median={eb.benchmark.median_us:.1f}µs "
+                        f"p95={eb.benchmark.p95_us:.1f}µs compile={eb.compile_time_s:.1f}s"
+                    )
+
+        ctx = _SearchContext(
+            spec=spec,
+            key=key,
+            bench_input=bench_input,
+            cases=cases,
+            tol=tol,
+            extended=extended,
+            start_time=start_time,
+        )
+        return ctx, None
+
+    def _finalize(
+        self,
+        ctx: _SearchContext,
+        best_params: SearchParams | None,
+        best_bench: BenchmarkResult | None,
+        *,
+        num_candidates: int,
+        notify: bool = False,
+    ) -> None:
+        """ベスト候補のキャッシュ書き込みと Discord 通知を行う。"""
+        if best_params is not None and best_bench is not None:
+            code = generate(ctx.spec, best_params)
+            self.repo.put(
+                ctx.key,
+                CachedKernel(
+                    cache_key=ctx.key,
+                    params=best_params.to_dict(),
+                    kernel_code=code,
+                    benchmark_json=best_bench.to_dict(),
+                    created_at=datetime.now(UTC),
+                ),
+            )
+            self._progress(f"cached best: {best_params} ({best_bench.median_us:.1f}us)")
+            if notify:
+                duration_seconds = time.time() - ctx.start_time
+                self.notifier.send_optimization_complete(
+                    op_name=ctx.spec.op_type,
+                    best_time=best_bench.median_us / 1000.0,  # Convert us to ms
+                    num_candidates=num_candidates,
+                    duration_seconds=duration_seconds,
+                )
+        elif notify:
+            if num_candidates > 0:
+                error_msg = (
+                    f"No successful candidates found after exploring {num_candidates} options"
+                )
+            else:
+                error_msg = "No candidates to explore"
+            self.notifier.send_optimization_error(
+                op_name=ctx.spec.op_type,
+                error_message=error_msg,
+                error_type="OPTIMIZATION_FAILED",
+            )
 
     def optimize(
         self,
