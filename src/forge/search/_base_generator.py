@@ -49,7 +49,7 @@ class _BaseGenerator(ABC):
     ) -> list[dict[str, Any]]:
         """構造化された候補 dict のリストを返す。"""
 
-    def reset_usage(self) -> None:
+    def reset_usage(self) -> None:  # noqa: B027 — 意図的な no-op デフォルト
         """トークン使用量などの累積状態を初期化する。デフォルトは no-op。"""
 
     # --- 構造化 dict -> SearchParams（無効な候補は捨てる） ---
