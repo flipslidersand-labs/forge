@@ -41,3 +41,17 @@ def is_matmul(op_type: str) -> bool:
 
 def is_gemm(op_type: str) -> bool:
     return get_op_info(op_type).kind == "gemm"
+
+
+from forge.ops.registry import OP_REGISTRY, OpDefinition  # noqa: E402
+
+__all__ = [
+    "OpInfo",
+    "OP_INFO",
+    "get_op_info",
+    "is_elementwise",
+    "is_matmul",
+    "is_gemm",
+    "OP_REGISTRY",
+    "OpDefinition",
+]
