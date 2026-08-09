@@ -100,6 +100,19 @@ class MultiRoundResult:
         return [exp for r in self.rounds for exp in r.experiments]
 
 
+@dataclass
+class _SearchContext:
+    """optimize() / optimize_rounds() 共通の前処理結果。"""
+
+    spec: KernelSpec
+    key: CacheKey
+    bench_input: list[dict[str, Any]]
+    cases: list[dict[str, Any]] | None
+    tol: dict[str, Any]
+    extended: list[ExtendedBaselineResult]
+    start_time: float
+
+
 class Orchestrator:
     """KernelSpec を受け取り、探索 → 検証 → ベンチマーク → キャッシュの一連を回す。
 
@@ -143,30 +156,32 @@ class Orchestrator:
     def __exit__(self, *_: object) -> None:
         self.close()
 
-    def optimize(
-        self,
-        spec: KernelSpec,
-        budget: int = 50,
-        search: CandidateGenerator | None = None,
-        use_cache: bool = True,
-    ) -> SearchResult:
+    # --- optimize()/optimize_rounds() 共通の前処理・後処理 ---
+
+    def _prepare(
+        self, spec: KernelSpec, use_cache: bool
+    ) -> tuple[_SearchContext, CachedKernel | None]:
+        """検証・キャッシュ照会・入力生成・extended baseline 計測をまとめて行う。
+
+        キャッシュヒット時は入力生成・extended 計測をスキップし、
+        (最小限の ctx, CachedKernel) を返す。ミス時は (完全な ctx, None)。
+        """
         spec.validate()
         key = CacheKey.from_spec_and_env(spec)
         start_time = time.time()
 
         if use_cache and (cached := self.repo.get(key)) is not None:
             self._progress(f"cache HIT: {cached.params}")
-            bench = BenchmarkResult.from_dict(cached.benchmark_json)
-            self.notifier.send_cache_hit(spec.op_type)
-            return SearchResult(
+            ctx = _SearchContext(
                 spec=spec,
-                cache_hit=True,
-                best_params=SearchParams.from_dict(cached.params),
-                best_benchmark=bench,
-                baseline_benchmark=None,
-                baseline_name=None,
-                experiments=[],
+                key=key,
+                bench_input=[],
+                cases=None,
+                tol={},
+                extended=[],
+                start_time=start_time,
             )
+            return ctx, cached
 
         bench_input = primary_input(spec)
         cases = correctness_cases(spec)
@@ -192,9 +207,85 @@ class Orchestrator:
                         f"p95={eb.benchmark.p95_us:.1f}µs compile={eb.compile_time_s:.1f}s"
                     )
 
+        ctx = _SearchContext(
+            spec=spec,
+            key=key,
+            bench_input=bench_input,
+            cases=cases,
+            tol=tol,
+            extended=extended,
+            start_time=start_time,
+        )
+        return ctx, None
+
+    def _finalize(
+        self,
+        ctx: _SearchContext,
+        best_params: SearchParams | None,
+        best_bench: BenchmarkResult | None,
+        *,
+        num_candidates: int,
+        notify: bool = False,
+    ) -> None:
+        """ベスト候補のキャッシュ書き込みと Discord 通知を行う。"""
+        if best_params is not None and best_bench is not None:
+            code = generate(ctx.spec, best_params)
+            self.repo.put(
+                ctx.key,
+                CachedKernel(
+                    cache_key=ctx.key,
+                    params=best_params.to_dict(),
+                    kernel_code=code,
+                    benchmark_json=best_bench.to_dict(),
+                    created_at=datetime.now(UTC),
+                ),
+            )
+            self._progress(f"cached best: {best_params} ({best_bench.median_us:.1f}us)")
+            if notify:
+                duration_seconds = time.time() - ctx.start_time
+                self.notifier.send_optimization_complete(
+                    op_name=ctx.spec.op_type,
+                    best_time=best_bench.median_us / 1000.0,  # Convert us to ms
+                    num_candidates=num_candidates,
+                    duration_seconds=duration_seconds,
+                )
+        elif notify:
+            if num_candidates > 0:
+                error_msg = (
+                    f"No successful candidates found after exploring {num_candidates} options"
+                )
+            else:
+                error_msg = "No candidates to explore"
+            self.notifier.send_optimization_error(
+                op_name=ctx.spec.op_type,
+                error_message=error_msg,
+                error_type="OPTIMIZATION_FAILED",
+            )
+
+    def optimize(
+        self,
+        spec: KernelSpec,
+        budget: int = 50,
+        search: CandidateGenerator | None = None,
+        use_cache: bool = True,
+    ) -> SearchResult:
+        ctx, cached = self._prepare(spec, use_cache)
+        if cached is not None:
+            bench = BenchmarkResult.from_dict(cached.benchmark_json)
+            self.notifier.send_cache_hit(spec.op_type)
+            return SearchResult(
+                spec=spec,
+                cache_hit=True,
+                best_params=SearchParams.from_dict(cached.params),
+                best_benchmark=bench,
+                baseline_benchmark=None,
+                baseline_name=None,
+                experiments=[],
+            )
+
         search = search or GridSearch()
-        candidates = search.generate(spec, key.compute_capability, budget=budget)
-        self._progress(f"searching {len(candidates)} candidates (cc {key.compute_capability})")
+        candidates = search.generate(spec, ctx.key.compute_capability, budget=budget)
+        self._progress(f"searching {len(candidates)} candidates (cc {ctx.key.compute_capability})")
 
         experiments: list[ExperimentResult] = []
         best_params: SearchParams | None = None
@@ -205,7 +296,7 @@ class Orchestrator:
         for i, params in enumerate(candidates, 1):
             label = f"[{i}/{len(candidates)}] {params.block_size}/{params.num_warps}"
             exp, cand_bench, bl_bench, bl_name = self._eval_one(
-                spec, params, bench_input, cases, tol, label
+                spec, params, ctx.bench_input, ctx.cases, ctx.tol, label
             )
             if bl_bench is not None:
                 baseline_bench, baseline_name = bl_bench, bl_name
@@ -224,42 +315,7 @@ class Orchestrator:
                     self._progress(f"{label}/{params.acc_dtype} -> {cand_bench.median_us:.1f}us")
             experiments.append(exp)
 
-        if best_params is not None and best_bench is not None:
-            code = generate(spec, best_params)
-            self.repo.put(
-                key,
-                CachedKernel(
-                    cache_key=key,
-                    params=best_params.to_dict(),
-                    kernel_code=code,
-                    benchmark_json=best_bench.to_dict(),
-                    created_at=datetime.now(UTC),
-                ),
-            )
-            self._progress(f"cached best: {best_params} ({best_bench.median_us:.1f}us)")
-
-            # Send Discord notification
-            duration_seconds = time.time() - start_time
-            self.notifier.send_optimization_complete(
-                op_name=spec.op_type,
-                best_time=best_bench.median_us / 1000.0,  # Convert us to ms
-                num_candidates=len(candidates),
-                duration_seconds=duration_seconds,
-            )
-        else:
-            # No successful optimization found, notify error
-            duration_seconds = time.time() - start_time
-            if experiments:
-                error_msg = (
-                    f"No successful candidates found after exploring {len(candidates)} options"
-                )
-            else:
-                error_msg = "No candidates to explore"
-            self.notifier.send_optimization_error(
-                op_name=spec.op_type,
-                error_message=error_msg,
-                error_type="OPTIMIZATION_FAILED",
-            )
+        self._finalize(ctx, best_params, best_bench, num_candidates=len(candidates), notify=True)
 
         return SearchResult(
             spec=spec,
@@ -269,7 +325,7 @@ class Orchestrator:
             baseline_benchmark=baseline_bench,
             baseline_name=baseline_name,
             experiments=experiments,
-            extended_baselines=extended,
+            extended_baselines=ctx.extended,
         )
 
     def optimize_rounds(
@@ -285,11 +341,8 @@ class Orchestrator:
         ANTHROPIC_API_KEY が必要（llm に propose_fn を注入することでテスト可能）。
         GPU 必須（ベンチマーク・検証を実行するため）。
         """
-        spec.validate()
-        key = CacheKey.from_spec_and_env(spec)
-
-        if use_cache and (cached := self.repo.get(key)) is not None:
-            self._progress(f"cache HIT: {cached.params}")
+        ctx, cached = self._prepare(spec, use_cache)
+        if cached is not None:
             bench = BenchmarkResult.from_dict(cached.benchmark_json)
             return MultiRoundResult(
                 spec=spec,
@@ -301,30 +354,6 @@ class Orchestrator:
                 token_usage=llm.token_usage,
                 total_benchmark_time_s=0.0,
             )
-
-        bench_input = primary_input(spec)
-        cases = correctness_cases(spec)
-        tol = get_tolerance(spec.op_type).to_dict()
-
-        extended: list[ExtendedBaselineResult] = []
-        if self.measure_extended:
-            self._progress("measuring extended baselines (torch.compile) …")
-            extended = run_extended_baseline_in_worker(
-                spec.op_type,
-                bench_input,
-                spec.constants,
-                warmup=self.warmup,
-                repeat=self.repeat,
-                python_executable=self.python_executable,
-            )
-            for eb in extended:
-                if eb.failed:
-                    self._progress(f"  extended: {eb.name} FAILED: {eb.error}")
-                else:
-                    self._progress(
-                        f"  extended: {eb.name} median={eb.benchmark.median_us:.1f}µs "
-                        f"p95={eb.benchmark.p95_us:.1f}µs compile={eb.compile_time_s:.1f}s"
-                    )
 
         llm.reset_usage()
         history: list[HistoryEntry] = []
@@ -344,7 +373,7 @@ class Orchestrator:
             )
             candidates = llm.generate(
                 spec,
-                key.compute_capability,
+                ctx.key.compute_capability,
                 budget=candidates_per_round,
                 history=history,
             )
@@ -360,7 +389,7 @@ class Orchestrator:
                 seen_params.add(params)
                 label = f"  [r{round_num}.{i}] {params.block_size}/{params.num_warps}"
                 exp, cand_bench, bl_bench, bl_name = self._eval_one(
-                    spec, params, bench_input, cases, tol, label
+                    spec, params, ctx.bench_input, ctx.cases, ctx.tol, label
                 )
                 if bl_bench is not None:
                     baseline_bench, baseline_name = bl_bench, bl_name
@@ -401,23 +430,9 @@ class Orchestrator:
             )
             round_start_time = time.time()
 
-        if overall_best_params is not None and overall_best_bench is not None:
-            code = generate(spec, overall_best_params)
-            self.repo.put(
-                key,
-                CachedKernel(
-                    cache_key=key,
-                    params=overall_best_params.to_dict(),
-                    kernel_code=code,
-                    benchmark_json=overall_best_bench.to_dict(),
-                    created_at=datetime.now(UTC),
-                ),
-            )
-            self._progress(
-                f"cached best: {overall_best_params} ({overall_best_bench.median_us:.1f}us)"
-            )
-
         total = sum(len(r.experiments) for r in rounds)
+        self._finalize(ctx, overall_best_params, overall_best_bench, num_candidates=total)
+
         return MultiRoundResult(
             spec=spec,
             rounds=rounds,
@@ -427,7 +442,7 @@ class Orchestrator:
             baseline_name=baseline_name,
             token_usage=llm.token_usage,
             total_candidates_evaluated=total,
-            extended_baselines=extended,
+            extended_baselines=ctx.extended,
             total_benchmark_time_s=total_benchmark_time_s,
         )
 
