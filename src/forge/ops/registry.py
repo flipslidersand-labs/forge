@@ -54,6 +54,14 @@ def _layernorm_reference(
     )
 
 
+def _fused_add_rmsnorm_reference(
+    x: torch.Tensor, residual: torch.Tensor, weight: torch.Tensor, eps: float = 1e-6
+) -> torch.Tensor:
+    hidden = x.float() + residual.float()
+    rms = torch.rsqrt(torch.mean(hidden * hidden, dim=-1, keepdim=True) + eps)
+    return (hidden * rms * weight.float()).to(x.dtype)
+
+
 def _rope_reference(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
     def _rotate_half(t: torch.Tensor) -> torch.Tensor:
         h = t.shape[-1] // 2
@@ -106,6 +114,17 @@ def _layernorm_baseline(
     x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor, eps: float = 1e-5
 ) -> torch.Tensor:
     return torch.nn.functional.layer_norm(x, (x.shape[-1],), weight, bias, eps)
+
+
+def _fused_add_rmsnorm_baseline(
+    x: torch.Tensor, residual: torch.Tensor, weight: torch.Tensor, eps: float = 1e-6
+) -> torch.Tensor:
+    hidden = x + residual
+    if hasattr(torch.nn.functional, "rms_norm"):
+        return torch.nn.functional.rms_norm(hidden, (hidden.shape[-1],), weight, eps)  # type: ignore[attr-defined]
+    x32 = hidden.float()
+    rms = torch.rsqrt(torch.mean(x32 * x32, dim=-1, keepdim=True) + eps)
+    return (x32 * rms * weight.float()).to(x.dtype)
 
 
 def _rope_baseline(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
@@ -175,6 +194,33 @@ def _softmax_inputs(m: int, n: int, dtype: str, **kw: Any) -> list[dict[str, Any
             "scale": kw.get("x_scale", 1.0),
             "seed": seed,
         }
+    ]
+
+
+def _fused_add_rmsnorm_inputs(m: int, n: int, dtype: str, **kw: Any) -> list[dict[str, Any]]:
+    seed = kw.get("seed", 0)
+    return [
+        {
+            "shape": [m, n],
+            "dtype": dtype,
+            "init": kw.get("x_init", "randn"),
+            "scale": kw.get("x_scale", 1.0),
+            "seed": seed,
+        },
+        {
+            "shape": [m, n],
+            "dtype": dtype,
+            "init": kw.get("r_init", "randn"),
+            "scale": kw.get("r_scale", 1.0),
+            "seed": seed + 1,
+        },
+        {
+            "shape": [n],
+            "dtype": dtype,
+            "init": kw.get("w_init", "ones"),
+            "scale": 1.0,
+            "seed": seed + 2,
+        },
     ]
 
 
@@ -305,6 +351,12 @@ def _softmax_primary(spec: KernelSpec) -> list[dict[str, Any]]:
     return _softmax_inputs(m, n, x.dtype_str())
 
 
+def _fused_add_rmsnorm_primary(spec: KernelSpec) -> list[dict[str, Any]]:
+    x = spec.input_specs[0]
+    m, n = x.shape
+    return _fused_add_rmsnorm_inputs(m, n, x.dtype_str())
+
+
 def _rope_primary(spec: KernelSpec) -> list[dict[str, Any]]:
     x = spec.input_specs[0]
     m, n = x.shape
@@ -391,6 +443,26 @@ def _layernorm_cases(spec: KernelSpec) -> list[dict[str, Any]]:
             "input_specs": _layernorm_inputs(64, n, dt, x_scale=100.0, seed=7),
         },
         {"name": "zeros", "input_specs": _layernorm_inputs(8, n, dt, x_init="zeros")},
+    ]
+
+
+def _fused_add_rmsnorm_cases(spec: KernelSpec) -> list[dict[str, Any]]:
+    x = spec.input_specs[0]
+    _, n = x.shape
+    dt = x.dtype_str()
+    return [
+        {"name": "basic", "input_specs": _fused_add_rmsnorm_inputs(2048, n, dt)},
+        {"name": "single_row", "input_specs": _fused_add_rmsnorm_inputs(1, n, dt)},
+        {"name": "odd_rows", "input_specs": _fused_add_rmsnorm_inputs(7, n, dt, seed=3)},
+        {
+            "name": "large_values",
+            "input_specs": _fused_add_rmsnorm_inputs(64, n, dt, x_scale=100.0, seed=7),
+        },  # noqa: E501
+        {
+            "name": "weight_randn",
+            "input_specs": _fused_add_rmsnorm_inputs(64, n, dt, w_init="randn", seed=5),
+        },  # noqa: E501
+        {"name": "zeros_x", "input_specs": _fused_add_rmsnorm_inputs(8, n, dt, x_init="zeros")},
     ]
 
 
@@ -520,6 +592,15 @@ OP_REGISTRY: dict[str, OpDefinition] = {
         tolerance=_TOL(atol=2e-3, rtol=1e-2),
         primary_input_fn=_layernorm_primary,
         correctness_cases_fn=_layernorm_cases,
+    ),
+    "fused_add_rmsnorm": OpDefinition(
+        op_type="fused_add_rmsnorm",
+        reference_fn=_fused_add_rmsnorm_reference,
+        baseline_fn=_fused_add_rmsnorm_baseline,
+        baseline_display_name="(x+residual) then F.rms_norm",
+        tolerance=_TOL(atol=2e-3, rtol=1e-2),
+        primary_input_fn=_fused_add_rmsnorm_primary,
+        correctness_cases_fn=_fused_add_rmsnorm_cases,
     ),
     "gelu": OpDefinition(
         op_type="gelu",

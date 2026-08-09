@@ -29,6 +29,14 @@ class TestIdentify:
 
         assert identify(layernorm) == "layernorm"
 
+    def test_recognizes_fused_add_rmsnorm(self) -> None:
+        def fused_add_rmsnorm(x, residual, weight, eps=1e-6):
+            hidden = x + residual
+            rms = torch.rsqrt(torch.mean(hidden * hidden, dim=-1, keepdim=True) + eps)
+            return hidden * rms * weight
+
+        assert identify(fused_add_rmsnorm) == "fused_add_rmsnorm"
+
     def test_recognizes_gelu(self) -> None:
         import torch.nn.functional as F
 

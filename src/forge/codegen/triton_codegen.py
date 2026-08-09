@@ -35,6 +35,7 @@ _TEMPLATES = {
     ("layernorm", "multi_row"): "layernorm_multi_row.py.jinja",
     ("layernorm", "two_pass"): "layernorm_two_pass.py.jinja",
     ("layernorm", "welford"): "layernorm_welford.py.jinja",
+    ("fused_add_rmsnorm", "single_row"): "fused_add_rmsnorm.py.jinja",
     ("gelu", "elementwise"): "gelu.py.jinja",
     ("rope", "rotary"): "rope.py.jinja",
     ("swiglu", "elementwise"): "swiglu.py.jinja",
