@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel
 
 from forge.ir.kernel_spec import KernelSpec
-from forge.search.llm_generator import LLMGenerator, build_prompt
-from forge.search.params import SearchParams
+from forge.search._base_generator import _BaseGenerator
+from forge.search.llm_generator import build_prompt
 
 if TYPE_CHECKING:
     from forge.search.candidate import HistoryEntry
@@ -35,7 +35,7 @@ class _Proposal(BaseModel):
     candidates: list[_Candidate]
 
 
-class OllamaGenerator:
+class OllamaGenerator(_BaseGenerator):
     """ローカル ollama サーバーを使った CandidateGenerator。
 
     ANTHROPIC_API_KEY 不要。`qwen2.5-coder` など JSON 出力を得意とするモデルを推奨。
@@ -58,31 +58,16 @@ class OllamaGenerator:
         self.model = model
         self.host = host
 
-    def reset_usage(self) -> None:
-        """LLMGenerator との互換用。OllamaGenerator はトークン追跡をしないため no-op。"""
-
-    def generate(
+    def _propose(
         self,
         spec: KernelSpec,
         compute_capability: str,
-        budget: int | None = None,
-        history: list[HistoryEntry] | None = None,
-    ) -> list[SearchParams]:
-        n = budget or 12
-        prompt = build_prompt(spec, compute_capability, n, history or [])
-        raw = self._propose(prompt)
-        out: list[SearchParams] = []
-        seen: set[SearchParams] = set()
-        for d in raw:
-            params = LLMGenerator._coerce(d, spec)
-            if params is not None and params not in seen:
-                seen.add(params)
-                out.append(params)
-        return out[:n]
-
-    def _propose(self, prompt: str) -> list[dict[str, Any]]:
+        n: int,
+        history: list[HistoryEntry],
+    ) -> list[dict[str, Any]]:
         import ollama  # type: ignore[import]
 
+        prompt = build_prompt(spec, compute_capability, n, history)
         try:
             resp = ollama.Client(host=self.host).chat(
                 model=self.model,
