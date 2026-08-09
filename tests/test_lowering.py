@@ -45,6 +45,16 @@ class TestIdentify:
 
         assert identify(swiglu) == "swiglu"
 
+    def test_recognizes_rope(self) -> None:
+        def rotate_half(x):
+            h = x.shape[-1] // 2
+            return torch.cat([-x[..., h:], x[..., :h]], dim=-1)
+
+        def apply_rope(x, cos, sin):
+            return (x * cos) + (rotate_half(x) * sin)
+
+        assert identify(apply_rope) == "rope"
+
     def test_unrelated_op_returns_none(self) -> None:
         def relu(x):
             return torch.relu(x)
