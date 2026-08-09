@@ -225,6 +225,7 @@ class Orchestrator:
         best_bench: BenchmarkResult | None,
         *,
         num_candidates: int,
+        baseline_us: float | None = None,
         notify: bool = False,
     ) -> None:
         """ベスト候補のキャッシュ書き込みと Discord 通知を行う。"""
@@ -237,6 +238,7 @@ class Orchestrator:
                     params=best_params.to_dict(),
                     kernel_code=code,
                     benchmark_json=best_bench.to_dict(),
+                    baseline_us=baseline_us,
                     created_at=datetime.now(UTC),
                 ),
             )
@@ -315,7 +317,14 @@ class Orchestrator:
                     self._progress(f"{label}/{params.acc_dtype} -> {cand_bench.median_us:.1f}us")
             experiments.append(exp)
 
-        self._finalize(ctx, best_params, best_bench, num_candidates=len(candidates), notify=True)
+        self._finalize(
+            ctx,
+            best_params,
+            best_bench,
+            num_candidates=len(candidates),
+            baseline_us=baseline_bench.median_us if baseline_bench else None,
+            notify=True,
+        )
 
         return SearchResult(
             spec=spec,
@@ -431,7 +440,13 @@ class Orchestrator:
             round_start_time = time.time()
 
         total = sum(len(r.experiments) for r in rounds)
-        self._finalize(ctx, overall_best_params, overall_best_bench, num_candidates=total)
+        self._finalize(
+            ctx,
+            overall_best_params,
+            overall_best_bench,
+            num_candidates=total,
+            baseline_us=baseline_bench.median_us if baseline_bench else None,
+        )
 
         return MultiRoundResult(
             spec=spec,
