@@ -300,7 +300,7 @@ class Orchestrator:
             exp, cand_bench, bl_bench, bl_name = self._eval_one(
                 spec, params, ctx.bench_input, ctx.cases, ctx.tol, label
             )
-            if bl_bench is not None:
+            if bl_bench is not None and baseline_bench is None:
                 baseline_bench, baseline_name = bl_bench, bl_name
 
             if exp.correct and cand_bench is not None:
