@@ -461,6 +461,135 @@ class Orchestrator:
             total_benchmark_time_s=total_benchmark_time_s,
         )
 
+    def optimize_sha(
+        self,
+        spec: KernelSpec,
+        initial_budget: int = 32,
+        halving_rounds: int = 3,
+        search: CandidateGenerator | None = None,
+        use_cache: bool = True,
+    ) -> SearchResult:
+        """Successive Halving で探索する。
+
+        各ラウンドで warmup/repeat を増やしながら上位 50% に候補を絞り込む。
+
+        | ラウンド | 候補数              | warmup | repeat |
+        |---------|---------------------|--------|--------|
+        | 1       | initial_budget      | 5      | 20     |
+        | 2       | initial_budget // 2 | 10     | 50     |
+        | 3       | initial_budget // 4 | 25     | 200    |
+        """
+        ctx, cached = self._prepare(spec, use_cache)
+        if cached is not None:
+            bench = BenchmarkResult.from_dict(cached.benchmark_json)
+            self.notifier.send_cache_hit(spec.op_type)
+            return SearchResult(
+                spec=spec,
+                cache_hit=True,
+                best_params=SearchParams.from_dict(cached.params),
+                best_benchmark=bench,
+                baseline_benchmark=None,
+                baseline_name=None,
+                experiments=[],
+            )
+
+        _ROUND_CONFIGS: list[tuple[int, int]] = [
+            (5, 20),
+            (10, 50),
+            (25, 200),
+        ]
+
+        search = search or GridSearch()
+        candidates = search.generate(spec, ctx.key.compute_capability, budget=initial_budget)
+        self._progress(
+            f"SHA: {len(candidates)} candidates, {halving_rounds} rounds "
+            f"(cc {ctx.key.compute_capability})"
+        )
+
+        all_experiments: list[ExperimentResult] = []
+        baseline_bench: BenchmarkResult | None = None
+        baseline_name: str | None = None
+        surviving: list[SearchParams] = list(candidates)
+
+        for round_num in range(1, halving_rounds + 1):
+            warmup, repeat = _ROUND_CONFIGS[min(round_num - 1, len(_ROUND_CONFIGS) - 1)]
+            self._progress(
+                f"  [SHA round {round_num}/{halving_rounds}] {len(surviving)} candidates "
+                f"warmup={warmup} repeat={repeat}"
+            )
+
+            round_results: list[tuple[SearchParams, BenchmarkResult]] = []
+            for i, params in enumerate(surviving, 1):
+                label = f"  [sha r{round_num}.{i}] {params.block_size}/{params.num_warps}"
+                exp, cand_bench, bl_bench, bl_name = self._eval_one(
+                    spec,
+                    params,
+                    ctx.bench_input,
+                    ctx.cases,
+                    ctx.tol,
+                    label,
+                    warmup=warmup,
+                    repeat=repeat,
+                )
+                if bl_bench is not None:
+                    baseline_bench, baseline_name = bl_bench, bl_name
+                all_experiments.append(exp)
+
+                if exp.correct and cand_bench is not None:
+                    round_results.append((params, cand_bench))
+
+            if not round_results:
+                self._progress(f"  [SHA round {round_num}] no valid candidates — stopping")
+                break
+
+            # 上位 50% に絞る（最終ラウンドは絞らない）
+            round_results.sort(key=lambda t: t[1].median_us)
+            if round_num < halving_rounds:
+                keep = max(1, len(round_results) // 2)
+                surviving = [p for p, _ in round_results[:keep]]
+                self._progress(
+                    f"  [SHA round {round_num}] keeping top {keep}/{len(round_results)}: "
+                    f"best={round_results[0][1].median_us:.1f}us"
+                )
+            else:
+                surviving = [p for p, _ in round_results]
+
+        best_params: SearchParams | None = None
+        best_bench: BenchmarkResult | None = None
+        # 最終ラウンドの生存候補から最良を選出
+        for exp in all_experiments:
+            if exp.correct and exp.median_us is not None:
+                if best_bench is None or exp.median_us < best_bench.median_us:
+                    best_params = exp.params
+                    # BenchmarkResult は _eval_one 戻り値から取れないので再構築
+        # last round_results が残っているので流用
+        if round_results:  # type: ignore[possibly-undefined]
+            best_params, best_bench = round_results[0]
+            for exp in all_experiments:
+                if exp.params == best_params:
+                    exp.is_best = True
+                    break
+
+        self._finalize(
+            ctx,
+            best_params,
+            best_bench,
+            num_candidates=len(all_experiments),
+            baseline_us=baseline_bench.median_us if baseline_bench else None,
+            notify=True,
+        )
+
+        return SearchResult(
+            spec=spec,
+            cache_hit=False,
+            best_params=best_params,
+            best_benchmark=best_bench,
+            baseline_benchmark=baseline_bench,
+            baseline_name=baseline_name,
+            experiments=all_experiments,
+            extended_baselines=ctx.extended,
+        )
+
     def _eval_one(
         self,
         spec: KernelSpec,
@@ -469,6 +598,8 @@ class Orchestrator:
         cases: list[dict[str, Any]] | None,
         tol: dict,
         label: str,
+        warmup: int | None = None,
+        repeat: int | None = None,
     ) -> tuple[ExperimentResult, BenchmarkResult | None, BenchmarkResult | None, str | None]:
         """1 候補を評価。戻り値: (experiment, candidate_bench, baseline_bench, baseline_name)。"""
         try:
@@ -484,8 +615,8 @@ class Orchestrator:
             spec.constants,
             correctness_cases=cases,
             task="full",
-            warmup=self.warmup,
-            repeat=self.repeat,
+            warmup=warmup if warmup is not None else self.warmup,
+            repeat=repeat if repeat is not None else self.repeat,
             tolerance=tol,
             timeout_s=self.timeout_s,
             python_executable=self.python_executable,
