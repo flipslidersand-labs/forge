@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import torch
 
+from forge.codegen.triton_codegen import graph_hash_for
 from forge.ir.kernel_spec import KernelSpec
 from forge.ir.tensor_spec import TensorSpec
 from forge.orchestrator import Orchestrator
@@ -26,7 +27,7 @@ def bench_rmsnorm(rows: int = 2048, hidden: int = 4096) -> None:
         ),
         output_specs=(TensorSpec((rows, hidden), torch.float16, True),),
         constants={"eps": 1e-6},
-        graph_hash="rmsnorm_v1",
+        graph_hash=graph_hash_for("rmsnorm"),
         constraints=(),
     )
     result = _orch().optimize(spec, budget=50, use_cache=False)
@@ -39,7 +40,7 @@ def bench_softmax(rows: int = 2048, hidden: int = 4096) -> None:
         input_specs=(TensorSpec((rows, hidden), torch.float16, True),),
         output_specs=(TensorSpec((rows, hidden), torch.float16, True),),
         constants={},
-        graph_hash="softmax_v1",
+        graph_hash=graph_hash_for("softmax"),
         constraints=(),
     )
     result = _orch().optimize(spec, budget=50, use_cache=False)
@@ -56,7 +57,7 @@ def bench_layernorm(rows: int = 2048, hidden: int = 4096) -> None:
         ),
         output_specs=(TensorSpec((rows, hidden), torch.float16, True),),
         constants={"eps": 1e-5},
-        graph_hash="layernorm_v1",
+        graph_hash=graph_hash_for("layernorm"),
         constraints=(),
     )
     result = _orch().optimize(spec, budget=50, use_cache=False)
@@ -69,7 +70,7 @@ def bench_gelu(rows: int = 2048, hidden: int = 4096) -> None:
         input_specs=(TensorSpec((rows, hidden), torch.float16, True),),
         output_specs=(TensorSpec((rows, hidden), torch.float16, True),),
         constants={},
-        graph_hash="gelu_v1",
+        graph_hash=graph_hash_for("gelu"),
         constraints=(),
     )
     result = _orch().optimize(spec, budget=50, use_cache=False)
