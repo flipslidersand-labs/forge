@@ -6,7 +6,7 @@ from collections.abc import Callable
 from typing import Any
 
 from forge.cache.repository import KernelRepository
-from forge.codegen.triton_codegen import generate, graph_hash_for
+from forge.codegen.triton_codegen import generate
 from forge.ir.kernel_spec import KernelSpec
 from forge.ir.tensor_spec import TensorSpec
 from forge.lowering import identify
@@ -137,7 +137,7 @@ def _build(
         input_specs=input_specs,
         output_specs=(out,),
         constants=constants,
-        graph_hash=graph_hash_for(op_type),
+        graph_hash=f"{op_type}_v1",  # 計算の識別子。テンプレ無効化は CacheKey.template_hash が担う
         constraints=(),
     )
 

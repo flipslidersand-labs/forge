@@ -45,8 +45,8 @@ _TEMPLATES = {
 def template_hash(op_type: str, template_dir: Path | None = None) -> str:
     """op_type の全 Triton テンプレート内容から安定した 12 桁 hex ダイジェストを返す。
 
-    キャッシュキー (graph_hash) に埋め込むことで、テンプレートを修正すると
-    古いキャッシュが自動的に無効化される（Issue #93）。
+    CacheKey.template_hash として保持され、テンプレートを修正すると
+    古いキャッシュが自動的に無効化される（Issue #93/#109）。
 
     テンプレートファイルが見つからない場合は FileNotFoundError を投げる —
     欠損は package-data 漏れ等の破損インストールであり、ファイル名のみの
@@ -63,15 +63,6 @@ def template_hash(op_type: str, template_dir: Path | None = None) -> str:
         h.update(len(content).to_bytes(8, "big"))
         h.update(content)
     return h.hexdigest()[:12]
-
-
-def graph_hash_for(op_type: str) -> str:
-    """op_type とテンプレート内容から KernelSpec.graph_hash を構築する。
-
-    decorator・examples・docs 共通の唯一の構築点。手書きの "<op>_v1" 形式は
-    テンプレート修正でキャッシュが無効化されないため使わないこと。
-    """
-    return f"{op_type}_{template_hash(op_type)}"
 
 
 def generate(spec: KernelSpec, params: SearchParams) -> str:

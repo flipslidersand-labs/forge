@@ -34,6 +34,7 @@ class TestCacheKey:
             triton_version="3.0.0",
             cuda_version="12.1",
             library_version="0.1.0",
+            template_hash="feedfacecafe",
         )
         assert key.digest() == key.digest()
 
@@ -49,6 +50,7 @@ class TestCacheKey:
                 triton_version="3.0.0",
                 cuda_version="12.1",
                 library_version="0.1.0",
+                template_hash="feedfacecafe",
             )
 
         assert make((2048, 4096)).digest() != make((1024, 4096)).digest()
@@ -63,6 +65,7 @@ class TestCacheKey:
             torch_version="2.3.0",
             triton_version="3.0.0",
             library_version="0.1.0",
+            template_hash="feedfacecafe",
         )
         k1 = CacheKey(**base, cuda_version="12.1")
         k2 = CacheKey(**base, cuda_version="12.4")
@@ -81,6 +84,7 @@ class TestKernelRepository:
             triton_version="3.0.0",
             cuda_version="12.1",
             library_version="0.1.0",
+            template_hash="feedfacecafe",
         )
 
     def _make_kernel(self, key: CacheKey) -> CachedKernel:
