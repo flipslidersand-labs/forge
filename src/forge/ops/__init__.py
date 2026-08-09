@@ -18,6 +18,9 @@ OP_INFO: dict[str, OpInfo] = {
     "softmax": OpInfo(kind="reduction", n_tensor_inputs=1),  # x
     "layernorm": OpInfo(kind="reduction", n_tensor_inputs=3),  # x, weight, bias
     "gelu": OpInfo(kind="elementwise", n_tensor_inputs=1),  # x
+    "swiglu": OpInfo(kind="elementwise", n_tensor_inputs=2),  # x, gate
+    "rope": OpInfo(kind="elementwise", n_tensor_inputs=3),  # x, cos, sin
+    "fused_add_rmsnorm": OpInfo(kind="reduction", n_tensor_inputs=3),  # x, residual, weight
     # Q, K, V の 3D テンソル [B*H, S, D]。block_size は S（シーケンス長）に対応。
     "scaled_dot_product_attention": OpInfo(kind="matmul", n_tensor_inputs=3),
     # x:[M,K], weight:[N,K], bias:[N] → out:[M,N]。F.linear は weight が転置済みで渡る。
