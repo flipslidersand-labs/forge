@@ -1,11 +1,21 @@
 """Orchestrator のオフライン単体テスト。GPU 不要。"""
 
+import sqlite3
+import tempfile
+from pathlib import Path
+
 import torch
 
 from forge.benchmark.statistics import BenchmarkResult
+from forge.cache.repository import KernelRepository
 from forge.ir.kernel_spec import KernelSpec
 from forge.ir.tensor_spec import TensorSpec
-from forge.orchestrator import ExperimentResult, MultiRoundResult, RoundResult
+from forge.orchestrator import (
+    ExperimentResult,
+    MultiRoundResult,
+    Orchestrator,
+    RoundResult,
+)
 from forge.runtime.worker import ExtendedBaselineResult
 from forge.search.llm_generator import TokenUsage
 from forge.search.params import SearchParams
@@ -159,21 +169,11 @@ class TestExtendedBaselineResult:
 
 class TestOrchestratorLifecycle:
     def test_owns_repo_when_none_passed(self) -> None:
-        import tempfile
-        from pathlib import Path
-        from forge.orchestrator import Orchestrator
-        from forge.cache.repository import KernelRepository
-
         with tempfile.TemporaryDirectory() as d:
             orch = Orchestrator(repo=KernelRepository(Path(d) / "a.db"))
             assert not orch._owns_repo
 
     def test_does_not_own_external_repo(self) -> None:
-        import tempfile
-        from pathlib import Path
-        from forge.orchestrator import Orchestrator
-        from forge.cache.repository import KernelRepository
-
         with tempfile.TemporaryDirectory() as d:
             repo = KernelRepository(Path(d) / "ext.db")
             orch = Orchestrator(repo=repo)
@@ -183,12 +183,6 @@ class TestOrchestratorLifecycle:
             repo.close()
 
     def test_context_manager_closes_owned_repo(self) -> None:
-        import sqlite3
-        import tempfile
-        from pathlib import Path
-        from forge.orchestrator import Orchestrator
-        from forge.cache.repository import KernelRepository
-
         with tempfile.TemporaryDirectory() as d:
             owned_repo = KernelRepository(Path(d) / "owned.db")
             # _owns_repo を強制的に True にして close() が呼ばれることを確認
@@ -202,11 +196,6 @@ class TestOrchestratorLifecycle:
                 pass
 
     def test_context_manager_does_not_close_external_repo(self) -> None:
-        import tempfile
-        from pathlib import Path
-        from forge.orchestrator import Orchestrator
-        from forge.cache.repository import KernelRepository
-
         with tempfile.TemporaryDirectory() as d:
             repo = KernelRepository(Path(d) / "ext.db")
             with Orchestrator(repo=repo) as _:
