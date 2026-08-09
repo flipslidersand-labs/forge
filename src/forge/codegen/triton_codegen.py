@@ -36,6 +36,7 @@ _TEMPLATES = {
     ("layernorm", "two_pass"): "layernorm_two_pass.py.jinja",
     ("layernorm", "welford"): "layernorm_welford.py.jinja",
     ("gelu", "elementwise"): "gelu.py.jinja",
+    ("swiglu", "elementwise"): "swiglu.py.jinja",
     ("scaled_dot_product_attention", "flash"): "sdpa.py.jinja",
     ("scaled_dot_product_attention", "flash_causal_opt"): "sdpa_causal_opt.py.jinja",
     ("linear", "gemm"): "linear.py.jinja",

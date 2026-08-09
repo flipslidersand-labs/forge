@@ -54,6 +54,10 @@ def _layernorm_reference(
     )
 
 
+def _swiglu_reference(x: torch.Tensor, gate: torch.Tensor) -> torch.Tensor:
+    return (torch.nn.functional.silu(gate.float()) * x.float()).to(x.dtype)
+
+
 def _gelu_reference(x: torch.Tensor) -> torch.Tensor:
     return torch.nn.functional.gelu(x.float()).to(x.dtype)
 
@@ -93,6 +97,10 @@ def _layernorm_baseline(
     x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor, eps: float = 1e-5
 ) -> torch.Tensor:
     return torch.nn.functional.layer_norm(x, (x.shape[-1],), weight, bias, eps)
+
+
+def _swiglu_baseline(x: torch.Tensor, gate: torch.Tensor) -> torch.Tensor:
+    return torch.nn.functional.silu(gate) * x
 
 
 def _gelu_baseline(x: torch.Tensor) -> torch.Tensor:
@@ -150,6 +158,26 @@ def _softmax_inputs(m: int, n: int, dtype: str, **kw: Any) -> list[dict[str, Any
             "scale": kw.get("x_scale", 1.0),
             "seed": seed,
         }
+    ]
+
+
+def _swiglu_inputs(m: int, n: int, dtype: str, **kw: Any) -> list[dict[str, Any]]:
+    seed = kw.get("seed", 0)
+    return [
+        {
+            "shape": [m, n],
+            "dtype": dtype,
+            "init": kw.get("x_init", "randn"),
+            "scale": kw.get("x_scale", 1.0),
+            "seed": seed,
+        },
+        {
+            "shape": [m, n],
+            "dtype": dtype,
+            "init": kw.get("g_init", "randn"),
+            "scale": kw.get("g_scale", 1.0),
+            "seed": seed + 1,
+        },
     ]
 
 
@@ -245,6 +273,12 @@ def _softmax_primary(spec: KernelSpec) -> list[dict[str, Any]]:
     return _softmax_inputs(m, n, x.dtype_str())
 
 
+def _swiglu_primary(spec: KernelSpec) -> list[dict[str, Any]]:
+    x = spec.input_specs[0]
+    m, n = x.shape
+    return _swiglu_inputs(m, n, x.dtype_str())
+
+
 def _gelu_primary(spec: KernelSpec) -> list[dict[str, Any]]:
     x = spec.input_specs[0]
     m, n = x.shape
@@ -319,6 +353,19 @@ def _layernorm_cases(spec: KernelSpec) -> list[dict[str, Any]]:
             "input_specs": _layernorm_inputs(64, n, dt, x_scale=100.0, seed=7),
         },
         {"name": "zeros", "input_specs": _layernorm_inputs(8, n, dt, x_init="zeros")},
+    ]
+
+
+def _swiglu_cases(spec: KernelSpec) -> list[dict[str, Any]]:
+    x = spec.input_specs[0]
+    _, n = x.shape
+    dt = x.dtype_str()
+    return [
+        {"name": "basic", "input_specs": _swiglu_inputs(2048, n, dt)},
+        {"name": "single_row", "input_specs": _swiglu_inputs(1, n, dt)},
+        {"name": "odd_rows", "input_specs": _swiglu_inputs(7, n, dt, seed=3)},
+        {"name": "large_values", "input_specs": _swiglu_inputs(64, n, dt, x_scale=10.0, seed=7)},
+        {"name": "zeros", "input_specs": _swiglu_inputs(8, n, dt, x_init="zeros", g_init="zeros")},
     ]
 
 
@@ -431,6 +478,15 @@ OP_REGISTRY: dict[str, OpDefinition] = {
         tolerance=_TOL(atol=2e-3, rtol=1e-2),
         primary_input_fn=_gelu_primary,
         correctness_cases_fn=_gelu_cases,
+    ),
+    "swiglu": OpDefinition(
+        op_type="swiglu",
+        reference_fn=_swiglu_reference,
+        baseline_fn=_swiglu_baseline,
+        baseline_display_name="F.silu(gate) * x",
+        tolerance=_TOL(atol=2e-3, rtol=1e-2),
+        primary_input_fn=_swiglu_primary,
+        correctness_cases_fn=_swiglu_cases,
     ),
     "scaled_dot_product_attention": OpDefinition(
         op_type="scaled_dot_product_attention",
