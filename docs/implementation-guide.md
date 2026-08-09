@@ -47,7 +47,7 @@ pytest tests/test_ir.py tests/test_cache.py -v
 
 ```bash
 python -c "
-from forge.codegen.triton_codegen import generate_rmsnorm, graph_hash_for
+from forge.codegen.triton_codegen import generate_rmsnorm
 from forge.ir.kernel_spec import KernelSpec, TensorSpec
 import torch
 
@@ -56,7 +56,7 @@ spec = KernelSpec(
     input_specs=(TensorSpec((2048, 4096), torch.float16, True),),
     output_specs=(TensorSpec((2048, 4096), torch.float16, True),),
     constants={'eps': 1e-6},
-    graph_hash=graph_hash_for('rmsnorm'),
+    graph_hash='rmsnorm_v1',
     constraints=(),
 )
 params = {'block_size': 1024, 'num_warps': 8, 'num_stages': 2, 'acc_dtype': 'fp32', 'variant': 'single_row'}

@@ -19,6 +19,9 @@ class CacheKey:
     triton_version: str
     cuda_version: str
     library_version: str
+    # codegen テンプレートの内容ダイジェスト。graph_hash（計算の識別子）とは
+    # 独立にテンプレート修正でキャッシュを無効化する（Issue #93/#109）。
+    template_hash: str
 
     @classmethod
     def from_spec_and_env(cls, spec: KernelSpec) -> CacheKey:
@@ -33,10 +36,12 @@ class CacheKey:
 
         cc = torch.cuda.get_device_capability() if torch.cuda.is_available() else (0, 0)
 
+        from forge.codegen.triton_codegen import template_hash
         from forge.ir.hashing import hash_constants
 
         return cls(
             graph_hash=spec.graph_hash,
+            template_hash=template_hash(spec.op_type),
             shapes=tuple(s.shape for s in spec.input_specs),
             dtypes=tuple(s.dtype_str() for s in spec.input_specs),
             constants_hash=hash_constants(spec.constants),
