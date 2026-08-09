@@ -99,14 +99,10 @@ def generate(spec: KernelSpec, params: SearchParams) -> str:
         out_tl=torch_dtype_str_to_tl(out_dtype_str),
     )
 
-    if spec.op_type == "scaled_dot_product_attention":
-        # head_dim は Q の最終次元（[B*H, S, D] の D）
-        render_kwargs["head_dim"] = spec.input_specs[0].shape[-1]
-        render_kwargs["is_causal"] = bool(spec.constants.get("is_causal", False))
+    from forge.ops.registry import OP_REGISTRY
 
-    if spec.op_type == "linear":
-        # BLOCK_K は constants["block_k"] で渡す（SearchSpace が決定）。未指定時は 32。
-        render_kwargs["block_k"] = int(str(spec.constants.get("block_k", 32)))
+    if spec.op_type in OP_REGISTRY:
+        render_kwargs.update(OP_REGISTRY[spec.op_type].render_extra_kwargs_fn(spec))
 
     return template.render(**render_kwargs)
 
