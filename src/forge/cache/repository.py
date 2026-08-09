@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from forge.benchmark.statistics import BenchmarkResultDict
+
 from .key import CacheKey
 
 # CLI (forge.cli) と KernelRepository が共有する既定 DB パスの単一定義。
@@ -17,7 +19,7 @@ class CachedKernel:
     cache_key: CacheKey
     params: dict[str, object]
     kernel_code: str
-    benchmark_json: dict[str, object]
+    benchmark_json: BenchmarkResultDict
     created_at: datetime
 
 
@@ -118,6 +120,12 @@ class KernelRepository:
         deleted = self.conn.execute("DELETE FROM kernels").rowcount
         self.conn.commit()
         return deleted
+
+    def __enter__(self) -> KernelRepository:
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.close()
 
     def close(self) -> None:
         self.conn.close()
