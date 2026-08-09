@@ -74,7 +74,7 @@ class TestFusedAddRmsnormInputs:
         specs = _fused_add_rmsnorm_inputs(4, 16, "fp32")
         assert specs[0]["shape"] == [4, 16]  # x
         assert specs[1]["shape"] == [4, 16]  # residual
-        assert specs[2]["shape"] == [16]     # weight
+        assert specs[2]["shape"] == [16]  # weight
 
     def test_weight_init_ones(self) -> None:
         from forge.ops.registry import _fused_add_rmsnorm_inputs
