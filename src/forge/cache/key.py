@@ -19,6 +19,7 @@ class CacheKey:
     triton_version: str
     cuda_version: str
     library_version: str
+    template_hash: str  # codegen テンプレートのダイジェスト（テンプレ編集でキャッシュ無効化）
 
     @classmethod
     def from_spec_and_env(cls, spec: KernelSpec) -> CacheKey:
@@ -33,6 +34,7 @@ class CacheKey:
 
         cc = torch.cuda.get_device_capability() if torch.cuda.is_available() else (0, 0)
 
+        from forge.codegen.triton_codegen import template_hash as get_template_hash
         from forge.ir.hashing import hash_constants
 
         return cls(
@@ -45,6 +47,7 @@ class CacheKey:
             triton_version=triton_ver,
             cuda_version=torch.version.cuda or "none",
             library_version=__version__,
+            template_hash=get_template_hash(spec.op_type),
         )
 
     @classmethod
@@ -65,6 +68,7 @@ class CacheKey:
             triton_version=str(data["triton_version"]),
             cuda_version=str(data["cuda_version"]),
             library_version=str(data["library_version"]),
+            template_hash=str(data["template_hash"]),
         )
 
     @classmethod

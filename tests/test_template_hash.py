@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from forge.codegen.triton_codegen import graph_hash_for, template_hash
+from forge.codegen.triton_codegen import template_hash
 
 
 def test_hash_is_stable() -> None:
@@ -49,7 +49,25 @@ def test_length_prefix_framing_disambiguates(tmp_path) -> None:
     assert h1 != h2
 
 
-def test_graph_hash_for_format() -> None:
-    h = graph_hash_for("rmsnorm")
-    assert h.startswith("rmsnorm_")
-    assert h == f"rmsnorm_{template_hash('rmsnorm')}"
+def test_template_hash_stored_in_cache_key(tmp_path) -> None:
+    """CacheKey.template_hash は graph_hash とは独立して保存される（Issue #109）。"""
+    from forge.cache.key import CacheKey
+
+    key = CacheKey(
+        graph_hash="rmsnorm",
+        shapes=((1024,),),
+        dtypes=("float16",),
+        constants_hash="abc",
+        compute_capability="8.9",
+        torch_version="2.4.0",
+        triton_version="3.1.0",
+        cuda_version="12.4",
+        library_version="0.1.0",
+        template_hash=template_hash("rmsnorm"),
+    )
+    # graph_hash はテンプレート編集で変化しない
+    assert key.graph_hash == "rmsnorm"
+    # template_hash がテンプレート内容のダイジェストを持つ
+    assert key.template_hash == template_hash("rmsnorm")
+    # digest にも template_hash が含まれるためテンプレ変更でキャッシュ無効化
+    assert len(key.template_hash) == 12
