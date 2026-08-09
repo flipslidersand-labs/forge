@@ -1,11 +1,21 @@
 """Orchestrator のオフライン単体テスト。GPU 不要。"""
 
+import sqlite3
+import tempfile
+from pathlib import Path
+
 import torch
 
 from forge.benchmark.statistics import BenchmarkResult
+from forge.cache.repository import KernelRepository
 from forge.ir.kernel_spec import KernelSpec
 from forge.ir.tensor_spec import TensorSpec
-from forge.orchestrator import ExperimentResult, MultiRoundResult, RoundResult
+from forge.orchestrator import (
+    ExperimentResult,
+    MultiRoundResult,
+    Orchestrator,
+    RoundResult,
+)
 from forge.runtime.worker import ExtendedBaselineResult
 from forge.search.llm_generator import TokenUsage
 from forge.search.params import SearchParams
@@ -155,3 +165,41 @@ class TestExtendedBaselineResult:
         r = ExtendedBaselineResult.from_dict({"name": "x", "benchmark": bench.to_dict()})
         assert r.error is None
         assert r.failed is False
+
+
+class TestOrchestratorLifecycle:
+    def test_owns_repo_when_none_passed(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            orch = Orchestrator(repo=KernelRepository(Path(d) / "a.db"))
+            assert not orch._owns_repo
+
+    def test_does_not_own_external_repo(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            repo = KernelRepository(Path(d) / "ext.db")
+            orch = Orchestrator(repo=repo)
+            assert not orch._owns_repo
+            orch.close()
+            # 外部 repo は close されていない（まだ使える）
+            repo.close()
+
+    def test_context_manager_closes_owned_repo(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            owned_repo = KernelRepository(Path(d) / "owned.db")
+            # _owns_repo を強制的に True にして close() が呼ばれることを確認
+            with Orchestrator(repo=owned_repo) as orch:
+                orch._owns_repo = True
+                repo_ref = orch.repo
+            try:
+                repo_ref.conn.execute("SELECT 1")
+                raise AssertionError("should have raised")
+            except sqlite3.ProgrammingError:
+                pass
+
+    def test_context_manager_does_not_close_external_repo(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            repo = KernelRepository(Path(d) / "ext.db")
+            with Orchestrator(repo=repo) as _:
+                pass
+            # 外部 repo は close されていない（まだ使える）
+            repo.conn.execute("SELECT 1")
+            repo.close()
