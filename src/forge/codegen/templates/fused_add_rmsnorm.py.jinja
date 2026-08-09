@@ -21,8 +21,10 @@ def _fused_add_rmsnorm_kernel(
 
     # fused: hidden = x + residual, then RMSNorm(hidden)
     hidden = x + residual
-    var = tl.sum(hidden * hidden, axis=0) / n_cols
-    rstd = tl.rsqrt(var + eps)
+    # variance in fp32 to avoid fp16 overflow over n_cols elements
+    hidden_f32 = hidden.to(tl.float32)
+    var = tl.sum(hidden_f32 * hidden_f32, axis=0) / n_cols
+    rstd = tl.rsqrt(var + eps).to(tl.{{ acc_tl }})
     out = hidden * rstd * weight
 
     tl.store(out_ptr + base + offs, out.to(tl.{{ out_tl }}), mask=mask)

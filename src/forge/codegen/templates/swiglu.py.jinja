@@ -11,7 +11,8 @@ def _swiglu_kernel(x_ptr, gate_ptr, out_ptr, n_elements, BLOCK_SIZE: tl.constexp
     x = tl.load(x_ptr + offs, mask=mask).to(tl.{{ acc_tl }})
     gate = tl.load(gate_ptr + offs, mask=mask).to(tl.{{ acc_tl }})
     # SwiGLU: silu(gate) * x = gate * sigmoid(gate) * x
-    silu_gate = gate * tl.sigmoid(gate)
+    # tl.exp requires fp32; cast gate up then back to acc dtype
+    silu_gate = gate * (1.0 / (1.0 + tl.exp(-gate.to(tl.float32)))).to(tl.{{ acc_tl }})
     out = silu_gate * x
     tl.store(out_ptr + offs, out.to(tl.{{ out_tl }}), mask=mask)
 
