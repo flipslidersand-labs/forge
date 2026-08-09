@@ -57,8 +57,6 @@ def _cmd_list(args: argparse.Namespace) -> int:
         repo.close()
 
     if args.json:
-        from dataclasses import asdict
-
         print(
             json.dumps(
                 [
