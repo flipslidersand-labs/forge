@@ -6,8 +6,9 @@ from typing import Any
 
 from forge.ir.kernel_spec import KernelSpec
 
+from ._base_generator import _BaseGenerator
 from .candidate import HistoryEntry
-from .params import SUPPORTED_ACC_DTYPES, SUPPORTED_VARIANTS, SearchParams
+from .params import SUPPORTED_ACC_DTYPES, SUPPORTED_VARIANTS
 
 # LLM に候補を出させる際の戻り値型: 構造化された dict のリスト。
 ProposeFn = Callable[[KernelSpec, str, int, list[HistoryEntry]], list[dict[str, Any]]]
@@ -41,7 +42,7 @@ _SYSTEM = (
 )
 
 
-class LLMGenerator:
+class LLMGenerator(_BaseGenerator):
     """Claude に構造化された探索候補を出させる CandidateGenerator 実装。
 
     LLM には自由な Triton コードを書かせず、変更命令（variant + パラメータ + 仮説）
@@ -69,46 +70,16 @@ class LLMGenerator:
         """token_usage を初期化する。複数 spec にまたがって再利用する場合に呼ぶ。"""
         self.token_usage = TokenUsage()
 
-    def generate(
+    def _propose(
         self,
         spec: KernelSpec,
         compute_capability: str,
-        budget: int | None = None,
-        history: list[HistoryEntry] | None = None,
-    ) -> list[SearchParams]:
-        n = budget or self.default_n
-        propose = self._propose_fn or self._propose_via_claude
-        raw = propose(spec, compute_capability, n, history or [])
-
-        out: list[SearchParams] = []
-        seen: set[SearchParams] = set()
-        for d in raw:
-            params = self._coerce(d, spec)
-            if params is not None and params not in seen:
-                seen.add(params)
-                out.append(params)
-        if budget is not None:
-            out = out[:budget]
-        return out
-
-    # --- 構造化 dict -> SearchParams（無効な候補は捨てる） ---
-
-    @staticmethod
-    def _coerce(d: dict[str, Any], spec: KernelSpec) -> SearchParams | None:
-        try:
-            params = SearchParams(
-                block_size=int(d["block_size"]),
-                num_warps=int(d["num_warps"]),
-                num_stages=int(d["num_stages"]),
-                acc_dtype=str(d.get("acc_dtype", "fp32")),
-                variant=str(d.get("base_variant", d.get("variant", "single_row"))),
-                rows_per_program=int(d.get("rows_per_program", 1)),
-            )
-        except (KeyError, ValueError, TypeError):
-            return None
-        if not _valid_block(params, spec.input_specs[0].shape[-1]):
-            return None
-        return params
+        n: int,
+        history: list[HistoryEntry],
+    ) -> list[dict[str, Any]]:
+        if self._propose_fn is not None:
+            return self._propose_fn(spec, compute_capability, n, history)
+        return self._propose_via_claude(spec, compute_capability, n, history)
 
     # --- 実際の Claude 呼び出し（遅延 import） ---
 
@@ -149,14 +120,6 @@ class LLMGenerator:
         if proposal is None:
             return []
         return [c.model_dump() for c in proposal.candidates]
-
-
-def _valid_block(params: SearchParams, n: int) -> bool:
-    """variant ごとの block_size 制約（SearchSpace と同じルール）。"""
-    if params.variant == "two_pass":
-        return params.block_size <= n
-    # single_row / multi_row は行全体を 1 タイルに収める
-    return params.block_size >= n
 
 
 def build_prompt(
