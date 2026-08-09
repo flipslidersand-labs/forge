@@ -341,11 +341,8 @@ class Orchestrator:
         ANTHROPIC_API_KEY が必要（llm に propose_fn を注入することでテスト可能）。
         GPU 必須（ベンチマーク・検証を実行するため）。
         """
-        spec.validate()
-        key = CacheKey.from_spec_and_env(spec)
-
-        if use_cache and (cached := self.repo.get(key)) is not None:
-            self._progress(f"cache HIT: {cached.params}")
+        ctx, cached = self._prepare(spec, use_cache)
+        if cached is not None:
             bench = BenchmarkResult.from_dict(cached.benchmark_json)
             return MultiRoundResult(
                 spec=spec,
@@ -357,30 +354,6 @@ class Orchestrator:
                 token_usage=llm.token_usage,
                 total_benchmark_time_s=0.0,
             )
-
-        bench_input = primary_input(spec)
-        cases = correctness_cases(spec)
-        tol = get_tolerance(spec.op_type).to_dict()
-
-        extended: list[ExtendedBaselineResult] = []
-        if self.measure_extended:
-            self._progress("measuring extended baselines (torch.compile) …")
-            extended = run_extended_baseline_in_worker(
-                spec.op_type,
-                bench_input,
-                spec.constants,
-                warmup=self.warmup,
-                repeat=self.repeat,
-                python_executable=self.python_executable,
-            )
-            for eb in extended:
-                if eb.failed:
-                    self._progress(f"  extended: {eb.name} FAILED: {eb.error}")
-                else:
-                    self._progress(
-                        f"  extended: {eb.name} median={eb.benchmark.median_us:.1f}µs "
-                        f"p95={eb.benchmark.p95_us:.1f}µs compile={eb.compile_time_s:.1f}s"
-                    )
 
         llm.reset_usage()
         history: list[HistoryEntry] = []
@@ -400,7 +373,7 @@ class Orchestrator:
             )
             candidates = llm.generate(
                 spec,
-                key.compute_capability,
+                ctx.key.compute_capability,
                 budget=candidates_per_round,
                 history=history,
             )
@@ -416,7 +389,7 @@ class Orchestrator:
                 seen_params.add(params)
                 label = f"  [r{round_num}.{i}] {params.block_size}/{params.num_warps}"
                 exp, cand_bench, bl_bench, bl_name = self._eval_one(
-                    spec, params, bench_input, cases, tol, label
+                    spec, params, ctx.bench_input, ctx.cases, ctx.tol, label
                 )
                 if bl_bench is not None:
                     baseline_bench, baseline_name = bl_bench, bl_name
@@ -457,23 +430,9 @@ class Orchestrator:
             )
             round_start_time = time.time()
 
-        if overall_best_params is not None and overall_best_bench is not None:
-            code = generate(spec, overall_best_params)
-            self.repo.put(
-                key,
-                CachedKernel(
-                    cache_key=key,
-                    params=overall_best_params.to_dict(),
-                    kernel_code=code,
-                    benchmark_json=overall_best_bench.to_dict(),
-                    created_at=datetime.now(UTC),
-                ),
-            )
-            self._progress(
-                f"cached best: {overall_best_params} ({overall_best_bench.median_us:.1f}us)"
-            )
-
         total = sum(len(r.experiments) for r in rounds)
+        self._finalize(ctx, overall_best_params, overall_best_bench, num_candidates=total)
+
         return MultiRoundResult(
             spec=spec,
             rounds=rounds,
@@ -483,7 +442,7 @@ class Orchestrator:
             baseline_name=baseline_name,
             token_usage=llm.token_usage,
             total_candidates_evaluated=total,
-            extended_baselines=extended,
+            extended_baselines=ctx.extended,
             total_benchmark_time_s=total_benchmark_time_s,
         )
 
