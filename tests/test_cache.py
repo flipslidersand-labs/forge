@@ -226,8 +226,8 @@ class TestCacheKeyFromDict:
         d = self._base()
         key = CacheKey.from_dict(d)
         assert key.graph_hash == "abc"
-        assert key.shapes == ((2048, 4096),)   # list → tuple restored
-        assert key.dtypes == ("float16",)       # list → tuple restored
+        assert key.shapes == ((2048, 4096),)  # list → tuple restored
+        assert key.dtypes == ("float16",)  # list → tuple restored
         assert key.constants_hash == "deadbeef"
 
     def test_from_json_roundtrip(self) -> None:
