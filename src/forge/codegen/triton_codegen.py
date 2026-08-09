@@ -37,7 +37,7 @@ _TEMPLATES = {
     ("layernorm", "welford"): "layernorm_welford.py.jinja",
     ("fused_add_rmsnorm", "single_row"): "fused_add_rmsnorm.py.jinja",
     ("gelu", "elementwise"): "gelu.py.jinja",
-    ("rope", "elementwise"): "rope.py.jinja",
+    ("rope", "single_row"): "rope.py.jinja",
     ("swiglu", "elementwise"): "swiglu.py.jinja",
     ("scaled_dot_product_attention", "flash"): "sdpa.py.jinja",
     ("scaled_dot_product_attention", "flash_causal_opt"): "sdpa_causal_opt.py.jinja",

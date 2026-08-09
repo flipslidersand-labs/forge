@@ -19,7 +19,7 @@ OP_INFO: dict[str, OpInfo] = {
     "layernorm": OpInfo(kind="reduction", n_tensor_inputs=3),  # x, weight, bias
     "gelu": OpInfo(kind="elementwise", n_tensor_inputs=1),  # x
     "swiglu": OpInfo(kind="elementwise", n_tensor_inputs=2),  # x, gate
-    "rope": OpInfo(kind="elementwise", n_tensor_inputs=3),  # x, cos, sin
+    "rope": OpInfo(kind="reduction", n_tensor_inputs=3),  # x, cos, sin — single_row kernel
     "fused_add_rmsnorm": OpInfo(kind="reduction", n_tensor_inputs=3),  # x, residual, weight
     # Q, K, V の 3D テンソル [B*H, S, D]。block_size は S（シーケンス長）に対応。
     "scaled_dot_product_attention": OpInfo(kind="matmul", n_tensor_inputs=3),
