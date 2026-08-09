@@ -233,6 +233,7 @@ class Orchestrator:
                     params=best_params.to_dict(),
                     kernel_code=code,
                     benchmark_json=best_bench.to_dict(),
+                    baseline_us=baseline_bench.median_us if baseline_bench else None,
                     created_at=datetime.now(UTC),
                 ),
             )
@@ -410,6 +411,7 @@ class Orchestrator:
                     params=overall_best_params.to_dict(),
                     kernel_code=code,
                     benchmark_json=overall_best_bench.to_dict(),
+                    baseline_us=baseline_bench.median_us if baseline_bench else None,
                     created_at=datetime.now(UTC),
                 ),
             )

@@ -130,6 +130,69 @@ class TestKernelRepository:
             assert result.kernel_code == "def v2(): pass"
             repo.close()
 
+    def test_baseline_us_roundtrip_and_speedup(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            repo = KernelRepository(Path(d) / "cache.db")
+            key = self._make_key()
+            kernel = self._make_kernel(key)
+            kernel.baseline_us = 84.0  # median 42.0 -> 2.0x
+            repo.put(key, kernel)
+
+            got = repo.get(key)
+            assert got is not None
+            assert got.baseline_us == 84.0
+
+            (summary,) = repo.list_summaries()
+            assert summary.speedup == 2.0
+            assert summary.median_us == 42.0
+            repo.close()
+
+    def test_summary_speedup_none_without_baseline(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            repo = KernelRepository(Path(d) / "cache.db")
+            key = self._make_key()
+            repo.put(key, self._make_kernel(key))  # baseline 未指定
+            (summary,) = repo.list_summaries()
+            assert summary.speedup is None
+            repo.close()
+
+    def test_migrates_legacy_db_without_baseline_column(self) -> None:
+        import sqlite3
+
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "cache.db"
+            # baseline_us 列が無い旧スキーマ + 旧レイアウトの行を用意
+            conn = sqlite3.connect(str(path))
+            conn.executescript(
+                "CREATE TABLE kernels ("
+                "cache_key_hash TEXT PRIMARY KEY, cache_key_json TEXT NOT NULL, "
+                "params_json TEXT NOT NULL, kernel_code TEXT NOT NULL, "
+                "benchmark_json TEXT NOT NULL, created_at TEXT NOT NULL);"
+            )
+            conn.execute(
+                "INSERT INTO kernels VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    "legacyhash",
+                    '{"graph_hash": "g", "shapes": [], "dtypes": []}',
+                    "{}",
+                    "def k(): pass",
+                    '{"median_us": 10.0}',
+                    "2026-01-01T00:00:00+00:00",
+                ),
+            )
+            conn.commit()
+            conn.close()
+
+            repo = KernelRepository(path)  # ALTER TABLE マイグレーションが走る
+            (summary,) = repo.list_summaries()
+            assert summary.median_us == 10.0
+            assert summary.speedup is None  # 旧行に baseline は無い
+            # 新規 put も壊れない
+            key = self._make_key()
+            repo.put(key, self._make_kernel(key))
+            assert repo.count() == 2
+            repo.close()
+
     def test_persists_across_instances(self) -> None:
         with tempfile.TemporaryDirectory() as d:
             path = Path(d) / "cache.db"
