@@ -8,7 +8,8 @@ import torch
 
 from forge.ir.kernel_spec import KernelSpec
 from forge.ir.tensor_spec import TensorSpec
-from forge.search.ollama_generator import OllamaGenerator, _Proposal
+from forge.search._proposal_models import Proposal
+from forge.search.ollama_generator import OllamaGenerator
 
 
 def _spec() -> KernelSpec:
@@ -26,7 +27,7 @@ def _spec() -> KernelSpec:
 
 
 def _valid_candidate_json() -> str:
-    return _Proposal(
+    return Proposal(
         candidates=[
             {  # type: ignore[arg-type]
                 "base_variant": "single_row",
@@ -66,7 +67,7 @@ class TestOllamaGeneratorOffline:
 
     def test_generate_deduplicates(self) -> None:
         # 同一パラメータが2件返ってきても1件にまとめられる
-        proposal = _Proposal(
+        proposal = Proposal(
             candidates=[  # type: ignore[arg-type]
                 {
                     "base_variant": "single_row",
@@ -97,7 +98,7 @@ class TestOllamaGeneratorOffline:
         assert len(result) == 1
 
     def test_generate_respects_budget(self) -> None:
-        proposal = _Proposal(
+        proposal = Proposal(
             candidates=[  # type: ignore[arg-type]
                 {
                     "base_variant": "single_row",
@@ -139,7 +140,7 @@ class TestOllamaGeneratorOffline:
 
     def test_generate_drops_invalid_params(self) -> None:
         # block_size が hidden size 未満 → single_row では invalid
-        proposal = _Proposal(
+        proposal = Proposal(
             candidates=[  # type: ignore[arg-type]
                 {
                     "base_variant": "single_row",

@@ -91,19 +91,8 @@ class LLMGenerator(_BaseGenerator):
         history: list[HistoryEntry],
     ) -> list[dict[str, Any]]:
         import anthropic  # type: ignore[import]
-        from pydantic import BaseModel
 
-        class Candidate(BaseModel):
-            base_variant: str
-            block_size: int
-            num_warps: int
-            num_stages: int
-            acc_dtype: str
-            rows_per_program: int
-            hypothesis: str
-
-        class Proposal(BaseModel):
-            candidates: list[Candidate]
+        from ._proposal_models import Proposal
 
         client = self.client or anthropic.Anthropic()
         prompt = build_prompt(spec, compute_capability, n, history)
