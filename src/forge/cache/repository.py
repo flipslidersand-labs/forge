@@ -25,12 +25,13 @@ class CachedKernel:
 
 @dataclass
 class KernelSummary:
-    """`forge cache list` 用の 1 行分の要約（full CacheKey は復元しない）。"""
+    """`forge cache list` 用の 1 行分の要約。
+
+    CacheKey を保持することで graph_hash / shapes / dtypes の3重定義を解消する。
+    """
 
     cache_key_hash: str
-    graph_hash: str
-    shapes: list[list[int]]
-    dtypes: list[str]
+    cache_key: CacheKey
     median_us: float | None
     created_at: str
 
@@ -97,15 +98,13 @@ class KernelRepository:
         ).fetchall()
         summaries: list[KernelSummary] = []
         for key_hash, key_json, bench_json, created_at in rows:
-            key = json.loads(key_json)
+            cache_key = CacheKey.from_json(key_json)
             bench = json.loads(bench_json)
             median = bench.get("median_us")
             summaries.append(
                 KernelSummary(
                     cache_key_hash=key_hash,
-                    graph_hash=key.get("graph_hash", "?"),
-                    shapes=key.get("shapes", []),
-                    dtypes=key.get("dtypes", []),
+                    cache_key=cache_key,
                     median_us=float(median) if median is not None else None,
                     created_at=created_at,
                 )
