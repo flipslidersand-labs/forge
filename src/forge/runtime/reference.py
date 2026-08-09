@@ -1,144 +1,55 @@
+"""runtime/reference.py — reference / baseline 関数の後方互換エントリポイント。
+
+実装は ops/registry.py の OP_REGISTRY に移管済み。
+このモジュールは既存テスト・コードの import 互換を維持するために残している。
+"""
+
 from __future__ import annotations
 
 from collections.abc import Callable
 
 import torch
 
-# op_type -> 正解（ground truth）となる純粋 PyTorch 実装。
-# 候補はこの出力と比較して正確性を検証する。fp32 で縮約してから入力 dtype に戻す
-# （数値的に最も正確な参照）。
+from forge.ops.registry import OP_REGISTRY
 
-
-def rmsnorm_reference(x: torch.Tensor, weight: torch.Tensor, eps: float) -> torch.Tensor:
-    x32 = x.float()
-    rms = torch.rsqrt(torch.mean(x32 * x32, dim=-1, keepdim=True) + eps)
-    return (x32 * rms * weight.float()).to(x.dtype)
-
-
-def softmax_reference(x: torch.Tensor, dim: int = -1) -> torch.Tensor:
-    return torch.softmax(x.float(), dim=dim).to(x.dtype)
-
-
-def layernorm_reference(
-    x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor, eps: float = 1e-5
-) -> torch.Tensor:
-    n = x.shape[-1]
-    out = torch.nn.functional.layer_norm(x.float(), (n,), weight.float(), bias.float(), eps)
-    return out.to(x.dtype)
-
-
-def gelu_reference(x: torch.Tensor) -> torch.Tensor:
-    return torch.nn.functional.gelu(x.float()).to(x.dtype)
-
-
-def sdpa_reference(
-    q: torch.Tensor,
-    k: torch.Tensor,
-    v: torch.Tensor,
-    scale: float | None = None,
-    is_causal: bool = False,
-) -> torch.Tensor:
-    # fp32 へ昇格して計算し、入力 dtype に戻す（数値的に最も正確な参照）。
-    out = torch.nn.functional.scaled_dot_product_attention(
-        q.float(), k.float(), v.float(), scale=scale, is_causal=is_causal
-    )
-    return out.to(q.dtype)
-
-
-def linear_reference(
-    x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor | None = None
-) -> torch.Tensor:
-    b = bias.float() if bias is not None else None
-    return torch.nn.functional.linear(x.float(), weight.float(), b).to(x.dtype)
-
+# --- 後方互換 dict ---
 
 REFERENCE_IMPLS: dict[str, Callable[..., torch.Tensor]] = {
-    "rmsnorm": rmsnorm_reference,
-    "softmax": softmax_reference,
-    "layernorm": layernorm_reference,
-    "gelu": gelu_reference,
-    "scaled_dot_product_attention": sdpa_reference,
-    "linear": linear_reference,
+    op: defn.reference_fn for op, defn in OP_REGISTRY.items()
 }
+
+BASELINE_IMPLS: dict[str, Callable[..., torch.Tensor]] = {
+    op: defn.baseline_fn for op, defn in OP_REGISTRY.items()
+}
+
+# --- 後方互換関数 ---
 
 
 def get_reference(op_type: str) -> Callable[..., torch.Tensor]:
     """正確性検証用の ground truth 実装を返す。"""
-    if op_type not in REFERENCE_IMPLS:
+    if op_type not in OP_REGISTRY:
         raise ValueError(f"No reference implementation for op_type={op_type!r}")
-    return REFERENCE_IMPLS[op_type]
-
-
-# 速度比較用の「公平な」baseline。素朴な fp32-upcast 実装ではなく、PyTorch の
-# 最適化済み組み込み演算と比べる（Phase 2 申し送り）。組み込みが無い環境では
-# reference にフォールバックする。
-
-
-def _rmsnorm_baseline(x: torch.Tensor, weight: torch.Tensor, eps: float) -> torch.Tensor:
-    if hasattr(torch.nn.functional, "rms_norm"):
-        return torch.nn.functional.rms_norm(x, (x.shape[-1],), weight, eps=eps)
-    return rmsnorm_reference(x, weight, eps)
-
-
-def _softmax_baseline(x: torch.Tensor, dim: int = -1) -> torch.Tensor:
-    return torch.softmax(x, dim=dim)
-
-
-def _layernorm_baseline(
-    x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor, eps: float = 1e-5
-) -> torch.Tensor:
-    return torch.nn.functional.layer_norm(x, (x.shape[-1],), weight, bias, eps)
-
-
-def _gelu_baseline(x: torch.Tensor) -> torch.Tensor:
-    return torch.nn.functional.gelu(x)
-
-
-def _sdpa_baseline(
-    q: torch.Tensor,
-    k: torch.Tensor,
-    v: torch.Tensor,
-    scale: float | None = None,
-    is_causal: bool = False,
-) -> torch.Tensor:
-    return torch.nn.functional.scaled_dot_product_attention(
-        q, k, v, scale=scale, is_causal=is_causal
-    )
-
-
-def _linear_baseline(
-    x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor | None = None
-) -> torch.Tensor:
-    return torch.nn.functional.linear(x, weight, bias)
-
-
-BASELINE_IMPLS: dict[str, Callable[..., torch.Tensor]] = {
-    "rmsnorm": _rmsnorm_baseline,
-    "softmax": _softmax_baseline,
-    "layernorm": _layernorm_baseline,
-    "gelu": _gelu_baseline,
-    "scaled_dot_product_attention": _sdpa_baseline,
-    "linear": _linear_baseline,
-}
+    return OP_REGISTRY[op_type].reference_fn
 
 
 def get_baseline(op_type: str) -> Callable[..., torch.Tensor]:
     """速度比較の対抗馬（PyTorch 最適化実装）を返す。"""
-    if op_type not in BASELINE_IMPLS:
+    if op_type not in OP_REGISTRY:
         raise ValueError(f"No baseline implementation for op_type={op_type!r}")
-    return BASELINE_IMPLS[op_type]
-
-
-_BASELINE_NAMES = {
-    "softmax": "F.softmax",
-    "layernorm": "F.layer_norm",
-    "gelu": "F.gelu",
-    "scaled_dot_product_attention": "F.scaled_dot_product_attention",
-    "linear": "F.linear",
-}
+    return OP_REGISTRY[op_type].baseline_fn
 
 
 def baseline_name(op_type: str) -> str:
-    if op_type == "rmsnorm" and hasattr(torch.nn.functional, "rms_norm"):
-        return "F.rms_norm"
-    return _BASELINE_NAMES.get(op_type, "fp32_reference")
+    if op_type not in OP_REGISTRY:
+        return "fp32_reference"
+    return OP_REGISTRY[op_type].baseline_display_name
+
+
+# --- 個別関数エイリアス（既存テストの直接 import 互換） ---
+
+rmsnorm_reference = REFERENCE_IMPLS.get("rmsnorm")
+softmax_reference = REFERENCE_IMPLS.get("softmax")
+layernorm_reference = REFERENCE_IMPLS.get("layernorm")
+gelu_reference = REFERENCE_IMPLS.get("gelu")
+sdpa_reference = REFERENCE_IMPLS.get("scaled_dot_product_attention")
+linear_reference = REFERENCE_IMPLS.get("linear")
