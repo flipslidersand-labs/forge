@@ -47,6 +47,31 @@ class CacheKey:
             library_version=__version__,
         )
 
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> CacheKey:
+        """Deserialize a CacheKey from a plain dict (as stored in cache_key_json).
+
+        Raises ``KeyError`` for any missing field — fail-loud so schema drift
+        surfaces immediately instead of silently producing '?' values.
+        Tuples are restored from JSON arrays.
+        """
+        return cls(
+            graph_hash=str(data["graph_hash"]),
+            shapes=tuple(tuple(s) for s in data["shapes"]),  # type: ignore[arg-type]
+            dtypes=tuple(data["dtypes"]),  # type: ignore[arg-type]
+            constants_hash=str(data["constants_hash"]),
+            compute_capability=str(data["compute_capability"]),
+            torch_version=str(data["torch_version"]),
+            triton_version=str(data["triton_version"]),
+            cuda_version=str(data["cuda_version"]),
+            library_version=str(data["library_version"]),
+        )
+
+    @classmethod
+    def from_json(cls, raw: str) -> CacheKey:
+        """Deserialize a CacheKey from the JSON string stored in ``cache_key_json``."""
+        return cls.from_dict(json.loads(raw))
+
     def digest(self) -> str:
         data = json.dumps(
             {k: list(v) if isinstance(v, tuple) else v for k, v in asdict(self).items()},

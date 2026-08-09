@@ -57,7 +57,23 @@ def _cmd_list(args: argparse.Namespace) -> int:
         repo.close()
 
     if args.json:
-        print(json.dumps([s.__dict__ for s in summaries], ensure_ascii=False, indent=2))
+        print(
+            json.dumps(
+                [
+                    {
+                        "cache_key_hash": s.cache_key_hash,
+                        "graph_hash": s.cache_key.graph_hash,
+                        "shapes": [list(sh) for sh in s.cache_key.shapes],
+                        "dtypes": list(s.cache_key.dtypes),
+                        "median_us": s.median_us,
+                        "created_at": s.created_at,
+                    }
+                    for s in summaries
+                ],
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
         return 0
 
     if not summaries:
@@ -67,9 +83,9 @@ def _cmd_list(args: argparse.Namespace) -> int:
     rows = [
         (
             s.cache_key_hash[:12],
-            s.graph_hash,
-            ", ".join("x".join(str(d) for d in shape) for shape in s.shapes) or "-",
-            ",".join(s.dtypes) or "-",
+            s.cache_key.graph_hash,
+            ", ".join("x".join(str(d) for d in shape) for shape in s.cache_key.shapes) or "-",
+            ",".join(s.cache_key.dtypes) or "-",
             f"{s.median_us:.1f}" if s.median_us is not None else "-",
             s.created_at[:19],
         )
