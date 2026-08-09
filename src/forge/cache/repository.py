@@ -69,5 +69,11 @@ class KernelRepository:
         )
         self.conn.commit()
 
+    def __enter__(self) -> KernelRepository:
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.close()
+
     def close(self) -> None:
         self.conn.close()

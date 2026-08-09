@@ -143,3 +143,34 @@ class TestKernelRepository:
             result = repo2.get(key)
             assert result is not None
             repo2.close()
+
+    def test_context_manager(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            key = self._make_key()
+            with KernelRepository(Path(d) / "cache.db") as repo:
+                repo.put(key, self._make_kernel(key))
+                result = repo.get(key)
+            assert result is not None
+            # close() 後は接続が閉じている
+            import sqlite3
+
+            try:
+                repo.conn.execute("SELECT 1")
+                raise AssertionError("should have raised")
+            except sqlite3.ProgrammingError:
+                pass
+
+    def test_context_manager_closes_on_exception(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            try:
+                with KernelRepository(Path(d) / "cache.db") as repo:
+                    raise ValueError("test error")
+            except ValueError:
+                pass
+            import sqlite3
+
+            try:
+                repo.conn.execute("SELECT 1")
+                raise AssertionError("should have raised")
+            except sqlite3.ProgrammingError:
+                pass
