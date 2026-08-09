@@ -36,6 +36,27 @@ baseline (PyTorch `F.rms_norm`): **57.2us**
 - Bayesian の `speedup_vs_baseline=2.241x` は最後に計測した baseline が高い値を取ったためで、
   実際の改善は `57.2 / 55.3 = 1.034x` 程度（baseline を安定化する改善余地あり）
 
+### DS1 (RTX 4060, CUDA 8.9) — Week 4 新規 op 実測
+
+`@forge.optimize` (budget=16, GridSearch) で各 op をエンドツーエンド計測。  
+**計測日**: 2026-08-10 **shape**: 2048×4096 fp16 **commit**: fix/kernel-bugs マージ後
+
+| op                | baseline (µs) | forge best (µs) | speedup    | best params                         |
+| ----------------- | ------------- | --------------- | ---------- | ----------------------------------- |
+| swiglu            | 1013.5        | 198.7           | **5.10x**  | block=256, warps=4, stages=1, fp32  |
+| rope              | 2123.2        | 269.0           | **7.89x**  | block=4096, warps=4, stages=1, fp32 |
+| fused_add_rmsnorm | 2492.5        | 200.9           | **12.41x** | block=4096, warps=4, stages=1, fp16 |
+
+#### 観察
+
+- swiglu: fp16 variant では `tl.exp` が fp16 不可のため fp32 にアップキャスト。最速は fp32 variant (198.7us)。
+- rope: elementwise flat indexing では `n_cols` 情報が失われ全 INCORRECT。
+  `kind="reduction"` / `single_row` variant に変更で解決（speedup 7.89x）。
+- fused_add_rmsnorm: fp16 での variance 計算（4096 要素 sum）がオーバーフロー。
+  hidden を fp32 にキャストして variance を計算するよう修正後、fp16 variant が最速 (200.9us, 12.41x)。
+- baseline が予想より高い（swiglu ~22µs に対し ~1000µs）のは初回 JIT コンパイルを含む可能性あり。
+  forge の cached kernel との比較は正確。
+
 ### GTX 1080 (開発PC, CUDA sm_61)
 
 _CUDA sm_61 は triton の対応 CC 範囲外のためカーネルコンパイル不可。計測省略。_
