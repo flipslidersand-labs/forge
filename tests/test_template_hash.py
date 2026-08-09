@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from forge.codegen.triton_codegen import graph_hash_for, template_hash
+from forge.codegen.triton_codegen import template_hash
 
 
 def test_hash_is_stable() -> None:
@@ -49,7 +49,23 @@ def test_length_prefix_framing_disambiguates(tmp_path) -> None:
     assert h1 != h2
 
 
-def test_graph_hash_for_format() -> None:
-    h = graph_hash_for("rmsnorm")
-    assert h.startswith("rmsnorm_")
-    assert h == f"rmsnorm_{template_hash('rmsnorm')}"
+def test_cache_key_carries_template_hash() -> None:
+    # template_hash は CacheKey の専用フィールド（#109）。graph_hash は
+    # テンプレ編集で変化しない計算識別子のまま、digest が変わることを確認。
+    from forge.cache.key import CacheKey
+
+    base = dict(
+        graph_hash="rmsnorm_v1",
+        shapes=((2048, 4096),),
+        dtypes=("float16",),
+        constants_hash="deadbeef",
+        compute_capability="8.9",
+        torch_version="2.3.0",
+        triton_version="3.0.0",
+        cuda_version="12.1",
+        library_version="0.1.0",
+    )
+    k1 = CacheKey(**base, template_hash="aaaaaaaaaaaa")
+    k2 = CacheKey(**base, template_hash="bbbbbbbbbbbb")
+    assert k1.graph_hash == k2.graph_hash
+    assert k1.digest() != k2.digest()
