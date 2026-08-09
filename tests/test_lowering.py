@@ -37,6 +37,14 @@ class TestIdentify:
 
         assert identify(gelu) == "gelu"
 
+    def test_recognizes_swiglu(self) -> None:
+        import torch.nn.functional as F
+
+        def swiglu(x, gate):
+            return F.silu(gate) * x
+
+        assert identify(swiglu) == "swiglu"
+
     def test_unrelated_op_returns_none(self) -> None:
         def relu(x):
             return torch.relu(x)
