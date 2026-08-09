@@ -2,10 +2,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel
-
 from forge.ir.kernel_spec import KernelSpec
 from forge.search._base_generator import _BaseGenerator
+from forge.search._proposal_models import Proposal
 from forge.search.llm_generator import build_prompt
 
 if TYPE_CHECKING:
@@ -19,20 +18,6 @@ _SYSTEM = (
     "Propose Triton kernel configurations as structured JSON. "
     "Do NOT write code — only structured parameters."
 )
-
-
-class _Candidate(BaseModel):
-    base_variant: str
-    block_size: int
-    num_warps: int
-    num_stages: int
-    acc_dtype: str
-    rows_per_program: int
-    hypothesis: str
-
-
-class _Proposal(BaseModel):
-    candidates: list[_Candidate]
 
 
 class OllamaGenerator(_BaseGenerator):
@@ -75,10 +60,10 @@ class OllamaGenerator(_BaseGenerator):
                     {"role": "system", "content": _SYSTEM},
                     {"role": "user", "content": prompt},
                 ],
-                format=_Proposal.model_json_schema(),
+                format=Proposal.model_json_schema(),
             )
             content = resp.message.content or ""
-            proposal = _Proposal.model_validate_json(content)
+            proposal = Proposal.model_validate_json(content)
             return [c.model_dump() for c in proposal.candidates]
         except Exception:
             return []

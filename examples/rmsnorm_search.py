@@ -10,6 +10,7 @@ import argparse
 
 import torch
 
+from forge.codegen.triton_codegen import graph_hash_for
 from forge.ir.kernel_spec import KernelSpec
 from forge.ir.tensor_spec import TensorSpec
 from forge.orchestrator import Orchestrator
@@ -24,7 +25,7 @@ def build_spec(m: int, n: int) -> KernelSpec:
         ),
         output_specs=(TensorSpec((m, n), torch.float16, True),),
         constants={"eps": 1e-6},
-        graph_hash="rmsnorm_v1",
+        graph_hash=graph_hash_for("rmsnorm"),
         constraints=(),
     )
 

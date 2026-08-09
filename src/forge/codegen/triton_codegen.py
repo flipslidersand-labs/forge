@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from functools import lru_cache
 from pathlib import Path
 
@@ -39,6 +40,38 @@ _TEMPLATES = {
     ("scaled_dot_product_attention", "flash_causal_opt"): "sdpa_causal_opt.py.jinja",
     ("linear", "gemm"): "linear.py.jinja",
 }
+
+
+def template_hash(op_type: str, template_dir: Path | None = None) -> str:
+    """op_type の全 Triton テンプレート内容から安定した 12 桁 hex ダイジェストを返す。
+
+    キャッシュキー (graph_hash) に埋め込むことで、テンプレートを修正すると
+    古いキャッシュが自動的に無効化される（Issue #93）。
+
+    テンプレートファイルが見つからない場合は FileNotFoundError を投げる —
+    欠損は package-data 漏れ等の破損インストールであり、ファイル名のみの
+    ハッシュへ静かにフォールバックすると無効化保証が消えるため。
+    各エントリは長さプレフィックス付きでハッシュし framing の曖昧さを避ける。
+    """
+    tdir = template_dir or _TEMPLATE_DIR
+    names = sorted(fname for (op, _variant), fname in _TEMPLATES.items() if op == op_type)
+    h = hashlib.sha256()
+    for name in names:
+        content = (tdir / name).read_bytes()  # 欠損は FileNotFoundError で即顕在化
+        h.update(len(name).to_bytes(4, "big"))
+        h.update(name.encode())
+        h.update(len(content).to_bytes(8, "big"))
+        h.update(content)
+    return h.hexdigest()[:12]
+
+
+def graph_hash_for(op_type: str) -> str:
+    """op_type とテンプレート内容から KernelSpec.graph_hash を構築する。
+
+    decorator・examples・docs 共通の唯一の構築点。手書きの "<op>_v1" 形式は
+    テンプレート修正でキャッシュが無効化されないため使わないこと。
+    """
+    return f"{op_type}_{template_hash(op_type)}"
 
 
 def generate(spec: KernelSpec, params: SearchParams) -> str:
