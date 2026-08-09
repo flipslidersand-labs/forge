@@ -6,6 +6,9 @@ from . import (
     attention as _attention,  # noqa: F401 — パターン登録の副作用  # pyright: ignore[reportUnusedImport]
 )
 from . import (
+    fused_add_rmsnorm as _fused_add_rmsnorm,  # noqa: F401 — パターン登録の副作用  # pyright: ignore[reportUnusedImport]
+)
+from . import (
     gelu as _gelu,  # noqa: F401 — パターン登録の副作用  # pyright: ignore[reportUnusedImport]
 )
 from . import (
