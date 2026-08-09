@@ -1,3 +1,4 @@
+import json
 import tempfile
 from datetime import UTC
 from pathlib import Path
@@ -33,6 +34,7 @@ class TestCacheKey:
             triton_version="3.0.0",
             cuda_version="12.1",
             library_version="0.1.0",
+            template_hash="feedfacecafe",
         )
         assert key.digest() == key.digest()
 
@@ -48,6 +50,7 @@ class TestCacheKey:
                 triton_version="3.0.0",
                 cuda_version="12.1",
                 library_version="0.1.0",
+                template_hash="feedfacecafe",
             )
 
         assert make((2048, 4096)).digest() != make((1024, 4096)).digest()
@@ -62,6 +65,7 @@ class TestCacheKey:
             torch_version="2.3.0",
             triton_version="3.0.0",
             library_version="0.1.0",
+            template_hash="feedfacecafe",
         )
         k1 = CacheKey(**base, cuda_version="12.1")
         k2 = CacheKey(**base, cuda_version="12.4")
@@ -80,6 +84,7 @@ class TestKernelRepository:
             triton_version="3.0.0",
             cuda_version="12.1",
             library_version="0.1.0",
+            template_hash="feedfacecafe",
         )
 
     def _make_kernel(self, key: CacheKey) -> CachedKernel:
@@ -169,11 +174,25 @@ class TestKernelRepository:
                 "params_json TEXT NOT NULL, kernel_code TEXT NOT NULL, "
                 "benchmark_json TEXT NOT NULL, created_at TEXT NOT NULL);"
             )
+            legacy_key_json = json.dumps(
+                {
+                    "graph_hash": "g",
+                    "shapes": [[2048, 4096]],
+                    "dtypes": ["float16"],
+                    "constants_hash": "deadbeef",
+                    "compute_capability": "8.9",
+                    "torch_version": "2.3.0",
+                    "triton_version": "3.0.0",
+                    "cuda_version": "12.1",
+                    "library_version": "0.1.0",
+                    "template_hash": "feedfacecafe",
+                }
+            )
             conn.execute(
                 "INSERT INTO kernels VALUES (?, ?, ?, ?, ?, ?)",
                 (
                     "legacyhash",
-                    '{"graph_hash": "g", "shapes": [], "dtypes": []}',
+                    legacy_key_json,
                     "{}",
                     "def k(): pass",
                     '{"median_us": 10.0}',
@@ -237,3 +256,106 @@ class TestKernelRepository:
                 raise AssertionError("should have raised")
             except sqlite3.ProgrammingError:
                 pass
+
+    def test_put_list_roundtrip_all_fields(self) -> None:
+        """put → list_summaries roundtrip: all CacheKey fields survive serialization."""
+        with tempfile.TemporaryDirectory() as d:
+            key = self._make_key()
+            kernel = self._make_kernel(key)
+            with KernelRepository(Path(d) / "cache.db") as repo:
+                repo.put(key, kernel)
+                summaries = repo.list_summaries()
+
+            assert len(summaries) == 1
+            restored = summaries[0].cache_key
+            assert restored == key
+            assert restored.graph_hash == key.graph_hash
+            assert restored.shapes == key.shapes
+            assert restored.dtypes == key.dtypes
+            assert restored.constants_hash == key.constants_hash
+            assert restored.compute_capability == key.compute_capability
+            assert restored.library_version == key.library_version
+
+    def test_list_summaries_has_cache_key(self) -> None:
+        """KernelSummary must expose cache_key, not flat graph_hash/shapes/dtypes fields."""
+        with tempfile.TemporaryDirectory() as d:
+            key = self._make_key()
+            with KernelRepository(Path(d) / "cache.db") as repo:
+                repo.put(key, self._make_kernel(key))
+                s = repo.list_summaries()[0]
+            assert hasattr(s, "cache_key")
+            assert not hasattr(s, "graph_hash"), "use s.cache_key.graph_hash"
+            assert not hasattr(s, "shapes"), "flat shapes field removed — use s.cache_key.shapes"
+            assert not hasattr(s, "dtypes"), "flat dtypes field removed — use s.cache_key.dtypes"
+
+
+class TestCacheKeyFromDict:
+    def _base(self) -> dict[str, object]:
+        return {
+            "graph_hash": "abc",
+            "shapes": [[2048, 4096]],
+            "dtypes": ["float16"],
+            "constants_hash": "deadbeef",
+            "compute_capability": "8.9",
+            "torch_version": "2.3.0",
+            "triton_version": "3.0.0",
+            "cuda_version": "12.1",
+            "library_version": "0.1.0",
+            "template_hash": "feedfacecafe",
+        }
+
+    def test_from_dict_roundtrip(self) -> None:
+        d = self._base()
+        key = CacheKey.from_dict(d)
+        assert key.graph_hash == "abc"
+        assert key.shapes == ((2048, 4096),)  # list → tuple restored
+        assert key.dtypes == ("float16",)  # list → tuple restored
+        assert key.constants_hash == "deadbeef"
+
+    def test_from_json_roundtrip(self) -> None:
+        original = CacheKey(
+            graph_hash="xyz",
+            shapes=((1024, 512), (256,)),
+            dtypes=("float32", "int32"),
+            constants_hash="aabbcc",
+            compute_capability="9.0",
+            torch_version="2.4.0",
+            triton_version="3.1.0",
+            cuda_version="12.4",
+            library_version="0.2.0",
+            template_hash="feedfacecafe",
+        )
+        raw = json.dumps(
+            {k: list(v) if isinstance(v, tuple) else v for k, v in original.__dict__.items()}
+        )
+        restored = CacheKey.from_json(raw)
+        assert restored == original
+
+    def test_from_dict_missing_field_raises(self) -> None:
+        d = self._base()
+        del d["library_version"]
+        try:
+            CacheKey.from_dict(d)
+            raise AssertionError("should raise KeyError")
+        except KeyError:
+            pass
+
+    def test_from_dict_digest_stable(self) -> None:
+        """from_dict roundtrip must produce the same digest as the original."""
+        original = CacheKey(
+            graph_hash="abc",
+            shapes=((2048, 4096),),
+            dtypes=("float16",),
+            constants_hash="deadbeef",
+            compute_capability="8.9",
+            torch_version="2.3.0",
+            triton_version="3.0.0",
+            cuda_version="12.1",
+            library_version="0.1.0",
+            template_hash="feedfacecafe",
+        )
+        raw = json.dumps(
+            {k: list(v) if isinstance(v, tuple) else v for k, v in original.__dict__.items()}
+        )
+        restored = CacheKey.from_json(raw)
+        assert restored.digest() == original.digest()

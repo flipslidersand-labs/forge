@@ -22,6 +22,7 @@ def _key(graph_hash: str = "rmsnorm_v1") -> CacheKey:
         triton_version="3.0.0",
         cuda_version="12.1",
         library_version="0.1.0",
+        template_hash="feedfacecafe",
     )
 
 

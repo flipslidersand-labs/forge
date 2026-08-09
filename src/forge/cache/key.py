@@ -19,6 +19,9 @@ class CacheKey:
     triton_version: str
     cuda_version: str
     library_version: str
+    # codegen テンプレートの内容ダイジェスト。graph_hash（計算の識別子）とは
+    # 独立にテンプレート修正でキャッシュを無効化する（Issue #93/#109）。
+    template_hash: str
 
     @classmethod
     def from_spec_and_env(cls, spec: KernelSpec) -> CacheKey:
@@ -33,10 +36,12 @@ class CacheKey:
 
         cc = torch.cuda.get_device_capability() if torch.cuda.is_available() else (0, 0)
 
+        from forge.codegen.triton_codegen import template_hash
         from forge.ir.hashing import hash_constants
 
         return cls(
             graph_hash=spec.graph_hash,
+            template_hash=template_hash(spec.op_type),
             shapes=tuple(s.shape for s in spec.input_specs),
             dtypes=tuple(s.dtype_str() for s in spec.input_specs),
             constants_hash=hash_constants(spec.constants),
@@ -46,6 +51,32 @@ class CacheKey:
             cuda_version=torch.version.cuda or "none",
             library_version=__version__,
         )
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> CacheKey:
+        """Deserialize a CacheKey from a plain dict (as stored in cache_key_json).
+
+        Raises ``KeyError`` for any missing field — fail-loud so schema drift
+        surfaces immediately instead of silently producing '?' values.
+        Tuples are restored from JSON arrays.
+        """
+        return cls(
+            graph_hash=str(data["graph_hash"]),
+            shapes=tuple(tuple(s) for s in data["shapes"]),  # type: ignore[arg-type]
+            dtypes=tuple(data["dtypes"]),  # type: ignore[arg-type]
+            constants_hash=str(data["constants_hash"]),
+            compute_capability=str(data["compute_capability"]),
+            torch_version=str(data["torch_version"]),
+            triton_version=str(data["triton_version"]),
+            cuda_version=str(data["cuda_version"]),
+            library_version=str(data["library_version"]),
+            template_hash=str(data["template_hash"]),
+        )
+
+    @classmethod
+    def from_json(cls, raw: str) -> CacheKey:
+        """Deserialize a CacheKey from the JSON string stored in ``cache_key_json``."""
+        return cls.from_dict(json.loads(raw))
 
     def digest(self) -> str:
         data = json.dumps(
