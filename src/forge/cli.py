@@ -66,6 +66,7 @@ def _cmd_list(args: argparse.Namespace) -> int:
                         "shapes": [list(sh) for sh in s.cache_key.shapes],
                         "dtypes": list(s.cache_key.dtypes),
                         "median_us": s.median_us,
+                        "speedup": s.speedup,
                         "created_at": s.created_at,
                     }
                     for s in summaries
@@ -87,11 +88,12 @@ def _cmd_list(args: argparse.Namespace) -> int:
             ", ".join("x".join(str(d) for d in shape) for shape in s.cache_key.shapes) or "-",
             ",".join(s.cache_key.dtypes) or "-",
             f"{s.median_us:.1f}" if s.median_us is not None else "-",
+            f"{s.speedup:.2f}x" if s.speedup is not None else "-",
             s.created_at[:19],
         )
         for s in summaries
     ]
-    headers = ("hash", "graph_hash", "shapes", "dtypes", "median_us", "created_at")
+    headers = ("hash", "graph_hash", "shapes", "dtypes", "median_us", "speedup", "created_at")
     widths = [max(len(headers[i]), *(len(r[i]) for r in rows)) for i in range(len(headers))]
     fmt = "  ".join(f"{{:<{w}}}" for w in widths)
     print(fmt.format(*headers))

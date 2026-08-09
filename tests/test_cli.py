@@ -72,6 +72,35 @@ def test_cache_list_table(tmp_path, capsys) -> None:
     assert "1 件" in out
 
 
+def test_cache_list_shows_speedup(tmp_path, capsys) -> None:
+    db = tmp_path / "cache.db"
+    repo = KernelRepository(db)
+    key = _key("rmsnorm_speed")
+    repo.put(
+        key,
+        CachedKernel(
+            cache_key=key,
+            params={"block_size": 1024},
+            kernel_code="def k(): pass",
+            benchmark_json={"median_us": 50.0},
+            baseline_us=100.0,  # -> 2.00x
+            created_at=datetime.now(UTC),
+        ),
+    )
+    repo.close()
+
+    rc = main(["cache", "list", "--json", "--db", str(db)])
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload[0]["speedup"] == 2.0
+
+    rc = main(["cache", "list", "--db", str(db)])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "speedup" in out
+    assert "2.00x" in out
+
+
 def test_cache_clear_force(tmp_path, capsys) -> None:
     db = tmp_path / "cache.db"
     _seed(db, n=3)
