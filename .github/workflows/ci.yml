@@ -62,6 +62,25 @@ jobs:
       - name: pyright
         run: pyright src/
 
+  gpu-smoke:
+    name: GPU Smoke Test (PR)
+    runs-on: [self-hosted, gpu]
+    if: github.event_name == 'pull_request'
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: nvidia-smi check
+        run: nvidia-smi
+      - name: Install dependencies (CUDA torch)
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cu124
+          pip install -e ".[dev,gpu]"
+      - name: Run GPU smoke tests
+        run: pytest -m "smoke" -q --tb=short
+
   gpu-test:
     name: GPU Test (RTX 4070 / RTX 4060 fallback)
     runs-on: [self-hosted, gpu]
