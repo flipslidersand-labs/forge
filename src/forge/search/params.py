@@ -62,4 +62,4 @@ class SearchParams:
 
     @classmethod
     def from_dict(cls, d: dict[str, object]) -> SearchParams:
-        return cls(**d)  # type: ignore[arg-type]
+        return cls(**d)  # type: ignore[arg-type]  # dict[str,object] → フィールド型へのナローイングは実行時保証

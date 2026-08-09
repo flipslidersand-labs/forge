@@ -90,7 +90,7 @@ class LLMGenerator(_BaseGenerator):
         n: int,
         history: list[HistoryEntry],
     ) -> list[dict[str, Any]]:
-        import anthropic  # type: ignore[import]
+        import anthropic  # type: ignore[import]  # anthropic SDK は py.typed 未対応
 
         from ._proposal_models import Proposal
 

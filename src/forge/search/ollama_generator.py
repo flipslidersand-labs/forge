@@ -50,7 +50,7 @@ class OllamaGenerator(_BaseGenerator):
         n: int,
         history: list[HistoryEntry],
     ) -> list[dict[str, Any]]:
-        import ollama  # type: ignore[import]
+        import ollama  # type: ignore[import]  # ollama は py.typed 未対応
 
         prompt = build_prompt(spec, compute_capability, n, history)
         try:

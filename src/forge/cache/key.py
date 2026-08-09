@@ -28,7 +28,7 @@ class CacheKey:
         import torch
 
         try:
-            import triton  # type: ignore[import-untyped]
+            import triton  # type: ignore[import-untyped]  # triton は py.typed 未対応
 
             triton_ver = triton.__version__
         except ImportError:
@@ -62,8 +62,8 @@ class CacheKey:
         """
         return cls(
             graph_hash=str(data["graph_hash"]),
-            shapes=tuple(tuple(s) for s in data["shapes"]),  # type: ignore[arg-type]
-            dtypes=tuple(data["dtypes"]),  # type: ignore[arg-type]
+            shapes=tuple(tuple(s) for s in data["shapes"]),  # type: ignore[arg-type]  # JSON list → tuple のナローイング
+            dtypes=tuple(data["dtypes"]),  # type: ignore[arg-type]  # JSON list → tuple のナローイング
             constants_hash=str(data["constants_hash"]),
             compute_capability=str(data["compute_capability"]),
             torch_version=str(data["torch_version"]),
