@@ -202,15 +202,9 @@ def _candidate_blocks(n_cols: int, elementwise: bool, attention: bool, gemm: boo
 
 
 def _candidate_variants(op_type: str) -> list[str]:
-    if op_type == "gelu":
-        return ["elementwise"]
-    if op_type in ("scaled_dot_product_attention",):
-        return ["flash", "flash_causal_opt"]
-    if op_type in ("linear",):
-        return ["gemm"]
-    if op_type == "softmax":
-        return ["single_row", "multi_row"]
-    return ["single_row", "multi_row", "two_pass", "welford"]
+    from forge.codegen.triton_codegen import _TEMPLATES  # type: ignore[attr-defined]
+
+    return [v for (op, v) in _TEMPLATES if op == op_type]
 
 
 def _find_idx(lst: list[Any], value: Any) -> int:
