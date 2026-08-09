@@ -27,6 +27,9 @@ dependencies = [
     "jinja2>=3.1",
 ]
 
+[project.scripts]
+forge = "forge.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/flipslidersand/forge"
 Repository = "https://github.com/flipslidersand/forge"
