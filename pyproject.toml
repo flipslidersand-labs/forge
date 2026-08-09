@@ -77,7 +77,10 @@ include = ["src/forge"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v"
-markers = ["gpu: requires NVIDIA GPU (skip with -m 'not gpu')"]
+markers = [
+    "gpu: requires NVIDIA GPU (skip with -m 'not gpu')",
+    "smoke: lightweight GPU smoke test for PR validation (subset of gpu)",
+]
 
 [tool.coverage.run]
 source = ["src/forge"]
