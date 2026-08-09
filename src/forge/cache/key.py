@@ -70,6 +70,7 @@ class CacheKey:
             triton_version=str(data["triton_version"]),
             cuda_version=str(data["cuda_version"]),
             library_version=str(data["library_version"]),
+            template_hash=str(data["template_hash"]),
         )
 
     @classmethod

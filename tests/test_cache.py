@@ -224,6 +224,7 @@ class TestCacheKeyFromDict:
             "triton_version": "3.0.0",
             "cuda_version": "12.1",
             "library_version": "0.1.0",
+            "template_hash": "feedfacecafe",
         }
 
     def test_from_dict_roundtrip(self) -> None:
@@ -245,6 +246,7 @@ class TestCacheKeyFromDict:
             triton_version="3.1.0",
             cuda_version="12.4",
             library_version="0.2.0",
+            template_hash="feedfacecafe",
         )
         raw = json.dumps(
             {k: list(v) if isinstance(v, tuple) else v for k, v in original.__dict__.items()}
@@ -273,6 +275,7 @@ class TestCacheKeyFromDict:
             triton_version="3.0.0",
             cuda_version="12.1",
             library_version="0.1.0",
+            template_hash="feedfacecafe",
         )
         raw = json.dumps(
             {k: list(v) if isinstance(v, tuple) else v for k, v in original.__dict__.items()}
