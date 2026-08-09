@@ -269,12 +269,8 @@ class Orchestrator:
         search: CandidateGenerator | None = None,
         use_cache: bool = True,
     ) -> SearchResult:
-        spec.validate()
-        key = CacheKey.from_spec_and_env(spec)
-        start_time = time.time()
-
-        if use_cache and (cached := self.repo.get(key)) is not None:
-            self._progress(f"cache HIT: {cached.params}")
+        ctx, cached = self._prepare(spec, use_cache)
+        if cached is not None:
             bench = BenchmarkResult.from_dict(cached.benchmark_json)
             self.notifier.send_cache_hit(spec.op_type)
             return SearchResult(
@@ -287,33 +283,9 @@ class Orchestrator:
                 experiments=[],
             )
 
-        bench_input = primary_input(spec)
-        cases = correctness_cases(spec)
-        tol = get_tolerance(spec.op_type).to_dict()
-
-        extended: list[ExtendedBaselineResult] = []
-        if self.measure_extended:
-            self._progress("measuring extended baselines (torch.compile) …")
-            extended = run_extended_baseline_in_worker(
-                spec.op_type,
-                bench_input,
-                spec.constants,
-                warmup=self.warmup,
-                repeat=self.repeat,
-                python_executable=self.python_executable,
-            )
-            for eb in extended:
-                if eb.failed:
-                    self._progress(f"  extended: {eb.name} FAILED: {eb.error}")
-                else:
-                    self._progress(
-                        f"  extended: {eb.name} median={eb.benchmark.median_us:.1f}µs "
-                        f"p95={eb.benchmark.p95_us:.1f}µs compile={eb.compile_time_s:.1f}s"
-                    )
-
         search = search or GridSearch()
-        candidates = search.generate(spec, key.compute_capability, budget=budget)
-        self._progress(f"searching {len(candidates)} candidates (cc {key.compute_capability})")
+        candidates = search.generate(spec, ctx.key.compute_capability, budget=budget)
+        self._progress(f"searching {len(candidates)} candidates (cc {ctx.key.compute_capability})")
 
         experiments: list[ExperimentResult] = []
         best_params: SearchParams | None = None
@@ -324,7 +296,7 @@ class Orchestrator:
         for i, params in enumerate(candidates, 1):
             label = f"[{i}/{len(candidates)}] {params.block_size}/{params.num_warps}"
             exp, cand_bench, bl_bench, bl_name = self._eval_one(
-                spec, params, bench_input, cases, tol, label
+                spec, params, ctx.bench_input, ctx.cases, ctx.tol, label
             )
             if bl_bench is not None:
                 baseline_bench, baseline_name = bl_bench, bl_name
@@ -343,42 +315,7 @@ class Orchestrator:
                     self._progress(f"{label}/{params.acc_dtype} -> {cand_bench.median_us:.1f}us")
             experiments.append(exp)
 
-        if best_params is not None and best_bench is not None:
-            code = generate(spec, best_params)
-            self.repo.put(
-                key,
-                CachedKernel(
-                    cache_key=key,
-                    params=best_params.to_dict(),
-                    kernel_code=code,
-                    benchmark_json=best_bench.to_dict(),
-                    created_at=datetime.now(UTC),
-                ),
-            )
-            self._progress(f"cached best: {best_params} ({best_bench.median_us:.1f}us)")
-
-            # Send Discord notification
-            duration_seconds = time.time() - start_time
-            self.notifier.send_optimization_complete(
-                op_name=spec.op_type,
-                best_time=best_bench.median_us / 1000.0,  # Convert us to ms
-                num_candidates=len(candidates),
-                duration_seconds=duration_seconds,
-            )
-        else:
-            # No successful optimization found, notify error
-            duration_seconds = time.time() - start_time
-            if experiments:
-                error_msg = (
-                    f"No successful candidates found after exploring {len(candidates)} options"
-                )
-            else:
-                error_msg = "No candidates to explore"
-            self.notifier.send_optimization_error(
-                op_name=spec.op_type,
-                error_message=error_msg,
-                error_type="OPTIMIZATION_FAILED",
-            )
+        self._finalize(ctx, best_params, best_bench, num_candidates=len(candidates), notify=True)
 
         return SearchResult(
             spec=spec,
@@ -388,7 +325,7 @@ class Orchestrator:
             baseline_benchmark=baseline_bench,
             baseline_name=baseline_name,
             experiments=experiments,
-            extended_baselines=extended,
+            extended_baselines=ctx.extended,
         )
 
     def optimize_rounds(
