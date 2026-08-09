@@ -18,6 +18,9 @@ from . import (
     rmsnorm as _rmsnorm,  # noqa: F401 — パターン登録の副作用  # pyright: ignore[reportUnusedImport]
 )
 from . import (
+    rope as _rope,  # noqa: F401 — パターン登録の副作用  # pyright: ignore[reportUnusedImport]
+)
+from . import (
     softmax as _softmax,  # noqa: F401 — パターン登録の副作用  # pyright: ignore[reportUnusedImport]
 )
 from . import (

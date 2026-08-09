@@ -54,6 +54,15 @@ def _layernorm_reference(
     )
 
 
+def _rope_reference(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
+    def _rotate_half(t: torch.Tensor) -> torch.Tensor:
+        h = t.shape[-1] // 2
+        return torch.cat([-t[..., h:], t[..., :h]], dim=-1)
+
+    xf = x.float()
+    return (xf * cos.float() + _rotate_half(xf) * sin.float()).to(x.dtype)
+
+
 def _swiglu_reference(x: torch.Tensor, gate: torch.Tensor) -> torch.Tensor:
     return (torch.nn.functional.silu(gate.float()) * x.float()).to(x.dtype)
 
@@ -97,6 +106,14 @@ def _layernorm_baseline(
     x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor, eps: float = 1e-5
 ) -> torch.Tensor:
     return torch.nn.functional.layer_norm(x, (x.shape[-1],), weight, bias, eps)
+
+
+def _rope_baseline(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
+    def _rotate_half(t: torch.Tensor) -> torch.Tensor:
+        h = t.shape[-1] // 2
+        return torch.cat([-t[..., h:], t[..., :h]], dim=-1)
+
+    return x * cos + _rotate_half(x) * sin
 
 
 def _swiglu_baseline(x: torch.Tensor, gate: torch.Tensor) -> torch.Tensor:
@@ -158,6 +175,21 @@ def _softmax_inputs(m: int, n: int, dtype: str, **kw: Any) -> list[dict[str, Any
             "scale": kw.get("x_scale", 1.0),
             "seed": seed,
         }
+    ]
+
+
+def _rope_inputs(m: int, n: int, dtype: str, **kw: Any) -> list[dict[str, Any]]:
+    seed = kw.get("seed", 0)
+    return [
+        {
+            "shape": [m, n],
+            "dtype": dtype,
+            "init": kw.get("x_init", "randn"),
+            "scale": 1.0,
+            "seed": seed,
+        },
+        {"shape": [m, n], "dtype": dtype, "init": "randn", "scale": 1.0, "seed": seed + 1},
+        {"shape": [m, n], "dtype": dtype, "init": "randn", "scale": 1.0, "seed": seed + 2},
     ]
 
 
@@ -273,6 +305,12 @@ def _softmax_primary(spec: KernelSpec) -> list[dict[str, Any]]:
     return _softmax_inputs(m, n, x.dtype_str())
 
 
+def _rope_primary(spec: KernelSpec) -> list[dict[str, Any]]:
+    x = spec.input_specs[0]
+    m, n = x.shape
+    return _rope_inputs(m, n, x.dtype_str())
+
+
 def _swiglu_primary(spec: KernelSpec) -> list[dict[str, Any]]:
     x = spec.input_specs[0]
     m, n = x.shape
@@ -353,6 +391,19 @@ def _layernorm_cases(spec: KernelSpec) -> list[dict[str, Any]]:
             "input_specs": _layernorm_inputs(64, n, dt, x_scale=100.0, seed=7),
         },
         {"name": "zeros", "input_specs": _layernorm_inputs(8, n, dt, x_init="zeros")},
+    ]
+
+
+def _rope_cases(spec: KernelSpec) -> list[dict[str, Any]]:
+    x = spec.input_specs[0]
+    _, n = x.shape
+    dt = x.dtype_str()
+    return [
+        {"name": "basic", "input_specs": _rope_inputs(2048, n, dt)},
+        {"name": "single_row", "input_specs": _rope_inputs(1, n, dt)},
+        {"name": "odd_rows", "input_specs": _rope_inputs(7, n, dt, seed=3)},
+        {"name": "large_values", "input_specs": _rope_inputs(64, n, dt, seed=7)},
+        {"name": "zeros", "input_specs": _rope_inputs(8, n, dt, x_init="zeros")},
     ]
 
 
@@ -478,6 +529,15 @@ OP_REGISTRY: dict[str, OpDefinition] = {
         tolerance=_TOL(atol=2e-3, rtol=1e-2),
         primary_input_fn=_gelu_primary,
         correctness_cases_fn=_gelu_cases,
+    ),
+    "rope": OpDefinition(
+        op_type="rope",
+        reference_fn=_rope_reference,
+        baseline_fn=_rope_baseline,
+        baseline_display_name="x*cos + rotate_half(x)*sin",
+        tolerance=_TOL(atol=2e-3, rtol=1e-2),
+        primary_input_fn=_rope_primary,
+        correctness_cases_fn=_rope_cases,
     ),
     "swiglu": OpDefinition(
         op_type="swiglu",
