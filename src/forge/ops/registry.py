@@ -79,7 +79,7 @@ def _linear_reference(
 
 def _rmsnorm_baseline(x: torch.Tensor, weight: torch.Tensor, eps: float) -> torch.Tensor:
     if hasattr(torch.nn.functional, "rms_norm"):
-        return torch.nn.functional.rms_norm(x, (x.shape[-1],), weight, eps)  # type: ignore[attr-defined]
+        return torch.nn.functional.rms_norm(x, (x.shape[-1],), weight, eps)  # type: ignore[attr-defined]  # PyTorch 2.4 追加; 旧スタブに定義なし
     x32 = x.float()
     rms = torch.rsqrt(torch.mean(x32 * x32, dim=-1, keepdim=True) + eps)
     return (x32 * rms * weight.float()).to(x.dtype)
