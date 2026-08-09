@@ -7,6 +7,7 @@ run_in_worker をモックして Successive Halving のラウンド制御・絞�
 from __future__ import annotations
 
 import tempfile
+import warnings
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -231,4 +232,41 @@ class TestOptimizeSHACPU:
 
         assert isinstance(result, SearchResult)
         assert result.speedup is not None
+        repo.close()
+
+    def test_small_budget_emits_warning(self):
+        """initial_budget < 64 のとき UserWarning が発行される。"""
+        with tempfile.TemporaryDirectory() as d:
+            repo = KernelRepository(Path(d) / "c.db")
+            orch = Orchestrator(repo=repo)
+            spec = _rmsnorm_spec()
+
+            with patch("forge.orchestrator.run_in_worker", return_value=_ok_result()):
+                with warnings.catch_warnings(record=True) as caught:
+                    warnings.simplefilter("always")
+                    orch.optimize_sha(
+                        spec, initial_budget=32, halving_rounds=1, search=_tiny_grid()
+                    )
+
+        user_warns = [w for w in caught if issubclass(w.category, UserWarning)]
+        assert len(user_warns) == 1
+        assert "initial_budget=32" in str(user_warns[0].message)
+        repo.close()
+
+    def test_large_budget_no_warning(self):
+        """initial_budget >= 64 のとき警告なし。"""
+        with tempfile.TemporaryDirectory() as d:
+            repo = KernelRepository(Path(d) / "c.db")
+            orch = Orchestrator(repo=repo)
+            spec = _rmsnorm_spec()
+
+            with patch("forge.orchestrator.run_in_worker", return_value=_ok_result()):
+                with warnings.catch_warnings(record=True) as caught:
+                    warnings.simplefilter("always")
+                    orch.optimize_sha(
+                        spec, initial_budget=64, halving_rounds=1, search=_tiny_grid()
+                    )
+
+        user_warns = [w for w in caught if issubclass(w.category, UserWarning)]
+        assert len(user_warns) == 0
         repo.close()

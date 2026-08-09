@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -479,6 +480,14 @@ class Orchestrator:
         | 2       | initial_budget // 2 | 10     | 50     |
         | 3       | initial_budget // 4 | 25     | 200    |
         """
+        if initial_budget < 64:
+            warnings.warn(
+                f"optimize_sha: initial_budget={initial_budget} が小さいため "
+                "ラウンド合計 eval 数が initial_budget を超える場合があります。"
+                "initial_budget >= 64 を推奨します。",
+                UserWarning,
+                stacklevel=2,
+            )
         ctx, cached = self._prepare(spec, use_cache)
         if cached is not None:
             bench = BenchmarkResult.from_dict(cached.benchmark_json)
