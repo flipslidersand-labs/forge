@@ -10,6 +10,9 @@ from forge.benchmark.statistics import BenchmarkResultDict
 
 from .key import CacheKey
 
+# CLI (forge.cli) と KernelRepository が共有する既定 DB パスの単一定義。
+DEFAULT_DB_PATH = "~/.forge/cache.db"
+
 
 @dataclass
 class CachedKernel:
@@ -20,8 +23,20 @@ class CachedKernel:
     created_at: datetime
 
 
+@dataclass
+class KernelSummary:
+    """`forge cache list` 用の 1 行分の要約（full CacheKey は復元しない）。"""
+
+    cache_key_hash: str
+    graph_hash: str
+    shapes: list[list[int]]
+    dtypes: list[str]
+    median_us: float | None
+    created_at: str
+
+
 class KernelRepository:
-    def __init__(self, path: str | Path = "~/.forge/cache.db") -> None:
+    def __init__(self, path: str | Path = DEFAULT_DB_PATH) -> None:
         db_path = Path(path).expanduser()
         db_path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(str(db_path))
@@ -70,6 +85,41 @@ class KernelRepository:
             ),
         )
         self.conn.commit()
+
+    def list_summaries(self) -> list[KernelSummary]:
+        """キャッシュ済みカーネルを新しい順に要約して返す（`forge cache list` 用）。
+
+        speedup は baseline を保存していないため median_us で代替する。
+        """
+        rows = self.conn.execute(
+            "SELECT cache_key_hash, cache_key_json, benchmark_json, created_at "
+            "FROM kernels ORDER BY created_at DESC"
+        ).fetchall()
+        summaries: list[KernelSummary] = []
+        for key_hash, key_json, bench_json, created_at in rows:
+            key = json.loads(key_json)
+            bench = json.loads(bench_json)
+            median = bench.get("median_us")
+            summaries.append(
+                KernelSummary(
+                    cache_key_hash=key_hash,
+                    graph_hash=key.get("graph_hash", "?"),
+                    shapes=key.get("shapes", []),
+                    dtypes=key.get("dtypes", []),
+                    median_us=float(median) if median is not None else None,
+                    created_at=created_at,
+                )
+            )
+        return summaries
+
+    def count(self) -> int:
+        return int(self.conn.execute("SELECT COUNT(*) FROM kernels").fetchone()[0])
+
+    def clear(self) -> int:
+        """全キャッシュを削除し、削除件数を返す（`forge cache clear` 用）。"""
+        deleted = self.conn.execute("DELETE FROM kernels").rowcount
+        self.conn.commit()
+        return deleted
 
     def __enter__(self) -> KernelRepository:
         return self
