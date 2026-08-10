@@ -15,8 +15,8 @@ from forge.search.iterative_search import (
 from forge.search.llm_generator import LLMGenerator
 from forge.search.params import SearchParams
 
-
 # ── fixtures ─────────────────────────────────────────────────────────────────
+
 
 def _spec() -> KernelSpec:
     n = 4096
@@ -60,6 +60,7 @@ def _evaluate_always_fail(params: SearchParams) -> HistoryEntry:
 
 
 # ── tests ─────────────────────────────────────────────────────────────────────
+
 
 class TestIterativeLLMSearchBasic:
     """基本的な実行フロー。"""
@@ -125,7 +126,6 @@ class TestTokenBudget:
 
     def test_stops_when_budget_exceeded(self) -> None:
         call_count = 0
-        original_propose = lambda s, cc, n, h: [_cand()]
 
         def propose_and_count(s, cc, n, h):
             nonlocal call_count
