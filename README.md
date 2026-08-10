@@ -24,6 +24,8 @@ y = rmsnorm(x, w)  # 初回: 探索してキャッシュ / 2回目以降: 最速
 
 ## ベンチマーク
 
+### forge vs PyTorch Eager
+
 forge が探索した最速カーネルと PyTorch Eager の比較（実測値）。
 
 | op          | shape        | dtype | PyTorch Eager (µs) | forge (µs) |    speedup |
@@ -37,10 +39,37 @@ forge が探索した最速カーネルと PyTorch Eager の比較（実測値�
 | SDPA        | (8, 64, 64)  | fp16  |              193.6 |      206.5 |      0.94x |
 | SDPA causal | (8, 64, 64)  | fp16  |              248.9 |      278.9 |      0.89x |
 
+### forge vs torch.compile / autotune
+
+torch.compile（eager backend）との比較。中央値計測。
+
+| Op        | Shape        | Eager (µs) | torch.compile (µs) | forge (µs) | forge/eager | forge/compiled |
+| --------- | ------------ | ---------: | -----------------: | ---------: | ----------: | -------------: |
+| RMSNorm   | (2048, 4096) |      815.1 |             1704.4 |      192.9 |   **4.23x** |      **8.84x** |
+| Softmax   | (2048, 4096) |      776.9 |              825.2 |      186.4 |   **4.17x** |      **4.43x** |
+| LayerNorm | (2048, 4096) |      926.5 |              970.2 |      973.1 |       0.95x |          1.00x |
+| GELU      | (2048, 4096) |      245.5 |              278.0 |      181.2 |   **1.35x** |      **1.53x** |
+| RMSNorm   | (1024, 8192) |      714.4 |             1686.5 |      189.5 |   **3.77x** |      **8.90x** |
+| Softmax   | (1024, 8192) |      811.5 |              890.8 |      178.2 |   **4.55x** |      **5.00x** |
+| LayerNorm | (1024, 8192) |      934.8 |              987.6 |      949.2 |       0.98x |          1.04x |
+| GELU      | (1024, 8192) |      243.7 |              283.6 |      181.9 |   **1.34x** |      **1.56x** |
+| SDPA      | (8, 256, 64) |      205.4 |              250.9 |      222.2 |       0.92x |          1.13x |
+| SDPA      | (8, 512, 64) |      551.6 |              596.0 |      560.0 |       0.98x |          1.06x |
+
+**主な発見**:
+
+- **RMSNorm・Softmax**: forge は eager の 3.77-4.55x、torch.compile の 8.84-8.90x （torch.compile が特に遅い）
+- **GELU**: forge は ease の 1.34-1.35x、torch.compile の 1.53-1.56x
+- **LayerNorm・SDPA**: 小さいサイズでは forge が eagerと同等以下（GPU メモリレイアウト最適化の余地あり）
+
 > **測定環境**: GTX 1080 (cc6.1, Triton 公式サポート外), PyTorch 2.13.0+cu126, Triton 3.7.1。  
-> budget=50, warmup=25, repeat=200 の中央値。Baseline は `F.rms_norm` / `F.softmax` / `F.layer_norm` / `F.gelu` / `F.scaled_dot_product_attention`。  
+> **計測設定**: budget=50, warmup=25, repeat=200 の中央値。baseline は PyTorch eager で動作確認。  
+> torch.compile は backend="eager" を使用（他の backend は GTX 1080 未サポート）。  
 > LayerNorm・SDPA は本 GPU・shape では eager と同等以下（forge はフォールバックせず正直に報告）。  
-> 自環境での計測: `.venv/bin/python examples/bench_all.py`
+> **自環境での計測**:
+>
+> - `examples/bench_all.py` — forge vs eager
+> - `examples/benchmark_torch_compile_autotune.py` — forge vs torch.compile vs autotune
 
 ## 対応演算
 
