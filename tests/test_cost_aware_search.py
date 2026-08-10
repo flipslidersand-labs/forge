@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import tempfile
+from pathlib import Path
+
 from forge.benchmark.pareto import (
     CandidateWithCost,
     ParetoFrontier,
     time_to_cost_s,
     tokens_to_cost,
 )
+from forge.search.cost_model import BudgetTracker, CostModel, scalarize
 from forge.search.params import SearchParams
 
 
@@ -242,11 +246,6 @@ class TestParetoFrontier:
 
 
 # ── CostModel / BudgetTracker / scalarize ────────────────────────────────────
-
-import tempfile
-from pathlib import Path
-
-from forge.search.cost_model import BudgetTracker, CostModel, scalarize
 
 
 class TestCostModel:
