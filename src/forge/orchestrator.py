@@ -273,23 +273,74 @@ class Orchestrator:
         use_cache: bool = True,
     ) -> SearchResult:
         ctx, cached = self._prepare(spec, use_cache)
-        if cached is not None:
-            bench = BenchmarkResult.from_dict(cached.benchmark_json)
-            self.notifier.send_cache_hit(spec.op_type)
-            return SearchResult(
-                spec=spec,
-                cache_hit=True,
-                best_params=SearchParams.from_dict(cached.params),
-                best_benchmark=bench,
-                baseline_benchmark=None,
-                baseline_name=None,
-                experiments=[],
-            )
+        if cached_result := self._check_cache(spec, ctx, cached):
+            return cached_result
 
+        candidates = self._generate_candidates(spec, ctx, search, budget)
+        experiments, best_params, best_bench, baseline_bench, baseline_name = (
+            self._explore_candidates(spec, ctx, candidates)
+        )
+
+        self._persist_result(ctx, best_params, best_bench, len(candidates), baseline_bench)
+
+        return SearchResult(
+            spec=spec,
+            cache_hit=False,
+            best_params=best_params,
+            best_benchmark=best_bench,
+            baseline_benchmark=baseline_bench,
+            baseline_name=baseline_name,
+            experiments=experiments,
+            extended_baselines=ctx.extended,
+        )
+
+    def _check_cache(
+        self,
+        spec: KernelSpec,
+        ctx: _SearchContext,
+        cached: CachedKernel | None,
+    ) -> SearchResult | None:
+        """キャッシュヒット時、結果を返す。ミス時は None。"""
+        if cached is None:
+            return None
+        bench = BenchmarkResult.from_dict(cached.benchmark_json)
+        self.notifier.send_cache_hit(spec.op_type)
+        return SearchResult(
+            spec=spec,
+            cache_hit=True,
+            best_params=SearchParams.from_dict(cached.params),
+            best_benchmark=bench,
+            baseline_benchmark=None,
+            baseline_name=None,
+            experiments=[],
+        )
+
+    def _generate_candidates(
+        self,
+        spec: KernelSpec,
+        ctx: _SearchContext,
+        search: CandidateGenerator | None,
+        budget: int,
+    ) -> list[SearchParams]:
+        """探索器から候補を生成。"""
         search = search or GridSearch()
         candidates = search.generate(spec, ctx.key.compute_capability, budget=budget)
         self._progress(f"searching {len(candidates)} candidates (cc {ctx.key.compute_capability})")
+        return candidates
 
+    def _explore_candidates(
+        self,
+        spec: KernelSpec,
+        ctx: _SearchContext,
+        candidates: list[SearchParams],
+    ) -> tuple[
+        list[ExperimentResult],
+        SearchParams | None,
+        BenchmarkResult | None,
+        BenchmarkResult | None,
+        str | None,
+    ]:
+        """各候補を評価。最良候補を返す。"""
         experiments: list[ExperimentResult] = []
         best_params: SearchParams | None = None
         best_bench: BenchmarkResult | None = None
@@ -318,24 +369,24 @@ class Orchestrator:
                     self._progress(f"{label}/{params.acc_dtype} -> {cand_bench.median_us:.1f}us")
             experiments.append(exp)
 
+        return experiments, best_params, best_bench, baseline_bench, baseline_name
+
+    def _persist_result(
+        self,
+        ctx: _SearchContext,
+        best_params: SearchParams | None,
+        best_bench: BenchmarkResult | None,
+        num_candidates: int,
+        baseline_bench: BenchmarkResult | None,
+    ) -> None:
+        """最良候補をキャッシュに永続化。"""
         self._finalize(
             ctx,
             best_params,
             best_bench,
-            num_candidates=len(candidates),
+            num_candidates=num_candidates,
             baseline_us=baseline_bench.median_us if baseline_bench else None,
             notify=True,
-        )
-
-        return SearchResult(
-            spec=spec,
-            cache_hit=False,
-            best_params=best_params,
-            best_benchmark=best_bench,
-            baseline_benchmark=baseline_bench,
-            baseline_name=baseline_name,
-            experiments=experiments,
-            extended_baselines=ctx.extended,
         )
 
     def optimize_rounds(
