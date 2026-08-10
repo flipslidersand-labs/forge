@@ -1,3 +1,11 @@
+"""Subprocess ワーカープロセスの結果型・JSON (de)serialization。
+
+Triton カーネルの検証・ベンチマークは子プロセス（ワーカー）で隔離して実行。
+親プロセス（orchestrator）はワーカーの結果を JSON で受け取り、
+BenchmarkResult や ExtendedBaselineResult に変換する。
+
+このモジュールは結果型と serialization ロジックを集約。
+"""
 from __future__ import annotations
 
 import json
