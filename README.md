@@ -39,9 +39,9 @@ forge が探索した最速カーネルと PyTorch Eager の比較（実測値�
 | SDPA        | (8, 64, 64)  | fp16  |              193.6 |      206.5 |      0.94x |
 | SDPA causal | (8, 64, 64)  | fp16  |              248.9 |      278.9 |      0.89x |
 
-### forge vs torch.compile / autotune
+### forge vs torch.compile (eager backend)
 
-torch.compile（eager backend）との比較。中央値計測。
+torch.compile と PyTorch Eager との比較。中央値計測。
 
 | Op        | Shape        | Eager (µs) | torch.compile (µs) | forge (µs) | forge/eager | forge/compiled |
 | --------- | ------------ | ---------: | -----------------: | ---------: | ----------: | -------------: |
@@ -69,7 +69,7 @@ torch.compile（eager backend）との比較。中央値計測。
 > **自環境での計測**:
 >
 > - `examples/bench_all.py` — forge vs eager
-> - `examples/benchmark_torch_compile_autotune.py` — forge vs torch.compile vs autotune
+> - `examples/benchmark_torch_compile_autotune.py` — forge vs torch.compile (eager backend)
 
 ## 対応演算
 
