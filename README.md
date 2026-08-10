@@ -203,6 +203,40 @@ recommended = frontier.recommend()  # スコアが最高の候補を推奨
 - 候補 B: `8.2µs`（中速、token cost 低）
   → 両者とも Pareto 最適。用途に応じて選択可能
 
+#### λ（lambda）パラメータによるトレードオフ制御
+
+`scalarize()` で複数目的を線形結合し、単一スコアに変換します：
+
+```python
+from forge.benchmark.pareto import scalarize
+
+# 速度重視（デフォルト）
+score_speed = scalarize(speedup=4.0, cost_us=100.0, lam=0.1)  # λ=0.1
+
+# コスト重視
+score_cost = scalarize(speedup=4.0, cost_us=100.0, lam=1.0)   # λ=1.0
+
+# 速度優先・コスト無視
+score_nopenalty = scalarize(speedup=4.0, cost_us=100.0, lam=0.0)  # λ=0.0
+```
+
+**λ の意味**:
+
+```
+score = speedup - λ × cost_us
+```
+
+- **λ=0.0**: 速度優先（コスト無視）→ 最も高速な候補選択
+- **λ=0.1** (デフォルト): 速度重視・コスト補助 → 実用的なバランス
+- **λ=1.0**: 同等ウェイト → 速度とコストを等価扱い
+- **λ > 1.0**: コスト重視 → 計測時間が限られた環境向け
+
+**推奨値**:
+
+- `local-GPU`: λ=0.0（GPU 時間制限なし） → 最高速求める
+- `cloud-API` (LLM利用): λ=0.1（API 費用を考慮）
+- `embedded`: λ=0.5-1.0（計測時間・メモリ節約）
+
 ## テスト
 
 ```bash

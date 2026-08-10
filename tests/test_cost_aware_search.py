@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import tempfile
+from pathlib import Path
+
 from forge.benchmark.pareto import (
     CandidateWithCost,
     ParetoFrontier,
     time_to_cost_s,
     tokens_to_cost,
 )
+from forge.search.cost_model import BudgetTracker, CostModel, scalarize
 from forge.search.params import SearchParams
 
 
@@ -239,3 +243,77 @@ class TestParetoFrontier:
         frontier = ParetoFrontier([cand1, cand2])
         rec = frontier.recommend()
         assert rec is not None
+
+
+# ── CostModel / BudgetTracker / scalarize ────────────────────────────────────
+
+
+class TestCostModel:
+    """CostModel の predict / record。"""
+
+    def _make_params(self, block_size: int = 256) -> SearchParams:
+        return SearchParams(block_size=block_size, num_warps=4, num_stages=2)
+
+    def test_predict_returns_default_on_cache_miss(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            with CostModel(db_path=Path(d) / "cost.db", default_ms=50.0) as model:
+                p = self._make_params()
+                est = model.predict_cost(p)
+                assert not est.is_cached
+                assert est.estimated_bench_ms > 0
+
+    def test_record_then_predict_returns_cached(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            with CostModel(db_path=Path(d) / "cost.db") as model:
+                p = self._make_params()
+                model.record(p, bench_time_ms=123.0)
+                est = model.predict_cost(p)
+                assert est.is_cached
+                assert est.estimated_bench_ms == 123.0
+
+    def test_upsert_overwrites_old_value(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            with CostModel(db_path=Path(d) / "cost.db") as model:
+                p = self._make_params()
+                model.record(p, bench_time_ms=100.0)
+                model.record(p, bench_time_ms=42.0)
+                assert model.predict_cost(p).estimated_bench_ms == 42.0
+
+
+class TestBudgetTracker:
+    """BudgetTracker の早期打ち切り判定。"""
+
+    def test_no_budget_never_exhausted(self) -> None:
+        tracker = BudgetTracker(max_total_s=None)
+        assert not tracker.budget_exhausted
+        assert not tracker.should_skip(999_999.0)
+
+    def test_should_skip_when_estimate_exceeds_remaining(self) -> None:
+        tracker = BudgetTracker(max_total_s=1.0)
+        # 即座に予算を使い切る想定: 残り ~1s、推定 2000ms
+        assert tracker.should_skip(2000.0)
+
+    def test_record_tracks_elapsed(self) -> None:
+        tracker = BudgetTracker(max_total_s=60.0)
+        tracker.record(100.0)
+        tracker.record(200.0)
+        assert not tracker.budget_exhausted
+
+
+class TestScalarize:
+    """scalarize のスコア計算。"""
+
+    def test_high_speedup_scores_higher(self) -> None:
+        s1 = scalarize(speedup=2.0, cost=0.1, lam=0.1)
+        s2 = scalarize(speedup=1.5, cost=0.1, lam=0.1)
+        assert s1 > s2
+
+    def test_high_cost_penalizes_score(self) -> None:
+        s_low = scalarize(speedup=2.0, cost=0.1, lam=1.0)
+        s_high = scalarize(speedup=2.0, cost=10.0, lam=1.0)
+        assert s_low > s_high
+
+    def test_zero_lambda_ignores_cost(self) -> None:
+        s1 = scalarize(speedup=2.0, cost=1000.0, lam=0.0)
+        s2 = scalarize(speedup=2.0, cost=0.0, lam=0.0)
+        assert s1 == s2
