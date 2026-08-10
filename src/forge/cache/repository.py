@@ -16,13 +16,22 @@ DEFAULT_DB_PATH = "~/.forge/cache.db"
 
 @dataclass
 class CachedKernel:
+    """SQLite キャッシュから取得した最適カーネル情報。
+
+    Attributes:
+        cache_key: 入出力仕様・定数・環境を含めた一意キー。
+        params: カーネルパラメータ。例: {'block_size': 256, 'num_warps': 8}
+        kernel_code: 生成された Triton カーネルのソースコード。
+        benchmark_json: ベンチマーク結果。中央値・P25・P75 等を含む。
+        created_at: キャッシュ作成日時（タイムスタンプ）。
+        baseline_us: PyTorch eager 実装の計測時間（μs）。speedup 計算に使用。
+            旧キャッシュでは None になる可能性がある。
+    """
     cache_key: CacheKey
     params: dict[str, object]
     kernel_code: str
     benchmark_json: BenchmarkResultDict
     created_at: datetime
-    # ベスト採用時の baseline（eager 実測）median_us。speedup 算出に使う。
-    # 旧キャッシュや baseline 未計測時は None。
     baseline_us: float | None = None
 
 
@@ -42,7 +51,21 @@ class KernelSummary:
 
 
 class KernelRepository:
+    """SQLite を使った Triton カーネルキャッシュの永続化・検索・管理。
+
+    Repository Pattern を採用。カーネルの CRUD 操作を単一責任に集約し、
+    上位層（orchestrator）は SQL 詳細を意識しない設計。
+
+    Attributes:
+        conn: SQLite 接続。WAL mode で並行書き込みを許容。
+    """
     def __init__(self, path: str | Path = DEFAULT_DB_PATH) -> None:
+        """SQLite DB を初期化。テーブルが無ければ作成。
+
+        Args:
+            path: SQLite DB ファイルパス。デフォルト: ~/.forge/cache.db
+                既存テーブルへの自動スキーママイグレーションに対応。
+        """
         db_path = Path(path).expanduser()
         db_path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(str(db_path))
