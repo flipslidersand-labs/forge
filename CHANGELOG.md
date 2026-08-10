@@ -1,3 +1,9 @@
+## [1.0.1](https://github.com/flipslidersand/forge/compare/v1.0.0...v1.0.1) (2026-08-10)
+
+### 🐛 Bug Fixes
+
+* release.yml の環境変数バグを修正 ([efccfc5](https://github.com/flipslidersand/forge/commit/efccfc530c2bcc95e45b412e1874ed67cf7573ea)), closes [#177](https://github.com/flipslidersand/forge/issues/177)
+
 ## 1.0.0 (2026-08-10)
 
 ### ✨ Features
