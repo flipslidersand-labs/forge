@@ -32,11 +32,19 @@ class TestSoftmaxCodegen:
         assert "ROWS=4" in code
         assert "triton.cdiv(M, 4)" in code
 
-    def test_two_pass_has_no_template(self) -> None:
-        import pytest
+    def test_two_pass_valid_python_and_loops(self) -> None:
+        p = default_params(variant="two_pass", block_size=1024)
+        code = generate(softmax_spec(), p)
+        compile(code, "<gen>", "exec")
+        assert "variant=two_pass" in code
+        assert "for start in range" in code  # streaming loops
+        assert "tl.maximum" in code  # online max update
+        assert "tl.exp" in code  # exp in both passes
 
-        with pytest.raises(ValueError, match="No codegen template"):
-            generate(softmax_spec(), default_params(variant="two_pass", block_size=1024))
+    def test_two_pass_tile_size_in_header(self) -> None:
+        p = default_params(variant="two_pass", block_size=512)
+        code = generate(softmax_spec(), p)
+        assert "tile=512" in code
 
 
 def layernorm_spec(n: int = 4096) -> KernelSpec:
