@@ -1,3 +1,9 @@
+## [1.3.1](https://github.com/flipslidersand/forge/compare/v1.3.0...v1.3.1) (2026-08-11)
+
+### 🐛 Bug Fixes
+
+* **ci:** Test PyPI 認証設定を修正 ([2bf8610](https://github.com/flipslidersand/forge/commit/2bf8610d2272e21f228c9e116be4fdd0eebb8b46)), closes [#174](https://github.com/flipslidersand/forge/issues/174)
+
 ## [1.3.0](https://github.com/flipslidersand/forge/compare/v1.2.0...v1.3.0) (2026-08-11)
 
 ### ✨ Features
