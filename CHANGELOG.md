@@ -1,3 +1,9 @@
+## [1.2.0](https://github.com/flipslidersand/forge/compare/v1.1.0...v1.2.0) (2026-08-11)
+
+### ✨ Features
+
+* Release automation retry (v1.1.0 → v1.2.0) ([7b1430f](https://github.com/flipslidersand/forge/commit/7b1430f0749143dc768b10bb872b029ded5847ce))
+
 ## [1.1.0](https://github.com/flipslidersand/forge/compare/v1.0.1...v1.1.0) (2026-08-11)
 
 ### ✨ Features
