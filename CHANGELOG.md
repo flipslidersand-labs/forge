@@ -1,3 +1,10 @@
+## [1.3.0](https://github.com/flipslidersand/forge/compare/v1.2.0...v1.3.0) (2026-08-11)
+
+### ✨ Features
+
+* Release automation retry (v1.1.0 → v1.2.0) ([75407bb](https://github.com/flipslidersand/forge/commit/75407bb122a30946e40945da9229114c86b7ee86))
+* **test:** Test PyPI deployment test ([a3e3abc](https://github.com/flipslidersand/forge/commit/a3e3abc5c82888d5a58d2b0442446951492b8682))
+
 ## [1.2.0](https://github.com/flipslidersand/forge/compare/v1.1.0...v1.2.0) (2026-08-11)
 
 ### ✨ Features
