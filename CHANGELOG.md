@@ -1,3 +1,9 @@
+## [1.1.0](https://github.com/flipslidersand/forge/compare/v1.0.1...v1.1.0) (2026-08-11)
+
+### ✨ Features
+
+* **test:** Release automation end-to-end test ([d50896e](https://github.com/flipslidersand/forge/commit/d50896e62a4a1068527950394739b1145781a0c6))
+
 ## [1.0.1](https://github.com/flipslidersand/forge/compare/v1.0.0...v1.0.1) (2026-08-10)
 
 ### 🐛 Bug Fixes
