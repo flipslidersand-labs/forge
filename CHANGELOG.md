@@ -1,3 +1,9 @@
+## [1.5.1](https://github.com/flipslidersand/forge/compare/v1.5.0...v1.5.1) (2026-08-12)
+
+### 🐛 Bug Fixes
+
+* **ci:** PYPI_PROD_TOKEN 再設定後の再トリガー ([4cc10d4](https://github.com/flipslidersand/forge/commit/4cc10d41263697f185ca361c6f3a67b8d82cf96e))
+
 ## [1.5.0](https://github.com/flipslidersand/forge/compare/v1.4.2...v1.5.0) (2026-08-12)
 
 ### ✨ Features
