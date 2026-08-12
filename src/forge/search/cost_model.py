@@ -65,20 +65,15 @@ class CostModel:
             WHERE variant=? AND block_size=? AND num_warps=?
               AND num_stages=? AND acc_dtype=?
             """,
-            (
-                params.variant,
-                params.block_size,
-                params.num_warps,
-                params.num_stages,
-                params.acc_dtype,
-            ),
+            _params_key(params),
         ).fetchone()
 
         if row:
             return CostEstimate(params=params, estimated_bench_ms=row[0], is_cached=True)
 
         # キャッシュミス: block_size * num_warps に比例する簡易推定
-        estimated = self._default_ms * (params.block_size / 256) * (params.num_warps / 4)
+        num_warps = max(params.num_warps, 1)
+        estimated = self._default_ms * (params.block_size / 256) * (num_warps / 4)
         return CostEstimate(params=params, estimated_bench_ms=estimated, is_cached=False)
 
     def record(self, params: SearchParams, bench_time_ms: float) -> None:
@@ -91,14 +86,7 @@ class CostModel:
             ON CONFLICT(variant, block_size, num_warps, num_stages, acc_dtype)
             DO UPDATE SET bench_time_ms = excluded.bench_time_ms
             """,
-            (
-                params.variant,
-                params.block_size,
-                params.num_warps,
-                params.num_stages,
-                params.acc_dtype,
-                bench_time_ms,
-            ),
+            (*_params_key(params), bench_time_ms),
         )
         self._conn.commit()
 
@@ -122,11 +110,9 @@ class BudgetTracker:
     def __init__(self, max_total_s: float | None = None) -> None:
         self._max_s = max_total_s
         self._start = time.monotonic()
-        self._elapsed_ms: list[float] = []
 
     def record(self, bench_ms: float) -> None:
-        """1 候補の実測時間を記録する。"""
-        self._elapsed_ms.append(bench_ms)
+        """1 候補の実測時間を記録する（API 互換性のため保持）。"""
 
     @property
     def elapsed_s(self) -> float:
@@ -145,6 +131,19 @@ class BudgetTracker:
             return False
         remaining_s = self._max_s - self.elapsed_s
         return (estimated_ms / 1000.0) > remaining_s
+
+
+def _params_key(
+    params: SearchParams,
+) -> tuple[str, int, int, int, str]:
+    """SearchParams を DB キー用タプルに変換する。predict_cost と record で共用。"""
+    return (
+        params.variant,
+        params.block_size,
+        params.num_warps,
+        params.num_stages,
+        params.acc_dtype,
+    )
 
 
 def scalarize(speedup: float, cost: float, lam: float = 0.1) -> float:

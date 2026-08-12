@@ -7,7 +7,7 @@ LLMGenerator を複数ラウンド呼び出し、前ラウンドの評価結果�
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from forge.ir.kernel_spec import KernelSpec
 
@@ -33,7 +33,6 @@ class IterativeSearchResult:
 
     rounds: list[RoundResult]
     best: HistoryEntry | None
-    total_token_usage: TokenUsage = field(default_factory=TokenUsage)
 
     def __post_init__(self) -> None:
         self.total_token_usage = TokenUsage(
@@ -78,7 +77,7 @@ class IterativeLLMSearch:
         rounds: list[RoundResult] = []
 
         for rnd in range(1, self._max_rounds + 1):
-            if self._budget_exhausted(rounds):
+            if self._budget_exhausted():
                 break
 
             before = TokenUsage(
@@ -90,7 +89,7 @@ class IterativeLLMSearch:
                 spec=spec,
                 compute_capability=compute_capability,
                 budget=self._n,
-                history=history,
+                history=_curate_history(history, self._top_k),
             )
 
             after = self._gen.token_usage
@@ -113,11 +112,20 @@ class IterativeLLMSearch:
         best = _best_entry(history)
         return IterativeSearchResult(rounds=rounds, best=best)
 
-    def _budget_exhausted(self, rounds: list[RoundResult]) -> bool:
+    def _budget_exhausted(self) -> bool:
         if self._max_tokens is None:
             return False
-        total = self._gen.token_usage.total
-        return total >= self._max_tokens
+        return self._gen.token_usage.total >= self._max_tokens
+
+
+def _curate_history(history: list[HistoryEntry], top_k: int) -> list[HistoryEntry]:
+    """top-k 正解（速度順）+ 直近 top-k 失敗を返す。generate() の history 引数に渡す。"""
+    correct = sorted(
+        [h for h in history if h.correct and h.median_us is not None],
+        key=lambda h: h.median_us,  # type: ignore[arg-type]
+    )
+    failed = [h for h in history if not h.correct]
+    return correct[:top_k] + failed[-top_k:]
 
 
 def _best_entry(history: list[HistoryEntry]) -> HistoryEntry | None:
@@ -129,11 +137,7 @@ def _best_entry(history: list[HistoryEntry]) -> HistoryEntry | None:
 
 
 def build_feedback_prompt(history: list[HistoryEntry], top_k: int = 3) -> str:
-    """前ラウンドの結果をまとめたフィードバック文字列を生成する。
-
-    LLMGenerator.build_prompt() の history 引数として渡せるように、
-    HistoryEntry リストをそのまま受け取る。この関数はプロンプト拡張のユーティリティ。
-    """
+    """前ラウンドの結果をまとめたフィードバック文字列を生成する（表示・デバッグ用）。"""
     correct = sorted(
         [h for h in history if h.correct and h.median_us is not None],
         key=lambda h: h.median_us,  # type: ignore[arg-type]
