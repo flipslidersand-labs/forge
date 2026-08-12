@@ -17,7 +17,8 @@ class KernelSpec:
         output_specs: 出力テンソル仕様のタプル。
         constants: 定数値。例: {'eps': 1e-6, 'dim': -1}。Triton カーネルのテンプレート引数。
         graph_hash: torch.fx グラフのハッシュ値。キャッシング時の同一性判定に使用。
-        constraints: 実装上の制約。例: ('head_dim_power_of_2',) — Attention では head_dim は 2 のべき乗必須。
+        constraints: 実装上の制約。例: ('head_dim_power_of_2',)
+            — Attention では head_dim は 2 のべき乗必須。
 
     Note:
         frozen=True により不変クラスとなり、ハッシング可能。CacheKey 生成時に使用。
