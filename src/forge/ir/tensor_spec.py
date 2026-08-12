@@ -15,6 +15,7 @@ class TensorSpec:
         is_contiguous: メモリ上の連続性フラグ。True なら行優先（C-order）レイアウト。
             Triton カーネルは連続テンソルを最適化できるため重要。
     """
+
     shape: tuple[int, ...]
     dtype: torch.dtype
     is_contiguous: bool

@@ -6,6 +6,7 @@ BenchmarkResult や ExtendedBaselineResult に変換する。
 
 このモジュールは結果型と serialization ロジックを集約。
 """
+
 from __future__ import annotations
 
 import json
