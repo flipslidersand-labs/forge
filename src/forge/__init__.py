@@ -3,4 +3,11 @@
 from forge._version import __version__
 from forge.decorator import optimize
 
-__all__ = ["optimize", "__version__"]
+
+def version_info() -> dict[str, str]:
+    """Return structured version information."""
+    major, minor, patch = __version__.split(".")
+    return {"version": __version__, "major": major, "minor": minor, "patch": patch}
+
+
+__all__ = ["optimize", "__version__", "version_info"]
