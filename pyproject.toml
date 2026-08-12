@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "forge-kernel"
+name = "kernelsmith"
 version = "0.1.0"
 description = "Automatic GPU kernel optimizer for PyTorch operations"
 readme = "README.md"

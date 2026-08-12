@@ -8,6 +8,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  id-token: write
 
 jobs:
   release:
@@ -62,15 +63,15 @@ jobs:
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "RELEASED_VERSION=${VERSION}" >> $GITHUB_ENV
 
-      - name: Build and publish to PyPI
+      - name: Build
         if: steps.semantic_release.outputs.version != ''
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_PROD_TOKEN }}
         run: |
-          pip install poetry twine
+          pip install poetry
           poetry build
-          twine upload dist/*
+
+      - name: Publish to PyPI
+        if: steps.semantic_release.outputs.version != ''
+        uses: pypa/gh-action-pypi-publish@release/v1
 
       - name: Create summary
         if: always()
