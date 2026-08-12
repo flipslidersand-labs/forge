@@ -1,3 +1,9 @@
+## [1.4.0](https://github.com/flipslidersand/forge/compare/v1.3.1...v1.4.0) (2026-08-12)
+
+### ✨ Features
+
+* **api:** version_info() — 構造化バージョン情報を返すヘルパー追加 ([30b7bbe](https://github.com/flipslidersand/forge/commit/30b7bbef7e7797c6e5cb336c5437489979e5a542))
+
 ## [1.3.1](https://github.com/flipslidersand/forge/compare/v1.3.0...v1.3.1) (2026-08-11)
 
 ### 🐛 Bug Fixes
