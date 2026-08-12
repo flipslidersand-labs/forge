@@ -1,3 +1,9 @@
+## [1.6.0](https://github.com/flipslidersand/forge/compare/v1.5.2...v1.6.0) (2026-08-12)
+
+### ✨ Features
+
+* **publish:** パッケージ名を kernelsmith に変更・Trusted Publishers (OIDC) に切り替え ([b6f70d8](https://github.com/flipslidersand/forge/commit/b6f70d88ec56b3486050dde53fef632910c17f56))
+
 ## [1.5.2](https://github.com/flipslidersand/forge/compare/v1.5.1...v1.5.2) (2026-08-12)
 
 ### 🐛 Bug Fixes
