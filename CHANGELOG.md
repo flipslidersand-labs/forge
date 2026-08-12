@@ -1,3 +1,9 @@
+## [1.4.1](https://github.com/flipslidersand/forge/compare/v1.4.0...v1.4.1) (2026-08-12)
+
+### 🐛 Bug Fixes
+
+* **ci:** poetry install をConfigureより前に移動 — command not found 修正 ([27b14b3](https://github.com/flipslidersand/forge/commit/27b14b3493a1f0c43a56387debf7489938a63527))
+
 ## [1.4.0](https://github.com/flipslidersand/forge/compare/v1.3.1...v1.4.0) (2026-08-12)
 
 ### ✨ Features
