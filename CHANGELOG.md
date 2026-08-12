@@ -1,3 +1,9 @@
+## [1.6.1](https://github.com/flipslidersand/forge/compare/v1.6.0...v1.6.1) (2026-08-12)
+
+### 🐛 Bug Fixes
+
+* **search:** コードレビュー指摘 6件修正 ([#180](https://github.com/flipslidersand/forge/issues/180)) ([0389b9e](https://github.com/flipslidersand/forge/commit/0389b9e41007ff54c23d96e855e54b7a3af30e00))
+
 ## [1.6.0](https://github.com/flipslidersand/forge/compare/v1.5.2...v1.6.0) (2026-08-12)
 
 ### ✨ Features
