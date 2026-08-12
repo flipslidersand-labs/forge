@@ -1,3 +1,9 @@
+## [1.5.0](https://github.com/flipslidersand/forge/compare/v1.4.2...v1.5.0) (2026-08-12)
+
+### ✨ Features
+
+* **ci:** 本番 PyPI への publish に切り替え ([caae14d](https://github.com/flipslidersand/forge/commit/caae14dd821d163fadc58e42f0c61edb5195d796))
+
 ## [1.4.2](https://github.com/flipslidersand/forge/compare/v1.4.1...v1.4.2) (2026-08-12)
 
 ### 🐛 Bug Fixes
