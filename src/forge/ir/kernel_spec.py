@@ -23,6 +23,7 @@ class KernelSpec:
     Note:
         frozen=True により不変クラスとなり、ハッシング可能。CacheKey 生成時に使用。
     """
+
     op_type: str
     input_specs: tuple[TensorSpec, ...]
     output_specs: tuple[TensorSpec, ...]

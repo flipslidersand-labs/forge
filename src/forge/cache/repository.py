@@ -27,6 +27,7 @@ class CachedKernel:
         baseline_us: PyTorch eager 実装の計測時間（μs）。speedup 計算に使用。
             旧キャッシュでは None になる可能性がある。
     """
+
     cache_key: CacheKey
     params: dict[str, object]
     kernel_code: str
@@ -59,6 +60,7 @@ class KernelRepository:
     Attributes:
         conn: SQLite 接続。WAL mode で並行書き込みを許容。
     """
+
     def __init__(self, path: str | Path = DEFAULT_DB_PATH) -> None:
         """SQLite DB を初期化。テーブルが無ければ作成。
 
