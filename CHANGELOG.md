@@ -1,3 +1,9 @@
+## [1.5.2](https://github.com/flipslidersand/forge/compare/v1.5.1...v1.5.2) (2026-08-12)
+
+### 🐛 Bug Fixes
+
+* **ci:** poetry publish → twine upload に切り替え ([437ebaa](https://github.com/flipslidersand/forge/commit/437ebaa1f335902caca42321d346fbb26246a9df))
+
 ## [1.5.1](https://github.com/flipslidersand/forge/compare/v1.5.0...v1.5.1) (2026-08-12)
 
 ### 🐛 Bug Fixes
