@@ -64,11 +64,13 @@ jobs:
 
       - name: Build and publish to PyPI
         if: steps.semantic_release.outputs.version != ''
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_PROD_TOKEN }}
         run: |
-          pip install poetry
-          poetry config pypi-token.pypi ${{ secrets.PYPI_PROD_TOKEN }}
+          pip install poetry twine
           poetry build
-          poetry publish
+          twine upload dist/*
 
       - name: Create summary
         if: always()
