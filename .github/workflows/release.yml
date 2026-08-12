@@ -62,15 +62,12 @@ jobs:
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "RELEASED_VERSION=${VERSION}" >> $GITHUB_ENV
 
-      - name: Configure poetry for Test PyPI
-        run: |
-          poetry config repositories.testpypi https://test.pypi.org/legacy/
-          poetry config pypi-token.testpypi ${{ secrets.PYPI_TOKEN }}
-
       - name: Build and publish to Test PyPI
         if: steps.semantic_release.outputs.version != ''
         run: |
           pip install poetry
+          poetry config repositories.testpypi https://test.pypi.org/legacy/
+          poetry config pypi-token.testpypi ${{ secrets.PYPI_TOKEN }}
           poetry build
           poetry publish --repository testpypi
 
