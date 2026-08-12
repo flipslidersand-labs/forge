@@ -1,3 +1,9 @@
+## [1.4.2](https://github.com/flipslidersand/forge/compare/v1.4.1...v1.4.2) (2026-08-12)
+
+### 🐛 Bug Fixes
+
+* **ci:** Test PyPI トークン再登録後の再トリガー ([23fafa7](https://github.com/flipslidersand/forge/commit/23fafa7f2f1088901dd44fb5c37134fdd7f3ad5f))
+
 ## [1.4.1](https://github.com/flipslidersand/forge/compare/v1.4.0...v1.4.1) (2026-08-12)
 
 ### 🐛 Bug Fixes
