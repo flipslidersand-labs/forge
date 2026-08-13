@@ -1,3 +1,9 @@
+## [1.6.2](https://github.com/flipslidersand/forge/compare/v1.6.1...v1.6.2) (2026-08-13)
+
+### 🐛 Bug Fixes
+
+* **ci:** Python 3.11 matrix 削除（3.12 のみに統一） ([#181](https://github.com/flipslidersand/forge/issues/181)) ([c8e511e](https://github.com/flipslidersand/forge/commit/c8e511e8e741b93c9b446d3ff472d1b93fa02b9c))
+
 ## [1.6.1](https://github.com/flipslidersand/forge/compare/v1.6.0...v1.6.1) (2026-08-12)
 
 ### 🐛 Bug Fixes
