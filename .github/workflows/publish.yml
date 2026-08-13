@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.GATE_RUNNER || 'ubuntu-latest' }}
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
@@ -34,7 +34,7 @@ jobs:
 
   publish-testpypi:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.GATE_RUNNER || 'ubuntu-latest' }}
     environment: testpypi
     permissions:
       id-token: write
@@ -51,7 +51,7 @@ jobs:
 
   publish-pypi:
     needs: publish-testpypi
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.GATE_RUNNER || 'ubuntu-latest' }}
     environment: pypi
     permissions:
       id-token: write
@@ -63,3 +63,4 @@ jobs:
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+
