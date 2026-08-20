@@ -73,12 +73,8 @@ src = ["src"]
 select = ["E", "F", "I", "UP", "B"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = [
-    "E501",   # line too long — test readability > strict length
-    "F401",   # unused imports in tests
-    "F841",   # unused variables in tests
-    "UP035",  # deprecated import paths in tests
-]
+"tests/**" = ["E501", "F401", "F841", "UP035"]
+"examples/**" = ["E501", "F401", "F841", "UP035"]
 
 [tool.pyright]
 pythonVersion = "3.11"
