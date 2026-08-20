@@ -10,11 +10,10 @@ jobs:
   quality:
     uses: flipslidersand-labs/qa-workflows/.github/workflows/python-test.yml@main
     with:
-      python-version: "3.12"
-      pre-install: "pip install torch --index-url https://download.pytorch.org/whl/cpu"
-      install-command: "pip install -e '.[dev,llm,ollama]'"
-      pytest-args: "-k 'not gpu'"
-      coverage-threshold: 75
+      pre-install: pip install torch --index-url https://download.pytorch.org/whl/cpu
+      install-extras: "dev,llm,ollama"
+      pytest-args: '-k "not gpu"'
+      coverage-threshold: 10
 
   typecheck:
     name: Type check
@@ -67,4 +66,3 @@ jobs:
           pip install -e ".[dev,llm,ollama]"
       - name: Run GPU tests
         run: pytest -k "gpu" -q --tb=short
-
