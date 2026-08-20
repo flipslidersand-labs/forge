@@ -7,49 +7,17 @@ on:
     branches: [master]
 
 jobs:
-  lint:
-    name: Lint
-    runs-on: ${{ vars.GATE_RUNNER || 'ubuntu-latest' }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install ruff
-        run: pip install "ruff>=0.4"
-      - name: ruff check
-        run: ruff check src/ tests/
-      - name: ruff format
-        run: ruff format --check src/ tests/
-
-  test:
-    name: Test (Python ${{ matrix.python-version }})
-    runs-on: ${{ vars.GATE_RUNNER || 'ubuntu-latest' }}
-    strategy:
-      matrix:
-        python-version: ["3.12"]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-      - name: Install dependencies (CPU torch)
-        run: |
-          pip install torch --index-url https://download.pytorch.org/whl/cpu
-          pip install -e ".[dev,llm,ollama]"
-      - name: Run tests (non-GPU) with coverage
-        run: pytest -k "not gpu" -q --cov=forge --cov-report=xml --cov-report=term-missing
-
-      - name: Upload coverage to Codecov
-        if: matrix.python-version == '3.12'
-        uses: codecov/codecov-action@v4
-        with:
-          files: coverage.xml
-          fail_ci_if_error: false
+  quality:
+    uses: flipslidersand-labs/qa-workflows/.github/workflows/python-test.yml@main
+    with:
+      pre-install: pip install torch --index-url https://download.pytorch.org/whl/cpu
+      install-extras: "dev,llm,ollama"
+      pytest-args: '-k "not gpu"'
+      coverage-threshold: 10
 
   typecheck:
     name: Type check
-    runs-on: ${{ vars.GATE_RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -65,7 +33,9 @@ jobs:
   gpu-smoke:
     name: GPU Smoke Test (PR)
     runs-on: [self-hosted, gpu]
-    if: github.event_name == 'pull_request'
+    if: >-
+      github.event_name == 'pull_request' &&
+      vars.GPU_RUNNER_AVAILABLE == 'true'
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -84,7 +54,10 @@ jobs:
   gpu-test:
     name: GPU Test (RTX 4070 / RTX 4060 fallback)
     runs-on: [self-hosted, gpu]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/master' &&
+      vars.GPU_RUNNER_AVAILABLE == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -98,4 +71,3 @@ jobs:
           pip install -e ".[dev,llm,ollama]"
       - name: Run GPU tests
         run: pytest -k "gpu" -q --tb=short
-
