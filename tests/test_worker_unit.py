@@ -95,6 +95,25 @@ class TestRunInWorkerErrorPaths:
         assert r.error is not None
         assert "bad worker output" in r.error
 
+    def test_empty_stdout_with_stderr_includes_stderr_detail(self) -> None:
+        proc = _proc(returncode=0, stdout="", stderr="OOM: CUDA out of memory")
+        with patch("subprocess.run", return_value=proc):
+            r = run_in_worker(_DUMMY_KERNEL, _DUMMY_OP, _DUMMY_INPUT, _DUMMY_CONSTANTS)
+
+        assert r.success is False
+        assert r.error is not None
+        assert "OOM" in r.error
+
+    def test_nonzero_returncode_full_stderr_included(self) -> None:
+        long_stderr = "line1\n" * 200 + "FATAL: last line"
+        proc = _proc(returncode=1, stderr=long_stderr)
+        with patch("subprocess.run", return_value=proc):
+            r = run_in_worker(_DUMMY_KERNEL, _DUMMY_OP, _DUMMY_INPUT, _DUMMY_CONSTANTS)
+
+        assert r.success is False
+        assert "FATAL" in r.error
+        assert "line1" in r.error
+
     def test_success_path_parsed_correctly(self) -> None:
         proc = _proc(returncode=0, stdout=_ok_output())
         with patch("subprocess.run", return_value=proc):

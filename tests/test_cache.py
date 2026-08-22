@@ -1,5 +1,6 @@
 import json
 import tempfile
+import threading
 from datetime import UTC, datetime, timezone
 from pathlib import Path
 
@@ -466,3 +467,55 @@ class TestCacheKeyFromDict:
         )
         restored = CacheKey.from_json(raw)
         assert restored.digest() == original.digest()
+
+
+class TestKernelRepositoryThreadSafety:
+    """KernelRepository の同時スレッドアクセス安全性を検証。"""
+
+    def _make_key(self, graph_hash: str) -> CacheKey:
+        return CacheKey(
+            graph_hash=graph_hash,
+            shapes=((512, 512),),
+            dtypes=("float32",),
+            constants_hash="abc",
+            compute_capability="8.9",
+            torch_version="2.3.0",
+            triton_version="3.0.0",
+            cuda_version="12.1",
+            library_version="0.1.0",
+            template_hash="cafe",
+        )
+
+    def test_concurrent_puts_no_exception_correct_count(self) -> None:
+        """10 スレッドが同一 KernelRepository インスタンスに同時書き込みしても例外なし。"""
+        n_threads = 10
+        errors: list[Exception] = []
+
+        with tempfile.TemporaryDirectory() as d:
+            repo = KernelRepository(Path(d) / "cache.db")
+
+            def _write(idx: int) -> None:
+                try:
+                    key = self._make_key(f"kernel_{idx}")
+                    repo.put(
+                        key,
+                        CachedKernel(
+                            cache_key=key,
+                            params={"block_size": 256},
+                            kernel_code="def k(): pass",
+                            benchmark_json={"median_us": float(idx)},
+                            created_at=datetime.now(UTC),
+                        ),
+                    )
+                except Exception as e:
+                    errors.append(e)
+
+            threads = [threading.Thread(target=_write, args=(i,)) for i in range(n_threads)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+
+            assert errors == [], f"Thread errors: {errors}"
+            assert repo.count() == n_threads
+            repo.close()

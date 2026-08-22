@@ -127,18 +127,20 @@ def run_in_worker(
         return WorkerResult(success=False, error=f"timeout after {timeout_s}s")
 
     if proc.returncode != 0:
-        # CUDA abort 等で JSON を出す前に死んだケース
-        err = (
-            proc.stderr.strip().splitlines()[-1]
-            if proc.stderr.strip()
-            else f"exit {proc.returncode}"
-        )
-        return WorkerResult(success=False, error=f"worker crashed: {err}")
+        stderr = proc.stderr.strip()
+        detail = stderr[:4096] if stderr else f"exit {proc.returncode}"
+        return WorkerResult(success=False, error=f"worker crashed: {detail}")
 
+    stdout = proc.stdout.strip()
+    if not stdout:
+        stderr = proc.stderr.strip()
+        detail = stderr[:4096] if stderr else "empty stdout"
+        return WorkerResult(success=False, error=f"bad worker output: {detail}")
     try:
-        return WorkerResult.from_dict(json.loads(proc.stdout.strip().splitlines()[-1]))
-    except (json.JSONDecodeError, IndexError):
-        return WorkerResult(success=False, error=f"bad worker output: {proc.stdout[:200]!r}")
+        return WorkerResult.from_dict(json.loads(stdout.splitlines()[-1]))
+    except (json.JSONDecodeError, IndexError, KeyError) as exc:
+        snippet = stdout[:4096]
+        return WorkerResult(success=False, error=f"bad worker output: {exc!r} stdout={snippet!r}")
 
 
 def run_extended_baseline_in_worker(

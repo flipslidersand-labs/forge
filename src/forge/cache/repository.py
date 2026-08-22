@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -70,34 +71,37 @@ class KernelRepository:
         """
         db_path = Path(path).expanduser()
         db_path.parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(str(db_path))
+        self.conn = sqlite3.connect(str(db_path), check_same_thread=False)
         self.conn.execute("PRAGMA journal_mode=WAL")
+        self._lock = threading.Lock()
         self._init_schema()
 
     def _init_schema(self) -> None:
-        self.conn.executescript("""
-            CREATE TABLE IF NOT EXISTS kernels (
-                cache_key_hash  TEXT PRIMARY KEY,
-                cache_key_json  TEXT NOT NULL,
-                params_json     TEXT NOT NULL,
-                kernel_code     TEXT NOT NULL,
-                benchmark_json  TEXT NOT NULL,
-                baseline_us     REAL,
-                created_at      TEXT NOT NULL
-            );
-        """)
-        # 既存 DB（baseline_us 列なし）を破壊せずマイグレーションする。
-        cols = {row[1] for row in self.conn.execute("PRAGMA table_info(kernels)")}
-        if "baseline_us" not in cols:
-            self.conn.execute("ALTER TABLE kernels ADD COLUMN baseline_us REAL")
-        self.conn.commit()
+        with self._lock:
+            self.conn.executescript("""
+                CREATE TABLE IF NOT EXISTS kernels (
+                    cache_key_hash  TEXT PRIMARY KEY,
+                    cache_key_json  TEXT NOT NULL,
+                    params_json     TEXT NOT NULL,
+                    kernel_code     TEXT NOT NULL,
+                    benchmark_json  TEXT NOT NULL,
+                    baseline_us     REAL,
+                    created_at      TEXT NOT NULL
+                );
+            """)
+            # 既存 DB（baseline_us 列なし）を破壊せずマイグレーションする。
+            cols = {row[1] for row in self.conn.execute("PRAGMA table_info(kernels)")}
+            if "baseline_us" not in cols:
+                self.conn.execute("ALTER TABLE kernels ADD COLUMN baseline_us REAL")
+            self.conn.commit()
 
     def get(self, key: CacheKey) -> CachedKernel | None:
-        row = self.conn.execute(
-            "SELECT cache_key_json, params_json, kernel_code, benchmark_json, baseline_us, "
-            "created_at FROM kernels WHERE cache_key_hash = ?",
-            (key.digest(),),
-        ).fetchone()
+        with self._lock:
+            row = self.conn.execute(
+                "SELECT cache_key_json, params_json, kernel_code, benchmark_json, baseline_us, "
+                "created_at FROM kernels WHERE cache_key_hash = ?",
+                (key.digest(),),
+            ).fetchone()
         if row is None:
             return None
         return CachedKernel(
@@ -110,31 +114,33 @@ class KernelRepository:
         )
 
     def put(self, key: CacheKey, kernel: CachedKernel) -> None:
-        self.conn.execute(
-            "INSERT OR REPLACE INTO kernels "
-            "(cache_key_hash, cache_key_json, params_json, kernel_code, benchmark_json, "
-            "baseline_us, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (
-                key.digest(),
-                json.dumps(key.__dict__, default=list),
-                json.dumps(kernel.params),
-                kernel.kernel_code,
-                json.dumps(kernel.benchmark_json),
-                kernel.baseline_us,
-                datetime.now(UTC).isoformat(),
-            ),
-        )
-        self.conn.commit()
+        with self._lock:
+            self.conn.execute(
+                "INSERT OR REPLACE INTO kernels "
+                "(cache_key_hash, cache_key_json, params_json, kernel_code, benchmark_json, "
+                "baseline_us, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    key.digest(),
+                    json.dumps(key.__dict__, default=list),
+                    json.dumps(kernel.params),
+                    kernel.kernel_code,
+                    json.dumps(kernel.benchmark_json),
+                    kernel.baseline_us,
+                    datetime.now(UTC).isoformat(),
+                ),
+            )
+            self.conn.commit()
 
     def list_summaries(self) -> list[KernelSummary]:
         """キャッシュ済みカーネルを新しい順に要約して返す（`forge cache list` 用）。
 
         speedup = baseline_us / median_us。baseline 未保存の旧キャッシュでは None。
         """
-        rows = self.conn.execute(
-            "SELECT cache_key_hash, cache_key_json, benchmark_json, baseline_us, created_at "
-            "FROM kernels ORDER BY created_at DESC"
-        ).fetchall()
+        with self._lock:
+            rows = self.conn.execute(
+                "SELECT cache_key_hash, cache_key_json, benchmark_json, baseline_us, created_at "
+                "FROM kernels ORDER BY created_at DESC"
+            ).fetchall()
         summaries: list[KernelSummary] = []
         for key_hash, key_json, bench_json, baseline_us, created_at in rows:
             cache_key = CacheKey.from_json(key_json)
@@ -156,7 +162,8 @@ class KernelRepository:
         return summaries
 
     def count(self) -> int:
-        return int(self.conn.execute("SELECT COUNT(*) FROM kernels").fetchone()[0])
+        with self._lock:
+            return int(self.conn.execute("SELECT COUNT(*) FROM kernels").fetchone()[0])
 
     def prune(
         self,
@@ -195,20 +202,22 @@ class KernelRepository:
 
         where = " OR ".join(conditions)
 
-        if dry_run:
-            row = self.conn.execute(
-                f"SELECT COUNT(*) FROM kernels WHERE {where}", params
-            ).fetchone()
-            return int(row[0])
+        with self._lock:
+            if dry_run:
+                row = self.conn.execute(
+                    f"SELECT COUNT(*) FROM kernels WHERE {where}", params
+                ).fetchone()
+                return int(row[0])
 
-        result = self.conn.execute(f"DELETE FROM kernels WHERE {where}", params)
-        self.conn.commit()
+            result = self.conn.execute(f"DELETE FROM kernels WHERE {where}", params)
+            self.conn.commit()
         return result.rowcount
 
     def clear(self) -> int:
         """全キャッシュを削除し、削除件数を返す（`forge cache clear` 用）。"""
-        deleted = self.conn.execute("DELETE FROM kernels").rowcount
-        self.conn.commit()
+        with self._lock:
+            deleted = self.conn.execute("DELETE FROM kernels").rowcount
+            self.conn.commit()
         return deleted
 
     def __enter__(self) -> KernelRepository:
