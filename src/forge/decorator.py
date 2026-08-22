@@ -90,6 +90,7 @@ def optimize(
                         compiled[key] = None
                     else:
                         compiled[key] = _build(
+                            fn,
                             op_type,
                             tensors,
                             constants,
@@ -102,6 +103,7 @@ def optimize(
                         )
                 else:
                     compiled[key] = _build(
+                        fn,
                         op_type,
                         tensors,
                         constants,
@@ -123,7 +125,24 @@ def optimize(
     return deco
 
 
+def _fn_graph_hash(fn: Callable[..., Any]) -> str:
+    """関数の実装を区別する graph_hash を生成する。
+
+    __qualname__ と inspect.getsource() の SHA-256 先頭 12 桁を組み合わせることで、
+    同一 op_type でも実装が異なる関数が別の CacheKey を持つことを保証する。
+    getsource() が利用できない（lambda・REPL 等）場合は qualname のみを使う。
+    """
+    import hashlib
+
+    try:
+        src_hash = hashlib.sha256(inspect.getsource(fn).encode()).hexdigest()[:12]
+    except OSError:
+        src_hash = "nosrc"
+    return f"{fn.__qualname__}:{src_hash}"
+
+
 def _build(
+    fn: Callable[..., Any],
     op_type: str,
     tensors: list[Any],
     constants: dict[str, Any],
@@ -142,7 +161,7 @@ def _build(
         input_specs=input_specs,
         output_specs=(out,),
         constants=constants,
-        graph_hash=f"{op_type}_v1",  # 計算の識別子。テンプレ無効化は CacheKey.template_hash が担う
+        graph_hash=_fn_graph_hash(fn),
         constraints=(),
     )
 
