@@ -11,7 +11,7 @@ jobs:
     uses: flipslidersand-labs/qa-workflows/.github/workflows/python-test.yml@main
     with:
       pre-install: pip install torch --index-url https://download.pytorch.org/whl/cpu
-      install-extras: "dev,llm,ollama"
+      install-extras: "dev,llm,ollama,search"
       pytest-args: '-k "not gpu"'
       coverage-threshold: 10
 
@@ -26,7 +26,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install torch --index-url https://download.pytorch.org/whl/cpu
-          pip install -e ".[dev,llm,ollama]"
+          pip install -e ".[dev,llm,ollama,search]"
       - name: pyright
         run: pyright src/
 
