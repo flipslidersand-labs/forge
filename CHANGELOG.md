@@ -1,3 +1,9 @@
+## [1.7.0](https://github.com/flipslidersand-labs/forge/compare/v1.6.4...v1.7.0) (2026-08-22)
+
+### ✨ Features
+
+* **cache:** forge cache prune コマンドを追加 ([#212](https://github.com/flipslidersand-labs/forge/issues/212)) ([#218](https://github.com/flipslidersand-labs/forge/issues/218)) ([0b7cee1](https://github.com/flipslidersand-labs/forge/commit/0b7cee106afd0c031e352115f61794f11df8b87b))
+
 ## [1.6.4](https://github.com/flipslidersand-labs/forge/compare/v1.6.3...v1.6.4) (2026-08-22)
 
 ### 🐛 Bug Fixes
