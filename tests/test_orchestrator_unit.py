@@ -3,6 +3,7 @@
 import sqlite3
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 import torch
 
@@ -16,7 +17,7 @@ from forge.orchestrator import (
     Orchestrator,
     RoundResult,
 )
-from forge.runtime.worker import ExtendedBaselineResult
+from forge.runtime.worker import ExtendedBaselineResult, WorkerResult
 from forge.search.llm_generator import TokenUsage
 from forge.search.params import SearchParams
 
@@ -203,3 +204,83 @@ class TestOrchestratorLifecycle:
             # 外部 repo は close されていない（まだ使える）
             repo.conn.execute("SELECT 1")
             repo.close()
+
+
+def _bench() -> BenchmarkResult:
+    return BenchmarkResult(median_us=10.0, p20_us=9.0, p80_us=11.0)
+
+
+def _eval_args(orch: Orchestrator) -> tuple:
+    spec = _spec()
+    params = _make_params()
+    bench_input = [{"shape": [512, 4096], "dtype": "float16", "init": "randn", "seed": 0}]
+    return (spec, params, bench_input, None, {"atol": 2e-3, "rtol": 1e-2}, "test")
+
+
+class TestEvalOneFailureBranches:
+    """Orchestrator._eval_one の3つの失敗ブランチを GPU なしで検証。"""
+
+    def test_codegen_value_error_returns_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            orch = Orchestrator(repo=KernelRepository(Path(d) / "c.db"))
+            with patch("forge.orchestrator.generate", side_effect=ValueError("block too small")):
+                exp, cand, bl, bl_name = orch._eval_one(*_eval_args(orch))
+
+        assert exp.success is False
+        assert exp.correct is False
+        assert exp.error == "block too small"
+        assert cand is None
+        assert bl is None
+        assert bl_name is None
+
+    def test_worker_failure_returns_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            orch = Orchestrator(repo=KernelRepository(Path(d) / "c.db"))
+            with patch("forge.orchestrator.generate", return_value="def k(): pass"):
+                with patch(
+                    "forge.orchestrator.run_in_worker",
+                    return_value=WorkerResult(success=False, error="CUDA crash"),
+                ):
+                    exp, cand, bl, bl_name = orch._eval_one(*_eval_args(orch))
+
+        assert exp.success is False
+        assert exp.correct is False
+        assert exp.error == "CUDA crash"
+        assert cand is None
+
+    def test_worker_incorrect_returns_incorrect(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            orch = Orchestrator(repo=KernelRepository(Path(d) / "c.db"))
+            with patch("forge.orchestrator.generate", return_value="def k(): pass"):
+                with patch(
+                    "forge.orchestrator.run_in_worker",
+                    return_value=WorkerResult(success=True, correct=False),
+                ):
+                    exp, cand, bl, bl_name = orch._eval_one(*_eval_args(orch))
+
+        assert exp.success is True
+        assert exp.correct is False
+        assert cand is None
+
+    def test_worker_success_returns_benchmarks(self) -> None:
+        bench = _bench()
+        with tempfile.TemporaryDirectory() as d:
+            orch = Orchestrator(repo=KernelRepository(Path(d) / "c.db"))
+            with patch("forge.orchestrator.generate", return_value="def k(): pass"):
+                with patch(
+                    "forge.orchestrator.run_in_worker",
+                    return_value=WorkerResult(
+                        success=True,
+                        correct=True,
+                        candidate=bench,
+                        baseline=bench,
+                        baseline_name="ref",
+                    ),
+                ):
+                    exp, cand, bl, bl_name = orch._eval_one(*_eval_args(orch))
+
+        assert exp.success is True
+        assert exp.correct is True
+        assert cand is bench
+        assert bl is bench
+        assert bl_name == "ref"
