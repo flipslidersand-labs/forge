@@ -1,3 +1,9 @@
+## [1.9.0](https://github.com/flipslidersand-labs/forge/compare/v1.8.0...v1.9.0) (2026-08-22)
+
+### ✨ Features
+
+* **dx:** py.typed マーカー追加 — PEP 561 準拠 ([#199](https://github.com/flipslidersand-labs/forge/issues/199)) ([#237](https://github.com/flipslidersand-labs/forge/issues/237)) ([6b61a42](https://github.com/flipslidersand-labs/forge/commit/6b61a4247ef9984308002dbb2e13791c13ff36f8))
+
 ## [1.8.0](https://github.com/flipslidersand-labs/forge/compare/v1.7.2...v1.8.0) (2026-08-22)
 
 ### ✨ Features
