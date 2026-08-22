@@ -62,7 +62,7 @@ def _measure_extended_baselines(payload: dict, torch, measure, get_reference) ->
                 "compile_time_s": compile_time_s,
             }
         )
-    except Exception as e:  # noqa: BLE001
+    except (RuntimeError, OSError, ValueError) as e:
         baselines.append(
             {
                 "name": "torch.compile(reference)",
@@ -142,14 +142,16 @@ def main() -> None:
             result["baseline_name"] = baseline_name(op_type)
 
         print(json.dumps(result))
-    except Exception as e:  # noqa: BLE001 — worker は何が起きても JSON を返す
+    except (RuntimeError, OSError, ValueError, ImportError, AttributeError) as e:
         import traceback
 
+        error_type = "cuda_oom" if type(e).__name__ == "OutOfMemoryError" else type(e).__name__
         print(
             json.dumps(
                 {
                     "success": False,
                     "error": f"{type(e).__name__}: {e}",
+                    "error_type": error_type,
                     "traceback": traceback.format_exc(),
                 }
             )
