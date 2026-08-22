@@ -1,8 +1,10 @@
+import pytest
 import torch
 
 from forge.ir.kernel_spec import KernelSpec
 from forge.ir.tensor_spec import TensorSpec
 from forge.search.grid import GridSearch
+from forge.search.params import SearchParams
 from forge.search.random_search import RandomSearch
 from forge.search.space import SearchSpace, _cc_to_int, _next_pow2
 
@@ -189,3 +191,104 @@ class TestRandomSearch:
         full = set(SearchSpace().enumerate(spec(4096), "8.9"))
         sample = RandomSearch(seed=3).generate(spec(4096), "8.9", budget=15)
         assert set(sample) <= full
+
+
+def _f16(shape: tuple[int, ...]) -> TensorSpec:
+    return TensorSpec(shape, torch.float16, True)
+
+
+def _make_spec(op_type: str, **kw: int) -> KernelSpec:
+    """各 op_type 用の最小 KernelSpec を返す（GPU 不要）。"""
+    if op_type in ("rmsnorm", "softmax", "layernorm", "gelu"):
+        m, n = kw["m"], kw["n"]
+        n_in = {"rmsnorm": 2, "layernorm": 3, "softmax": 1, "gelu": 1}[op_type]
+        inputs = [_f16((m, n))] * n_in
+        return KernelSpec(
+            op_type=op_type, input_specs=tuple(inputs),
+            output_specs=(_f16((m, n)),), constants={"eps": 1e-6},
+            graph_hash=f"{op_type}_v1", constraints=(),
+        )
+    if op_type == "swiglu":
+        m, n = kw["m"], kw["n"]
+        return KernelSpec(
+            op_type="swiglu",
+            input_specs=(_f16((m, n)), _f16((m, n))),
+            output_specs=(_f16((m, n)),), constants={},
+            graph_hash="swiglu_v1", constraints=(),
+        )
+    if op_type == "rope":
+        m, n = kw["m"], kw["n"]
+        return KernelSpec(
+            op_type="rope",
+            input_specs=(_f16((m, n)), _f16((m, n)), _f16((m, n))),
+            output_specs=(_f16((m, n)),), constants={},
+            graph_hash="rope_v1", constraints=(),
+        )
+    if op_type == "fused_add_rmsnorm":
+        m, n = kw["m"], kw["n"]
+        return KernelSpec(
+            op_type="fused_add_rmsnorm",
+            input_specs=(_f16((m, n)), _f16((m, n)), _f16((n,))),
+            output_specs=(_f16((m, n)),), constants={"eps": 1e-6},
+            graph_hash="fused_add_rmsnorm_v1", constraints=(),
+        )
+    if op_type == "linear":
+        m, k, n = kw["m"], kw["k"], kw["n"]
+        return KernelSpec(
+            op_type="linear",
+            input_specs=(_f16((m, k)), _f16((n, k)), _f16((n,))),
+            output_specs=(_f16((m, n)),), constants={},
+            graph_hash="linear_v1", constraints=(),
+        )
+    if op_type == "scaled_dot_product_attention":
+        bh, s, d = kw["bh"], kw["s"], kw["d"]
+        return KernelSpec(
+            op_type="scaled_dot_product_attention",
+            input_specs=(_f16((bh, s, d)), _f16((bh, s, d)), _f16((bh, s, d))),
+            output_specs=(_f16((bh, s, d)),), constants={},
+            graph_hash="sdpa_v1", constraints=(),
+        )
+    raise ValueError(f"unknown op_type: {op_type}")
+
+
+@pytest.mark.parametrize(
+    "op_type,shape_kw",
+    [
+        ("rmsnorm", {"m": 16, "n": 4096}),
+        ("softmax", {"m": 16, "n": 4096}),
+        ("layernorm", {"m": 16, "n": 4096}),
+        ("gelu", {"m": 16, "n": 4096}),
+        ("swiglu", {"m": 16, "n": 4096}),
+        ("rope", {"m": 16, "n": 128}),
+        ("fused_add_rmsnorm", {"m": 16, "n": 4096}),
+        ("linear", {"m": 16, "k": 4096, "n": 4096}),
+        ("scaled_dot_product_attention", {"bh": 4, "s": 64, "d": 64}),
+    ],
+)
+def test_enumerate_returns_candidates(op_type: str, shape_kw: dict) -> None:
+    """全 op_type で SearchSpace.enumerate() が最低1件以上の候補を返すこと。"""
+    spec_ = _make_spec(op_type, **shape_kw)
+    candidates = list(SearchSpace().enumerate(spec_, "8.0"))
+    assert len(candidates) >= 1, f"{op_type}: candidates={candidates}"
+    assert all(isinstance(c, SearchParams) for c in candidates)
+
+
+@pytest.mark.parametrize(
+    "op_type,shape_kw",
+    [
+        ("rmsnorm", {"m": 16, "n": 4096}),
+        ("gelu", {"m": 16, "n": 4096}),
+        ("swiglu", {"m": 16, "n": 4096}),
+        ("rope", {"m": 16, "n": 128}),
+        ("linear", {"m": 16, "k": 4096, "n": 4096}),
+        ("scaled_dot_product_attention", {"bh": 4, "s": 64, "d": 64}),
+    ],
+)
+def test_pascal_cc_restricts_stages_to_one(op_type: str, shape_kw: dict) -> None:
+    """cc=6.1 (Pascal) では num_stages=1 のみ列挙される。"""
+    spec_ = _make_spec(op_type, **shape_kw)
+    candidates = list(SearchSpace().enumerate(spec_, "6.1"))
+    assert len(candidates) >= 1
+    assert all(c.num_stages == 1 for c in candidates), (
+        f"{op_type}: non-stage-1 found in Pascal candidates"
+    )
