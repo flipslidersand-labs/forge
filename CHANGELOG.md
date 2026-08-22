@@ -1,3 +1,9 @@
+## [1.8.0](https://github.com/flipslidersand-labs/forge/compare/v1.7.2...v1.8.0) (2026-08-22)
+
+### ✨ Features
+
+* **cache:** FORGE_DB_PATH 環境変数でデフォルト DB パスをオーバーライド ([#198](https://github.com/flipslidersand-labs/forge/issues/198)) ([#235](https://github.com/flipslidersand-labs/forge/issues/235)) ([5d6aa3d](https://github.com/flipslidersand-labs/forge/commit/5d6aa3d516f337a754575f5b01a3e95fbbcac6ac))
+
 ## [1.7.2](https://github.com/flipslidersand-labs/forge/compare/v1.7.1...v1.7.2) (2026-08-22)
 
 ### 🐛 Bug Fixes
