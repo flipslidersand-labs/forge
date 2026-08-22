@@ -13,7 +13,7 @@ jobs:
       pre-install: pip install torch --index-url https://download.pytorch.org/whl/cpu
       install-extras: "dev,llm,ollama"
       pytest-args: '-k "not gpu"'
-      coverage-threshold: 10
+      coverage-threshold: 71
 
   typecheck:
     name: Type check
