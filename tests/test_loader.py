@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
 _DUMMY_MODULE = """\
 def kernel_fn(*args, **kwargs):
     return None
+"""
+
+_BROKEN_MODULE = """\
+raise RuntimeError("broken")
+def kernel_fn(): pass
 """
 
 
@@ -19,60 +25,54 @@ def test_file_is_created_and_importable():
     assert callable(fn)
 
 
-def test_atexit_cleanup_removes_file():
-    """atexit ハンドラが呼ばれるとファイルが削除される。"""
-    import tempfile
+def test_tmpfile_deleted_after_successful_load():
+    """ロード成功後に /tmp/forge_kernels/ に .py ファイルが残らない。"""
+    from forge.runtime import loader
+
+    tmp_dir = Path(tempfile.gettempdir()) / "forge_kernels"
+    before = set(tmp_dir.glob("kernel_*.py")) if tmp_dir.exists() else set()
+
+    loader.load_kernel_fn(_DUMMY_MODULE)
+
+    after = set(tmp_dir.glob("kernel_*.py")) if tmp_dir.exists() else set()
+    new_files = after - before
+    assert new_files == set(), f"残存ファイル: {new_files}"
+
+
+def test_tmpfile_deleted_after_load_failure():
+    """exec_module が例外を投げた場合もファイルが削除される。"""
     import uuid
+
+    from forge.runtime import loader
 
     tmp_dir = Path(tempfile.gettempdir()) / "forge_kernels"
     tmp_dir.mkdir(parents=True, exist_ok=True)
-    mod_path = tmp_dir / f"kernel_{uuid.uuid4().hex}.py"
-    mod_path.write_text(_DUMMY_MODULE)
-    assert mod_path.exists()
 
-    cleanup = lambda: mod_path.unlink(missing_ok=True)  # noqa: E731
-    cleanup()
+    created: list[Path] = []
 
-    assert not mod_path.exists()
+    original_write = Path.write_text
+
+    def _track_write(self: Path, *args, **kwargs):  # type: ignore[override]
+        result = original_write(self, *args, **kwargs)
+        if "forge_kernels" in str(self) and self.suffix == ".py":
+            created.append(self)
+        return result
+
+    with patch.object(Path, "write_text", _track_write):
+        try:
+            loader.load_kernel_fn(_BROKEN_MODULE)
+        except (RuntimeError, AssertionError):
+            pass
+
+    for p in created:
+        assert not p.exists(), f"失敗時にも削除されるべき: {p}"
 
 
-def test_atexit_cleanup_missing_ok():
-    """存在しないファイルに unlink(missing_ok=True) してもエラーにならない。"""
-    import tempfile
-    import uuid
-
-    tmp_dir = Path(tempfile.gettempdir()) / "forge_kernels"
-    mod_path = tmp_dir / f"kernel_{uuid.uuid4().hex}.py"
-
-    cleanup = lambda: mod_path.unlink(missing_ok=True)  # noqa: E731
-    cleanup()  # raises nothing
-
-
-def test_load_kernel_fn_registers_atexit():
-    """load_kernel_fn が atexit.register を呼ぶことを確認。"""
+def test_tmpfile_missing_ok_on_load_failure():
+    """exec_module が例外を投げたときに unlink(missing_ok=True) がエラーを出さない。"""
     from forge.runtime import loader
 
-    registered: list = []
-
-    # loader モジュールが参照する atexit.register を直接 patch する
-    with patch.object(loader.atexit, "register", side_effect=registered.append):
-        loader.load_kernel_fn(_DUMMY_MODULE)
-
-    assert len(registered) == 1
-    # クリーンアップを手動実行して後始末
-    registered[0]()
-
-
-def test_load_kernel_fn_cleanup_deletes_file():
-    """load_kernel_fn が登録した atexit ハンドラが実際にファイルを削除する。"""
-    from forge.runtime import loader
-
-    registered: list = []
-
-    with patch.object(loader.atexit, "register", side_effect=registered.append):
-        loader.load_kernel_fn(_DUMMY_MODULE)
-
-    cleanup = registered[0]
-    # 削除前にファイルが存在することは確認できないが（UUID が取れないため）、
-    # cleanup を呼んでもエラーにならないことを確認
-    cleanup()
+    try:
+        loader.load_kernel_fn(_BROKEN_MODULE)
+    except (RuntimeError, AssertionError):
+        pass  # 例外は伝播するが unlink で追加エラーは出ない

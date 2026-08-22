@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import atexit
 import importlib.util
 import tempfile
 import uuid
@@ -16,15 +15,18 @@ def load_kernel_fn(code: str) -> Callable[..., object]:
     デコレータ（in-process）の両方がこれを使う。in-process 実行は、キャッシュ済みの
     検証通過カーネルのみを対象とすること。
 
-    一時ファイルはプロセス終了時（atexit）に自動削除される。
+    一時ファイルは exec_module 完了後（または例外発生時）に try/finally で即座に削除する。
+    SIGKILL では atexit が実行されないため、長時間稼働プロセスでのファイル蓄積を防ぐ。
     """
     tmp_dir = Path(tempfile.gettempdir()) / "forge_kernels"
     tmp_dir.mkdir(parents=True, exist_ok=True)
     mod_path = tmp_dir / f"kernel_{uuid.uuid4().hex}.py"
     mod_path.write_text(code)
-    atexit.register(lambda: mod_path.unlink(missing_ok=True))
-    spec = importlib.util.spec_from_file_location(mod_path.stem, str(mod_path))
-    assert spec and spec.loader
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module.kernel_fn
+    try:
+        spec = importlib.util.spec_from_file_location(mod_path.stem, str(mod_path))
+        assert spec and spec.loader
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module.kernel_fn
+    finally:
+        mod_path.unlink(missing_ok=True)
