@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import threading
 from dataclasses import dataclass
@@ -12,7 +13,8 @@ from forge.benchmark.statistics import BenchmarkResultDict
 from .key import CacheKey
 
 # CLI (forge.cli) と KernelRepository が共有する既定 DB パスの単一定義。
-DEFAULT_DB_PATH = "~/.forge/cache.db"
+# FORGE_DB_PATH 環境変数でオーバーライド可能。
+DEFAULT_DB_PATH = os.environ.get("FORGE_DB_PATH", "~/.forge/cache.db")
 
 
 @dataclass

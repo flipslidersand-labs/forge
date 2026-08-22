@@ -1,3 +1,4 @@
+import importlib
 import json
 import tempfile
 import threading
@@ -519,3 +520,29 @@ class TestKernelRepositoryThreadSafety:
             assert errors == [], f"Thread errors: {errors}"
             assert repo.count() == n_threads
             repo.close()
+
+
+class TestForgeDbPathEnvVar:
+    """FORGE_DB_PATH 環境変数による DEFAULT_DB_PATH オーバーライドを検証。"""
+
+    def test_env_var_overrides_default(self, tmp_path, monkeypatch) -> None:
+        custom = str(tmp_path / "custom.db")
+        monkeypatch.setenv("FORGE_DB_PATH", custom)
+        import forge.cache.repository as repo_mod
+        importlib.reload(repo_mod)
+        assert repo_mod.DEFAULT_DB_PATH == custom
+
+    def test_default_used_when_env_not_set(self, monkeypatch) -> None:
+        monkeypatch.delenv("FORGE_DB_PATH", raising=False)
+        import forge.cache.repository as repo_mod
+        importlib.reload(repo_mod)
+        assert repo_mod.DEFAULT_DB_PATH == "~/.forge/cache.db"
+
+    def test_cli_db_flag_takes_precedence(self, tmp_path, capsys, monkeypatch) -> None:
+        env_db = str(tmp_path / "env.db")
+        cli_db = str(tmp_path / "cli.db")
+        monkeypatch.setenv("FORGE_DB_PATH", env_db)
+        from forge.cli import main
+        rc = main(["cache", "list", "--db", cli_db])
+        assert rc == 0
+        assert not Path(env_db).exists()  # 環境変数パスは使われない

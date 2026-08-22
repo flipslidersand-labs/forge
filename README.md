@@ -237,6 +237,23 @@ score = speedup - λ × cost_us
 - `cloud-API` (LLM利用): λ=0.1（API 費用を考慮）
 - `embedded`: λ=0.5-1.0（計測時間・メモリ節約）
 
+## 環境変数
+
+| 変数名 | 既定値 | 説明 |
+|---|---|---|
+| `FORGE_DB_PATH` | `~/.forge/cache.db` | キャッシュ DB のパス |
+| `FORGE_DISCORD_WEBHOOK` | ― | Discord 通知用 Webhook URL |
+
+```bash
+# CI/CD やテスト時に一時 DB を使う例
+FORGE_DB_PATH=/tmp/forge_test.db pytest
+
+# 複数プロジェクトでキャッシュを分離する例
+FORGE_DB_PATH=~/projects/myapp/.forge/cache.db python train.py
+```
+
+CLI の `--db` オプションは環境変数より優先されます。
+
 ## テスト
 
 ```bash
