@@ -333,7 +333,7 @@ class TestKernelRepositoryPrune:
         with tempfile.TemporaryDirectory() as d:
             with KernelRepository(Path(d) / "cache.db") as repo:
                 self._put(repo, "old")
-                cutoff = datetime.now(timezone.utc)
+                cutoff = datetime.now(UTC)
                 self._put(repo, "new")
                 deleted = repo.prune(before=cutoff)
                 assert deleted == 1
@@ -379,7 +379,7 @@ class TestKernelRepositoryPrune:
         with tempfile.TemporaryDirectory() as d:
             with KernelRepository(Path(d) / "cache.db") as repo:
                 self._put(repo, "old")
-                cutoff = datetime.now(timezone.utc)
+                cutoff = datetime.now(UTC)
                 for i in range(4):
                     self._put(repo, f"new{i}")
                 # keep_latest=2 → 最新2件を保持: new2,new3 が残る
