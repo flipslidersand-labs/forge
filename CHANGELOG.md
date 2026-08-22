@@ -1,3 +1,9 @@
+## [1.6.3](https://github.com/flipslidersand-labs/forge/compare/v1.6.2...v1.6.3) (2026-08-22)
+
+### 🐛 Bug Fixes
+
+* **ci:** push ブランチフィルタに test/** / chore/** 等を追加 ([#201](https://github.com/flipslidersand-labs/forge/issues/201)) ([#224](https://github.com/flipslidersand-labs/forge/issues/224)) ([f2fa5e0](https://github.com/flipslidersand-labs/forge/commit/f2fa5e0c270c706a072e52ca9c6b4dd396504c6b))
+
 ## [1.6.2](https://github.com/flipslidersand/forge/compare/v1.6.1...v1.6.2) (2026-08-13)
 
 ### 🐛 Bug Fixes
