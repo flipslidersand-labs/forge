@@ -3,7 +3,7 @@
 ## 開発環境セットアップ
 
 ```bash
-git clone https://github.com/flipslidersand/forge.git
+git clone https://github.com/flipslidersand-labs/forge.git
 cd forge
 python3 -m venv .venv
 source .venv/bin/activate

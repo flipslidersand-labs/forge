@@ -31,9 +31,9 @@ dependencies = [
 forge = "forge.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/flipslidersand/forge"
-Repository = "https://github.com/flipslidersand/forge"
-Issues = "https://github.com/flipslidersand/forge/issues"
+Homepage = "https://github.com/flipslidersand-labs/forge"
+Repository = "https://github.com/flipslidersand-labs/forge"
+Issues = "https://github.com/flipslidersand-labs/forge/issues"
 
 [project.optional-dependencies]
 gpu = [
