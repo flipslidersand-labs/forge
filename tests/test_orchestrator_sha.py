@@ -270,3 +270,47 @@ class TestOptimizeSHACPU:
         user_warns = [w for w in caught if issubclass(w.category, UserWarning)]
         assert len(user_warns) == 0
         repo.close()
+
+    def test_zero_candidates_returns_no_best(self):
+        """search が候補を 0 件返した場合、round_results が未定義にならず best_params=None を返す。
+
+        回帰テスト: #193 — round_results をループ外で初期化せずに参照すると NameError になる。
+        """
+
+        class _EmptySearch:
+            def generate(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+                return []
+
+        with tempfile.TemporaryDirectory() as d:
+            repo = KernelRepository(Path(d) / "c.db")
+            orch = Orchestrator(repo=repo)
+            spec = _rmsnorm_spec()
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", UserWarning)
+                result = orch.optimize_sha(
+                    spec, initial_budget=4, halving_rounds=2, search=_EmptySearch()
+                )
+
+        assert result.best_params is None
+        assert result.best_benchmark is None
+        assert result.experiments == []
+        repo.close()
+
+    def test_halving_rounds_zero_returns_no_best(self):
+        """halving_rounds=0 のとき outer ループが回らず round_results が未定義にならない。
+
+        回帰テスト: #193 — range(1, 0+1) は空なのでループ本体が未実行になる。
+        """
+        with tempfile.TemporaryDirectory() as d:
+            repo = KernelRepository(Path(d) / "c.db")
+            orch = Orchestrator(repo=repo)
+            spec = _rmsnorm_spec()
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", UserWarning)
+                result = orch.optimize_sha(
+                    spec, initial_budget=4, halving_rounds=0, search=_tiny_grid()
+                )
+
+        assert result.best_params is None
+        assert result.best_benchmark is None
+        repo.close()
