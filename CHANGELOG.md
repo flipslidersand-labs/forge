@@ -1,3 +1,9 @@
+## [1.7.1](https://github.com/flipslidersand-labs/forge/compare/v1.7.0...v1.7.1) (2026-08-22)
+
+### 🐛 Bug Fixes
+
+* **runtime,cache:** worker stderr 詳細化・bare Exception 絞り込み・SQLite スレッドセーフ ([#219](https://github.com/flipslidersand-labs/forge/issues/219),[#220](https://github.com/flipslidersand-labs/forge/issues/220),[#221](https://github.com/flipslidersand-labs/forge/issues/221)) ([#227](https://github.com/flipslidersand-labs/forge/issues/227)) ([fb89f91](https://github.com/flipslidersand-labs/forge/commit/fb89f9136b17a0de022ee7baeaf088a013d2044b))
+
 ## [1.7.0](https://github.com/flipslidersand-labs/forge/compare/v1.6.4...v1.7.0) (2026-08-22)
 
 ### ✨ Features
