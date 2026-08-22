@@ -158,6 +158,53 @@ class KernelRepository:
     def count(self) -> int:
         return int(self.conn.execute("SELECT COUNT(*) FROM kernels").fetchone()[0])
 
+    def prune(
+        self,
+        before: datetime | None = None,
+        keep_latest: int | None = None,
+        *,
+        dry_run: bool = False,
+    ) -> int:
+        """期間または件数を指定して古いキャッシュを削除する（`forge cache prune` 用）。
+
+        Args:
+            before: この日時より前に作成されたエントリを削除。
+            keep_latest: 最新 N 件を残し、それ以外を削除。
+            dry_run: True の場合は削除せず対象件数のみ返す。
+
+        Returns:
+            削除件数（dry_run=True の場合は削除対象件数）。
+            before / keep_latest が両方 None の場合は 0 を返す。
+        """
+        if before is None and keep_latest is None:
+            return 0
+
+        params: list[object] = []
+        conditions: list[str] = []
+
+        if before is not None:
+            conditions.append("created_at < ?")
+            params.append(before.isoformat())
+
+        if keep_latest is not None:
+            n = int(keep_latest)
+            conditions.append(
+                f"cache_key_hash NOT IN "
+                f"(SELECT cache_key_hash FROM kernels ORDER BY created_at DESC LIMIT {n})"
+            )
+
+        where = " OR ".join(conditions)
+
+        if dry_run:
+            row = self.conn.execute(
+                f"SELECT COUNT(*) FROM kernels WHERE {where}", params
+            ).fetchone()
+            return int(row[0])
+
+        result = self.conn.execute(f"DELETE FROM kernels WHERE {where}", params)
+        self.conn.commit()
+        return result.rowcount
+
     def clear(self) -> int:
         """全キャッシュを削除し、削除件数を返す（`forge cache clear` 用）。"""
         deleted = self.conn.execute("DELETE FROM kernels").rowcount
