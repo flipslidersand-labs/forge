@@ -1,3 +1,14 @@
+## [1.6.4](https://github.com/flipslidersand-labs/forge/compare/v1.6.3...v1.6.4) (2026-08-22)
+
+### 🐛 Bug Fixes
+
+* **#207:** is_improvement が baseline.p20_us<=0 のとき warning を出力する ([#210](https://github.com/flipslidersand-labs/forge/issues/210)) ([d19b42a](https://github.com/flipslidersand-labs/forge/commit/d19b42a474d8e52bdf5306a071dd759b053d61ac)), closes [#207](https://github.com/flipslidersand-labs/forge/issues/207)
+* **#209:** forge cache list/clear が SQLite 破損時に rc=1 とエラーメッセージを返す ([#211](https://github.com/flipslidersand-labs/forge/issues/211)) ([c64e73d](https://github.com/flipslidersand-labs/forge/commit/c64e73dcf8648b3fb10f1c846aa64c03d5495c38)), closes [#209](https://github.com/flipslidersand-labs/forge/issues/209)
+* **ci:** coverage-threshold を実測値 76% に基づき 71% に引き上げ ([#195](https://github.com/flipslidersand-labs/forge/issues/195)) ([#226](https://github.com/flipslidersand-labs/forge/issues/226)) ([3e87f24](https://github.com/flipslidersand-labs/forge/commit/3e87f2431ca3350e1e31981693e5e29e269fb11c))
+* **ci:** publish.yml を削除し PyPI publish を release.yml に一本化 ([#196](https://github.com/flipslidersand-labs/forge/issues/196)) ([#225](https://github.com/flipslidersand-labs/forge/issues/225)) ([9997cfc](https://github.com/flipslidersand-labs/forge/commit/9997cfc385dbc059e76667c977438c6d01f1c0bf))
+* **ci:** search extra を install-extras に追加して collection error を解消 ([#194](https://github.com/flipslidersand-labs/forge/issues/194)) ([#223](https://github.com/flipslidersand-labs/forge/issues/223)) ([4986280](https://github.com/flipslidersand-labs/forge/commit/4986280ee452040868ff7a5fd9e3bc6125c0c9d7))
+* **orchestrator:** round_results をループ前に初期化し NameError を排除 ([#193](https://github.com/flipslidersand-labs/forge/issues/193)) ([#222](https://github.com/flipslidersand-labs/forge/issues/222)) ([8f6b711](https://github.com/flipslidersand-labs/forge/commit/8f6b711ceb88c153fa44e6e6100f0230aa87b770))
+
 ## [1.6.3](https://github.com/flipslidersand-labs/forge/compare/v1.6.2...v1.6.3) (2026-08-22)
 
 ### 🐛 Bug Fixes
