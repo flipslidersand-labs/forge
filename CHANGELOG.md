@@ -1,3 +1,9 @@
+## [1.7.2](https://github.com/flipslidersand-labs/forge/compare/v1.7.1...v1.7.2) (2026-08-22)
+
+### 🐛 Bug Fixes
+
+* **pareto:** speedup_ratio 常に1.0バグ修正・コストレート定数化 ([#202](https://github.com/flipslidersand-labs/forge/issues/202),[#203](https://github.com/flipslidersand-labs/forge/issues/203)) ([#228](https://github.com/flipslidersand-labs/forge/issues/228)) ([bb173f8](https://github.com/flipslidersand-labs/forge/commit/bb173f8ba017affbfd3662233cdc19b9c06fe643))
+
 ## [1.7.1](https://github.com/flipslidersand-labs/forge/compare/v1.7.0...v1.7.1) (2026-08-22)
 
 ### 🐛 Bug Fixes
