@@ -6,7 +6,10 @@ import tempfile
 from pathlib import Path
 
 from forge.benchmark.pareto import (
+    _GPU_COST_PER_SECOND,
+    _TOKEN_COST_PER_TOKEN,
     CandidateWithCost,
+    CostMetrics,
     ParetoFrontier,
     time_to_cost_s,
     tokens_to_cost,
@@ -27,6 +30,17 @@ class TestTokensAndTimeCost:
         cost = time_to_cost_s(100.0)  # 100 秒
         assert cost > 0
         assert cost < 0.01  # 100s で 1 セント未満
+
+    def test_tokens_to_cost_uses_constant(self) -> None:
+        assert tokens_to_cost(1_000_000) == _TOKEN_COST_PER_TOKEN * 1_000_000
+
+    def test_time_to_cost_uses_constant(self) -> None:
+        assert time_to_cost_s(1.0) == _GPU_COST_PER_SECOND
+
+    def test_cost_metrics_total_cost_uses_same_rate_as_helpers(self) -> None:
+        metrics = CostMetrics(tokens=1_000_000, benchmark_time_s=10.0, evaluated_candidates=5)
+        expected = tokens_to_cost(1_000_000) * 6 + time_to_cost_s(10.0)
+        assert metrics.total_cost == expected
 
 
 class TestCandidateWithCost:
@@ -71,6 +85,43 @@ class TestCandidateWithCost:
         cost = cand.cost_per_1x_speedup(baseline_us=100.0)
         assert cost is not None
         assert cost > 0
+
+    def test_speedup_ratio_correct(self) -> None:
+        params = SearchParams(
+            block_size=256,
+            num_warps=8,
+            num_stages=2,
+            acc_dtype="fp32",
+            variant="single_row",
+            rows_per_program=1,
+        )
+        cand = CandidateWithCost(
+            params=params,
+            median_us=50.0,
+            tokens_for_proposal=1000,
+            benchmark_time_ms=100.0,
+            correct=True,
+            baseline_us=100.0,
+        )
+        assert cand.speedup_ratio == 2.0
+
+    def test_speedup_ratio_no_baseline_returns_one(self) -> None:
+        params = SearchParams(
+            block_size=256,
+            num_warps=8,
+            num_stages=2,
+            acc_dtype="fp32",
+            variant="single_row",
+            rows_per_program=1,
+        )
+        cand = CandidateWithCost(
+            params=params,
+            median_us=50.0,
+            tokens_for_proposal=1000,
+            benchmark_time_ms=100.0,
+            correct=True,
+        )
+        assert cand.speedup_ratio == 1.0
 
     def test_cost_per_1x_speedup_no_improvement(self) -> None:
         params = SearchParams(
