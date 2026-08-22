@@ -570,6 +570,7 @@ class Orchestrator:
         baseline_bench: BenchmarkResult | None = None
         baseline_name: str | None = None
         surviving: list[SearchParams] = list(candidates)
+        round_results: list[tuple[SearchParams, BenchmarkResult]] = []
 
         for round_num in range(1, halving_rounds + 1):
             warmup, repeat = _ROUND_CONFIGS[min(round_num - 1, len(_ROUND_CONFIGS) - 1)]
@@ -578,7 +579,7 @@ class Orchestrator:
                 f"warmup={warmup} repeat={repeat}"
             )
 
-            round_results: list[tuple[SearchParams, BenchmarkResult]] = []
+            round_results = []
             for i, params in enumerate(surviving, 1):
                 label = f"  [sha r{round_num}.{i}] {params.block_size}/{params.num_warps}"
                 exp, cand_bench, bl_bench, bl_name = self._eval_one(
@@ -623,7 +624,7 @@ class Orchestrator:
                     best_params = exp.params
                     # BenchmarkResult は _eval_one 戻り値から取れないので再構築
         # last round_results が残っているので流用
-        if round_results:  # type: ignore[possibly-undefined]
+        if round_results:
             best_params, best_bench = round_results[0]
             for exp in all_experiments:
                 if exp.params == best_params:
