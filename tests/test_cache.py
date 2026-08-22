@@ -1,6 +1,6 @@
 import json
 import tempfile
-from datetime import UTC
+from datetime import UTC, datetime, timezone
 from pathlib import Path
 
 import torch
@@ -287,6 +287,113 @@ class TestKernelRepository:
             assert not hasattr(s, "graph_hash"), "use s.cache_key.graph_hash"
             assert not hasattr(s, "shapes"), "flat shapes field removed — use s.cache_key.shapes"
             assert not hasattr(s, "dtypes"), "flat dtypes field removed — use s.cache_key.dtypes"
+
+
+class TestKernelRepositoryPrune:
+    """KernelRepository.prune() のユニットテスト。"""
+
+    def _make_key(self, graph_hash: str = "rmsnorm_v1") -> CacheKey:
+        return CacheKey(
+            graph_hash=graph_hash,
+            shapes=((2048, 4096),),
+            dtypes=("float16",),
+            constants_hash="deadbeef",
+            compute_capability="8.9",
+            torch_version="2.3.0",
+            triton_version="3.0.0",
+            cuda_version="12.1",
+            library_version="0.1.0",
+            template_hash="feedfacecafe",
+        )
+
+    def _put(self, repo: KernelRepository, graph_hash: str) -> None:
+        from datetime import datetime
+
+        key = self._make_key(graph_hash)
+        repo.put(
+            key,
+            CachedKernel(
+                cache_key=key,
+                params={"block_size": 1024},
+                kernel_code="def k(): pass",
+                benchmark_json={"median_us": 42.0},
+                created_at=datetime.now(UTC),
+            ),
+        )
+
+    def test_prune_no_options_returns_zero(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            with KernelRepository(Path(d) / "cache.db") as repo:
+                self._put(repo, "a")
+                self._put(repo, "b")
+                assert repo.prune() == 0
+                assert repo.count() == 2
+
+    def test_prune_before_removes_old_entries(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            with KernelRepository(Path(d) / "cache.db") as repo:
+                self._put(repo, "old")
+                cutoff = datetime.now(timezone.utc)
+                self._put(repo, "new")
+                deleted = repo.prune(before=cutoff)
+                assert deleted == 1
+                assert repo.count() == 1
+
+    def test_prune_keep_latest_removes_oldest(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            with KernelRepository(Path(d) / "cache.db") as repo:
+                for i in range(5):
+                    self._put(repo, f"v{i}")
+                deleted = repo.prune(keep_latest=2)
+                assert deleted == 3
+                assert repo.count() == 2
+
+    def test_prune_keep_latest_zero_removes_all(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            with KernelRepository(Path(d) / "cache.db") as repo:
+                for i in range(3):
+                    self._put(repo, f"v{i}")
+                deleted = repo.prune(keep_latest=0)
+                assert deleted == 3
+                assert repo.count() == 0
+
+    def test_prune_keep_latest_larger_than_count_removes_nothing(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            with KernelRepository(Path(d) / "cache.db") as repo:
+                self._put(repo, "only")
+                deleted = repo.prune(keep_latest=100)
+                assert deleted == 0
+                assert repo.count() == 1
+
+    def test_prune_dry_run_does_not_delete(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            with KernelRepository(Path(d) / "cache.db") as repo:
+                for i in range(4):
+                    self._put(repo, f"v{i}")
+                target = repo.prune(keep_latest=1, dry_run=True)
+                assert target == 3
+                assert repo.count() == 4
+
+    def test_prune_both_options_union(self) -> None:
+        """--before と --keep-latest の同時指定は OR 条件で削除する。"""
+        with tempfile.TemporaryDirectory() as d:
+            with KernelRepository(Path(d) / "cache.db") as repo:
+                self._put(repo, "old")
+                cutoff = datetime.now(timezone.utc)
+                for i in range(4):
+                    self._put(repo, f"new{i}")
+                # keep_latest=2 → 最新2件を保持: new2,new3 が残る
+                # before=cutoff  → old が削除対象
+                # OR条件: old + new0 + new1 の計3件が削除される
+                deleted = repo.prune(before=cutoff, keep_latest=2)
+                assert deleted == 3
+                assert repo.count() == 2
+
+    def test_prune_empty_db_returns_zero(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            with KernelRepository(Path(d) / "cache.db") as repo:
+                deleted = repo.prune(keep_latest=0)
+                assert deleted == 0
 
 
 class TestCacheKeyFromDict:

@@ -228,3 +228,73 @@ class TestSQLiteErrorHandling:
         rc = main(["cache", "clear", "--force", "--db", str(db)])
         assert rc == 1
         assert "no such table" in capsys.readouterr().err
+
+
+# --- forge cache prune ---
+
+
+def test_cache_prune_no_options_shows_count_and_errors(tmp_path, capsys) -> None:
+    db = tmp_path / "cache.db"
+    _seed(db, n=3)
+    rc = main(["cache", "prune", "--db", str(db)])
+    assert rc == 1
+    out = capsys.readouterr().out
+    assert "3" in out
+
+
+def test_cache_prune_no_options_missing_db(tmp_path, capsys) -> None:
+    db = tmp_path / "missing.db"
+    rc = main(["cache", "prune", "--db", str(db)])
+    assert rc == 0
+    assert "空" in capsys.readouterr().out
+
+
+def test_cache_prune_keep_latest_force(tmp_path, capsys) -> None:
+    db = tmp_path / "cache.db"
+    _seed(db, n=5)
+    rc = main(["cache", "prune", "--keep-latest", "2", "--force", "--db", str(db)])
+    assert rc == 0
+    assert "3 件削除" in capsys.readouterr().out
+    assert KernelRepository(db).count() == 2
+
+
+def test_cache_prune_before_force(tmp_path, capsys) -> None:
+    db = tmp_path / "cache.db"
+    _seed(db, n=3)
+    rc = main(["cache", "prune", "--before", "2099-01-01", "--force", "--db", str(db)])
+    assert rc == 0
+    assert "3 件削除" in capsys.readouterr().out
+    assert KernelRepository(db).count() == 0
+
+
+def test_cache_prune_no_target_prints_message(tmp_path, capsys) -> None:
+    db = tmp_path / "cache.db"
+    _seed(db, n=2)
+    rc = main(["cache", "prune", "--keep-latest", "100", "--force", "--db", str(db)])
+    assert rc == 0
+    assert "削除対象" in capsys.readouterr().out
+    assert KernelRepository(db).count() == 2
+
+
+def test_cache_prune_invalid_date_errors(tmp_path, capsys) -> None:
+    db = tmp_path / "cache.db"
+    rc = main(["cache", "prune", "--before", "not-a-date", "--db", str(db)])
+    assert rc == 1
+    assert "エラー" in capsys.readouterr().out
+
+
+def test_cache_prune_prompt_aborts(tmp_path, capsys, monkeypatch) -> None:
+    db = tmp_path / "cache.db"
+    _seed(db, n=3)
+    monkeypatch.setattr("builtins.input", lambda _: "n")
+    rc = main(["cache", "prune", "--keep-latest", "1", "--db", str(db)])
+    assert rc == 0
+    assert "中止" in capsys.readouterr().out
+    assert KernelRepository(db).count() == 3
+
+
+def test_cache_prune_does_not_create_db(tmp_path, capsys) -> None:
+    db = tmp_path / "no" / "such" / "cache.db"
+    rc = main(["cache", "prune", "--keep-latest", "0", "--force", "--db", str(db)])
+    assert rc == 0
+    assert not db.exists()

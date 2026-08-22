@@ -4,6 +4,7 @@ import argparse
 import json
 import sys
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 
 from forge import __version__
@@ -30,6 +31,22 @@ def _build_parser() -> argparse.ArgumentParser:
     clear_p.add_argument("--force", action="store_true", help="確認プロンプトなしで削除")
     clear_p.add_argument("--db", default=DEFAULT_DB_PATH, help="キャッシュ DB のパス")
     clear_p.set_defaults(func=_cmd_clear)
+
+    prune_p = cache_sub.add_parser("prune", help="条件を指定して古いキャッシュを削除")
+    prune_p.add_argument(
+        "--before",
+        metavar="YYYY-MM-DD",
+        help="この日付より前に作成されたエントリを削除",
+    )
+    prune_p.add_argument(
+        "--keep-latest",
+        metavar="N",
+        type=int,
+        help="最新 N 件を残してそれ以外を削除",
+    )
+    prune_p.add_argument("--force", action="store_true", help="確認プロンプトなしで削除")
+    prune_p.add_argument("--db", default=DEFAULT_DB_PATH, help="キャッシュ DB のパス")
+    prune_p.set_defaults(func=_cmd_prune)
 
     return parser
 
@@ -151,6 +168,50 @@ def _cmd_clear(args: argparse.Namespace) -> int:
         return 1
     finally:
         repo.close()
+    print(f"{deleted} 件削除しました。")
+    return 0
+
+
+def _cmd_prune(args: argparse.Namespace) -> int:
+    from forge.cache.repository import KernelRepository
+
+    before_dt: datetime | None = None
+    if args.before is not None:
+        try:
+            before_dt = datetime.strptime(args.before, "%Y-%m-%d").replace(tzinfo=UTC)
+        except ValueError:
+            print(f"エラー: --before の日付形式が正しくありません: {args.before!r} (YYYY-MM-DD)")
+            return 1
+
+    keep_latest: int | None = args.keep_latest
+    if keep_latest is not None and keep_latest < 0:
+        print("エラー: --keep-latest には 0 以上の整数を指定してください。")
+        return 1
+
+    if before_dt is None and keep_latest is None:
+        if _db_missing(args.db):
+            print("キャッシュは空です。(DB 未作成)")
+            return 0
+        with KernelRepository(args.db) as repo:
+            n = repo.count()
+        print(
+            f"キャッシュ: {n} 件。削除するには --before または --keep-latest を指定してください。"
+        )
+        return 1
+
+    if _db_missing(args.db):
+        print("キャッシュは空です。(DB 未作成)")
+        return 0
+
+    with KernelRepository(args.db) as repo:
+        target = repo.prune(before=before_dt, keep_latest=keep_latest, dry_run=True)
+        if target == 0:
+            print("削除対象のエントリはありません。")
+            return 0
+        if not args.force and not _confirm(f"{target} 件を削除します。よろしいですか? [y/N] "):
+            print("中止しました。")
+            return 0
+        deleted = repo.prune(before=before_dt, keep_latest=keep_latest)
     print(f"{deleted} 件削除しました。")
     return 0
 
