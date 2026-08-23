@@ -23,6 +23,7 @@ class TestFnGraphHash:
         def rmsnorm_v2(x, w, eps):  # noqa: ARG001
             # different body
             import math
+
             return x * math.sqrt(1.0) * w
 
         assert _fn_graph_hash(rmsnorm_v1) != _fn_graph_hash(rmsnorm_v2)
@@ -59,6 +60,7 @@ class TestFnGraphHash:
         def make(n: int):
             def fn(x):
                 return x + n
+
             return fn
 
         f1 = make(1)
