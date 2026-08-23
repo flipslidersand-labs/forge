@@ -1,3 +1,9 @@
+## [1.12.0](https://github.com/flipslidersand-labs/forge/compare/v1.11.0...v1.12.0) (2026-08-23)
+
+### ✨ Features
+
+* **#189:** DiscordNotifier 完了通知に speedup/best_round/failed_rate を追加 ([#245](https://github.com/flipslidersand-labs/forge/issues/245)) ([ad0572f](https://github.com/flipslidersand-labs/forge/commit/ad0572f724433ea2c0c8c9be78c16cbfd82a6f87)), closes [#189](https://github.com/flipslidersand-labs/forge/issues/189) [#213](https://github.com/flipslidersand-labs/forge/issues/213) [#189](https://github.com/flipslidersand-labs/forge/issues/189) [#189](https://github.com/flipslidersand-labs/forge/issues/189)
+
 ## [1.11.0](https://github.com/flipslidersand-labs/forge/compare/v1.10.0...v1.11.0) (2026-08-23)
 
 ### ✨ Features
