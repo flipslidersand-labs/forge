@@ -9,11 +9,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-_log = logging.getLogger("forge.cache")
-
 from forge.benchmark.statistics import BenchmarkResultDict
 
 from .key import CacheKey
+
+_log = logging.getLogger("forge.cache")
 
 # CLI (forge.cli) と KernelRepository が共有する既定 DB パスの単一定義。
 # FORGE_DB_PATH 環境変数でオーバーライド可能。

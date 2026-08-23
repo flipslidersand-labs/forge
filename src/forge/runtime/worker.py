@@ -16,9 +16,9 @@ import sys
 from dataclasses import dataclass, field
 from typing import Any
 
-_log = logging.getLogger("forge.runtime")
-
 from forge.benchmark.statistics import BenchmarkResult
+
+_log = logging.getLogger("forge.runtime")
 
 
 @dataclass
