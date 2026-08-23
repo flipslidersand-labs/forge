@@ -1,3 +1,9 @@
+## [1.15.0](https://github.com/flipslidersand-labs/forge/compare/v1.14.0...v1.15.0) (2026-08-23)
+
+### ✨ Features
+
+* **#215:** forge.prewarm() — デプロイ前キャッシュ事前生成 API ([#251](https://github.com/flipslidersand-labs/forge/issues/251)) ([5a4305a](https://github.com/flipslidersand-labs/forge/commit/5a4305affcce57b9ac0eaa5f7d9caae6f6983933)), closes [#215](https://github.com/flipslidersand-labs/forge/issues/215)
+
 ## [1.14.0](https://github.com/flipslidersand-labs/forge/compare/v1.13.0...v1.14.0) (2026-08-23)
 
 ### ✨ Features
