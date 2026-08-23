@@ -118,7 +118,7 @@ class TestSearchSpace:
 
     def test_no_duplicates(self) -> None:
         params = list(SearchSpace().enumerate(_linear_spec(), "8.9"))
-        keys = [(p.block_size, p.num_warps, p.num_stages, p.acc_dtype) for p in params]
+        keys = [(p.block_size, p.block_k, p.num_warps, p.num_stages, p.acc_dtype) for p in params]
         assert len(keys) == len(set(keys))
 
     def test_block_sizes_are_gemm_output_blocks(self) -> None:
