@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sqlite3
 import threading
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+
+_log = logging.getLogger("forge.cache")
 
 from forge.benchmark.statistics import BenchmarkResultDict
 
@@ -105,7 +108,9 @@ class KernelRepository:
                 (key.digest(),),
             ).fetchone()
         if row is None:
+            _log.debug("cache miss key=%s", key.digest()[:8])
             return None
+        _log.debug("cache hit key=%s", key.digest()[:8])
         return CachedKernel(
             cache_key=key,
             params=json.loads(row[1]),
@@ -116,6 +121,7 @@ class KernelRepository:
         )
 
     def put(self, key: CacheKey, kernel: CachedKernel) -> None:
+        _log.debug("cache write key=%s", key.digest()[:8])
         with self._lock:
             self.conn.execute(
                 "INSERT OR REPLACE INTO kernels "
