@@ -1,3 +1,9 @@
+## [1.17.1](https://github.com/flipslidersand-labs/forge/compare/v1.17.0...v1.17.1) (2026-08-23)
+
+### 🐛 Bug Fixes
+
+* **lint:** E402/E501 master hotfix — _log を import 後に移動 ([#259](https://github.com/flipslidersand-labs/forge/issues/259)) ([b1f790d](https://github.com/flipslidersand-labs/forge/commit/b1f790dd23f4aedb776f62cc0d000728745e281d)), closes [#243](https://github.com/flipslidersand-labs/forge/issues/243)
+
 ## [1.17.0](https://github.com/flipslidersand-labs/forge/compare/v1.16.1...v1.17.0) (2026-08-23)
 
 ### ✨ Features
