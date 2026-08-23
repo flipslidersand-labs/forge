@@ -245,6 +245,9 @@ class Orchestrator:
         num_candidates: int,
         baseline_us: float | None = None,
         notify: bool = False,
+        speedup: float | None = None,
+        best_round: int | None = None,
+        failed_count: int = 0,
     ) -> None:
         """ベスト候補のキャッシュ書き込みと Discord 通知を行う。"""
         if best_params is not None and best_bench is not None:
@@ -264,11 +267,15 @@ class Orchestrator:
             _log.info("cached best op=%s median=%.1fus %s", ctx.spec.op_type, best_bench.median_us, best_params)
             if notify:
                 duration_seconds = time.time() - ctx.start_time
+                failed_rate = failed_count / num_candidates if num_candidates > 0 else None
                 self.notifier.send_optimization_complete(
                     op_name=ctx.spec.op_type,
                     best_time=best_bench.median_us / 1000.0,  # Convert us to ms
                     num_candidates=num_candidates,
                     duration_seconds=duration_seconds,
+                    speedup=speedup,
+                    best_round=best_round,
+                    failed_rate=failed_rate,
                 )
         elif notify:
             if num_candidates > 0:
@@ -300,7 +307,14 @@ class Orchestrator:
             self._explore_candidates(spec, ctx, candidates)
         )
 
-        self._persist_result(ctx, best_params, best_bench, len(candidates), baseline_bench)
+        failed_count = sum(1 for e in experiments if not e.success)
+        speedup: float | None = None
+        if best_bench and baseline_bench and best_bench.median_us > 0:
+            speedup = baseline_bench.median_us / best_bench.median_us
+        self._persist_result(
+            ctx, best_params, best_bench, len(candidates), baseline_bench,
+            failed_count=failed_count, speedup=speedup,
+        )
 
         return SearchResult(
             spec=spec,
@@ -408,6 +422,8 @@ class Orchestrator:
         best_bench: BenchmarkResult | None,
         num_candidates: int,
         baseline_bench: BenchmarkResult | None,
+        failed_count: int = 0,
+        speedup: float | None = None,
     ) -> None:
         """最良候補をキャッシュに永続化。"""
         self._finalize(
@@ -417,6 +433,8 @@ class Orchestrator:
             num_candidates=num_candidates,
             baseline_us=baseline_bench.median_us if baseline_bench else None,
             notify=True,
+            speedup=speedup,
+            failed_count=failed_count,
         )
 
     def optimize_rounds(
@@ -522,12 +540,25 @@ class Orchestrator:
             round_start_time = time.time()
 
         total = sum(len(r.experiments) for r in rounds)
+        all_exps_for_rounds = [e for r in rounds for e in r.experiments]
+        round_failed_count = sum(1 for e in all_exps_for_rounds if not e.success)
+        round_speedup: float | None = None
+        if overall_best_bench and baseline_bench and overall_best_bench.median_us > 0:
+            round_speedup = baseline_bench.median_us / overall_best_bench.median_us
+        best_round_num: int | None = None
+        for r in rounds:
+            if r.best_params == overall_best_params and overall_best_params is not None:
+                best_round_num = r.round_num
+                break
         self._finalize(
             ctx,
             overall_best_params,
             overall_best_bench,
             num_candidates=total,
             baseline_us=baseline_bench.median_us if baseline_bench else None,
+            speedup=round_speedup,
+            best_round=best_round_num,
+            failed_count=round_failed_count,
         )
 
         all_exps = [e for r in rounds for e in r.experiments]
@@ -664,6 +695,10 @@ class Orchestrator:
                     exp.is_best = True
                     break
 
+        sha_failed_count = sum(1 for e in all_experiments if not e.success)
+        sha_speedup: float | None = None
+        if best_bench and baseline_bench and best_bench.median_us > 0:
+            sha_speedup = baseline_bench.median_us / best_bench.median_us
         self._finalize(
             ctx,
             best_params,
@@ -671,6 +706,8 @@ class Orchestrator:
             num_candidates=len(all_experiments),
             baseline_us=baseline_bench.median_us if baseline_bench else None,
             notify=True,
+            speedup=sha_speedup,
+            failed_count=sha_failed_count,
         )
 
         return SearchResult(

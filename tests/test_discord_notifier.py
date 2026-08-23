@@ -137,3 +137,55 @@ class TestUnexpectedExceptions:
         with patch("forge.notifiers.discord.datetime") as mock_dt:
             mock_dt.now.side_effect = RuntimeError("clock unavailable")
             assert n.send_cache_hit("rmsnorm") is False
+
+
+class TestOptimizationCompleteNewFields:
+    """send_optimization_complete の新パラメータ（speedup/best_round/failed_rate）を検証。"""
+
+    def _capture_payload(self, n, **kwargs):
+        """urlopen を mock して送信ペイロードを捕捉する。"""
+        captured = {}
+
+        def _fake_urlopen(req, timeout=None):
+            import json
+
+            captured["payload"] = json.loads(req.data.decode())
+            mock_resp = type("R", (), {"status": 204, "__enter__": lambda s: s, "__exit__": lambda s, *a: None})()
+            return mock_resp
+
+        with patch("forge.notifiers.discord.urlopen", side_effect=_fake_urlopen):
+            n.send_optimization_complete("rmsnorm", 1.0, 10, 2.0, **kwargs)
+        return captured.get("payload", {})
+
+    def test_speedup_field_in_embed(self):
+        n = _configured()
+        payload = self._capture_payload(n, speedup=4.25)
+        fields = payload["embeds"][0]["fields"]
+        names = {f["name"]: f["value"] for f in fields}
+        assert "Speedup" in names
+        assert names["Speedup"] == "4.25×"
+
+    def test_best_round_field_in_embed(self):
+        n = _configured()
+        payload = self._capture_payload(n, best_round=2)
+        fields = payload["embeds"][0]["fields"]
+        names = {f["name"]: f["value"] for f in fields}
+        assert "Best Round" in names
+        assert names["Best Round"] == "2"
+
+    def test_failed_rate_field_in_embed(self):
+        n = _configured()
+        payload = self._capture_payload(n, failed_rate=0.2)
+        fields = payload["embeds"][0]["fields"]
+        names = {f["name"]: f["value"] for f in fields}
+        assert "Fail Rate" in names
+        assert names["Fail Rate"] == "20%"
+
+    def test_none_fields_omitted(self):
+        n = _configured()
+        payload = self._capture_payload(n)
+        fields = payload["embeds"][0]["fields"]
+        field_names = {f["name"] for f in fields}
+        assert "Speedup" not in field_names
+        assert "Best Round" not in field_names
+        assert "Fail Rate" not in field_names
