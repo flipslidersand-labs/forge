@@ -378,3 +378,97 @@ class TestMultiRoundResultMetrics:
         )
         assert r.failed_count == 0
         assert r.incorrect_count == 0
+
+
+class TestProgressEvent:
+    """ProgressEvent dataclass とコールバック dispatch のユニットテスト。"""
+
+    def test_event_fields(self):
+        from forge.orchestrator import ProgressEvent
+
+        e = ProgressEvent(kind="candidate_ok", label="ok", params=None, median_us=50.0, speedup=2.0)
+        assert e.kind == "candidate_ok"
+        assert e.label == "ok"
+        assert e.median_us == 50.0
+        assert e.speedup == 2.0
+
+    def test_typed_callback_receives_event(self):
+        """progress=Callable[[ProgressEvent], None] はイベントをそのまま受け取る。"""
+        from forge.orchestrator import Orchestrator, ProgressEvent
+
+        events: list[ProgressEvent] = []
+        orch = Orchestrator(progress=lambda e: events.append(e))
+        orch._emit(ProgressEvent(kind="info", label="hello"))
+        assert len(events) == 1
+        assert events[0].kind == "info"
+
+    def test_string_callback_receives_label(self):
+        """progress=Callable[[str], None] は label を受け取る（後方互換）。"""
+        from forge.orchestrator import Orchestrator, ProgressEvent
+
+        msgs: list[str] = []
+
+        def on_str(msg: str) -> None:
+            msgs.append(msg)
+
+        import warnings
+        with warnings.catch_warnings(record=True):
+            warnings.simplefilter("always")
+            orch = Orchestrator(progress=on_str)
+        orch._emit(ProgressEvent(kind="info", label="hello"))
+        assert msgs == ["hello"]
+
+    def test_none_progress_is_noop(self):
+        """progress=None でもエラーにならない。"""
+        from forge.orchestrator import Orchestrator, ProgressEvent
+
+        orch = Orchestrator(progress=None)
+        orch._emit(ProgressEvent(kind="info", label="x"))  # no exception
+
+    def test_worker_fail_emits_candidate_fail_event(self):
+        """_eval_one でワーカー失敗 → candidate_fail イベント。"""
+        import tempfile
+        from forge.orchestrator import Orchestrator, ProgressEvent
+
+        events: list[ProgressEvent] = []
+        with tempfile.TemporaryDirectory() as d:
+            orch = Orchestrator(
+                repo=KernelRepository(Path(d) / "c.db"),
+                progress=lambda e: events.append(e),
+            )
+            with patch("forge.orchestrator.generate", return_value="def k(): pass"):
+                with patch(
+                    "forge.orchestrator.run_in_worker",
+                    return_value=WorkerResult(success=False, error="crash"),
+                ):
+                    orch._eval_one(*_eval_args(orch))
+
+        fail_events = [e for e in events if e.kind == "candidate_fail"]
+        assert len(fail_events) == 1
+        assert "crash" in fail_events[0].label
+
+    def test_worker_success_emits_candidate_ok_event(self):
+        """_eval_one でワーカー成功 → candidate_ok イベント。"""
+        import tempfile
+        from forge.orchestrator import Orchestrator, ProgressEvent
+
+        events: list[ProgressEvent] = []
+        bench = _bench()
+        with tempfile.TemporaryDirectory() as d:
+            orch = Orchestrator(
+                repo=KernelRepository(Path(d) / "c.db"),
+                progress=lambda e: events.append(e),
+            )
+            with patch("forge.orchestrator.generate", return_value="def k(): pass"):
+                with patch(
+                    "forge.orchestrator.run_in_worker",
+                    return_value=WorkerResult(
+                        success=True, correct=True,
+                        candidate=bench, baseline=bench, baseline_name="ref",
+                    ),
+                ):
+                    orch._eval_one(*_eval_args(orch))
+
+        ok_events = [e for e in events if e.kind == "candidate_ok"]
+        assert len(ok_events) == 1
+        assert ok_events[0].median_us == bench.median_us

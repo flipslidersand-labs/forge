@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import inspect
 import logging
 import time
 import warnings
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 _log = logging.getLogger("forge.orchestrator")
 
@@ -30,6 +31,30 @@ from forge.validation.tolerance import get_tolerance
 
 if TYPE_CHECKING:
     from forge.search.llm_generator import LLMGenerator, TokenUsage
+
+
+@dataclass
+class ProgressEvent:
+    """構造化進捗イベント。Orchestrator の progress コールバックに渡される。
+
+    kind で種別を判別し、params / median_us / round_num / speedup で詳細を取得できる。
+    label は人間可読文字列（従来の progress 文字列と等価）。
+    """
+
+    kind: Literal[
+        "candidate_ok",
+        "candidate_fail",
+        "candidate_incorrect",
+        "cache_hit",
+        "round_done",
+        "search_done",
+        "info",
+    ]
+    label: str
+    params: SearchParams | None = None
+    median_us: float | None = None
+    round_num: int | None = None
+    speedup: float | None = None
 
 
 @dataclass
@@ -136,7 +161,7 @@ class Orchestrator:
         warmup: int = 25,
         repeat: int = 200,
         timeout_s: float = 60.0,
-        progress: Callable[[str], None] | None = None,
+        progress: Callable[[ProgressEvent], None] | Callable[[str], None] | None = None,
         measure_extended: bool = False,
         notifier: DiscordNotifier | None = None,
     ) -> None:
@@ -151,9 +176,49 @@ class Orchestrator:
         self.warmup = warmup
         self.repeat = repeat
         self.timeout_s = timeout_s
-        self._progress = progress or (lambda _msg: None)
+        self._event_handler = self._wrap_progress(progress)
         self.measure_extended = measure_extended
         self.notifier = notifier or DiscordNotifier()
+
+    @staticmethod
+    def _wrap_progress(
+        fn: Callable[[ProgressEvent], None] | Callable[[str], None] | None,
+    ) -> Callable[[ProgressEvent], None]:
+        """progress 引数を ProgressEvent → void に統一する。
+
+        - None: no-op
+        - Callable[[ProgressEvent], None]: そのまま使う
+        - Callable[[str], None]: event.label を渡すラッパー（後方互換、非推奨）
+        """
+        if fn is None:
+            return lambda _e: None
+        try:
+            sig = inspect.signature(fn)
+            params = list(sig.parameters.values())
+        except (ValueError, TypeError):
+            params = []
+        if params:
+            ann = params[0].annotation
+            if ann is str or ann == "str":
+                warnings.warn(
+                    "progress=Callable[[str], None] は非推奨です。"
+                    " Callable[[ProgressEvent], None] に変更してください。",
+                    DeprecationWarning,
+                    stacklevel=3,
+                )
+                str_fn: Callable[[str], None] = fn  # type: ignore[assignment]
+                return lambda e: str_fn(e.label)
+        return fn  # type: ignore[return-value]
+
+    def _progress(self, msg: str, *, kind: str = "info") -> None:
+        """内部文字列ベースの進捗通知（後方互換用）。ProgressEvent を wrap して送出する。"""
+        self._event_handler(
+            ProgressEvent(kind=kind, label=msg)  # type: ignore[arg-type]
+        )
+
+    def _emit(self, event: ProgressEvent) -> None:
+        """構造化 ProgressEvent を送出する。"""
+        self._event_handler(event)
 
     def close(self) -> None:
         if self._owns_repo:
@@ -404,12 +469,8 @@ class Orchestrator:
                 if improved:
                     best_params, best_bench = params, cand_bench
                     exp.is_best = True
-                    self._progress(
-                        f"{label}/{params.acc_dtype} -> {cand_bench.median_us:.1f}us BEST"
-                    )
                     _log.debug("new best %.1fus %s", cand_bench.median_us, params)
                 else:
-                    self._progress(f"{label}/{params.acc_dtype} -> {cand_bench.median_us:.1f}us")
                     _log.debug("candidate %.1fus %s", cand_bench.median_us, params)
             experiments.append(exp)
 
@@ -758,15 +819,27 @@ class Orchestrator:
         )
 
         if not wr.success:
-            self._progress(f"{label} FAIL: {wr.error}")
+            self._emit(ProgressEvent(kind="candidate_fail", label=f"{label} FAIL: {wr.error}", params=params))
             _log.warning("FAIL %s: %s", label, wr.error)
             return ExperimentResult(params, False, False, None, wr.error), None, None, None
         if not wr.correct:
-            self._progress(f"{label} INCORRECT")
+            self._emit(ProgressEvent(kind="candidate_incorrect", label=f"{label} INCORRECT", params=params))
             _log.debug("INCORRECT %s", label)
             return ExperimentResult(params, True, False, None, "incorrect"), None, None, None
 
         assert wr.candidate is not None and wr.baseline is not None
+        speedup: float | None = None
+        if wr.baseline.median_us > 0 and wr.candidate.median_us > 0:
+            speedup = wr.baseline.median_us / wr.candidate.median_us
+        self._emit(
+            ProgressEvent(
+                kind="candidate_ok",
+                label=f"{label}/{params.acc_dtype} -> {wr.candidate.median_us:.1f}us",
+                params=params,
+                median_us=wr.candidate.median_us,
+                speedup=speedup,
+            )
+        )
         return (
             ExperimentResult(params, True, True, wr.candidate.median_us, None),
             wr.candidate,
