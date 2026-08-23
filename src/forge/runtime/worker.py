@@ -10,10 +10,13 @@ BenchmarkResult や ExtendedBaselineResult に変換する。
 from __future__ import annotations
 
 import json
+import logging
 import subprocess
 import sys
 from dataclasses import dataclass, field
 from typing import Any
+
+_log = logging.getLogger("forge.runtime")
 
 from forge.benchmark.statistics import BenchmarkResult
 
@@ -124,22 +127,26 @@ def run_in_worker(
             timeout=timeout_s,
         )
     except subprocess.TimeoutExpired:
+        _log.warning("worker timeout op=%s after %.1fs", op_type, timeout_s)
         return WorkerResult(success=False, error=f"timeout after {timeout_s}s")
 
     if proc.returncode != 0:
         stderr = proc.stderr.strip()
         detail = stderr[:4096] if stderr else f"exit {proc.returncode}"
+        _log.warning("worker crashed op=%s rc=%d", op_type, proc.returncode)
         return WorkerResult(success=False, error=f"worker crashed: {detail}")
 
     stdout = proc.stdout.strip()
     if not stdout:
         stderr = proc.stderr.strip()
         detail = stderr[:4096] if stderr else "empty stdout"
+        _log.warning("bad worker output op=%s: empty stdout", op_type)
         return WorkerResult(success=False, error=f"bad worker output: {detail}")
     try:
         return WorkerResult.from_dict(json.loads(stdout.splitlines()[-1]))
     except (json.JSONDecodeError, IndexError, KeyError) as exc:
         snippet = stdout[:4096]
+        _log.warning("bad worker output op=%s: %r", op_type, exc)
         return WorkerResult(success=False, error=f"bad worker output: {exc!r} stdout={snippet!r}")
 
 

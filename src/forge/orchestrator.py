@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 import time
 import warnings
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
+
+_log = logging.getLogger("forge.orchestrator")
 
 from forge.benchmark.statistics import BenchmarkResult, is_improvement
 from forge.cache.key import CacheKey
@@ -49,6 +52,9 @@ class SearchResult:
     baseline_name: str | None
     experiments: list[ExperimentResult]
     extended_baselines: list[ExtendedBaselineResult] = field(default_factory=list)
+    total_time_s: float = field(default=0.0)
+    failed_count: int = field(default=0)
+    incorrect_count: int = field(default=0)
 
     @property
     def speedup(self) -> float | None:
@@ -81,6 +87,8 @@ class MultiRoundResult:
     total_candidates_evaluated: int = field(default=0)
     extended_baselines: list[ExtendedBaselineResult] = field(default_factory=list)
     total_benchmark_time_s: float = field(default=0.0)  # コスト計測用
+    failed_count: int = field(default=0)
+    incorrect_count: int = field(default=0)
 
     @property
     def speedup(self) -> float | None:
@@ -173,6 +181,7 @@ class Orchestrator:
 
         if use_cache and (cached := self.repo.get(key)) is not None:
             self._progress(f"cache HIT: {cached.params}")
+            _log.info("cache HIT op=%s", spec.op_type)
             ctx = _SearchContext(
                 spec=spec,
                 key=key,
@@ -184,6 +193,7 @@ class Orchestrator:
             )
             return ctx, cached
 
+        _log.debug("cache MISS op=%s", spec.op_type)
         bench_input = primary_input(spec)
         cases = correctness_cases(spec)
         tol = get_tolerance(spec.op_type).to_dict()
@@ -202,10 +212,17 @@ class Orchestrator:
             for eb in extended:
                 if eb.failed:
                     self._progress(f"  extended: {eb.name} FAILED: {eb.error}")
+                    _log.warning("extended baseline FAILED name=%s error=%s", eb.name, eb.error)
                 else:
                     self._progress(
                         f"  extended: {eb.name} median={eb.benchmark.median_us:.1f}µs "
                         f"p95={eb.benchmark.p95_us:.1f}µs compile={eb.compile_time_s:.1f}s"
+                    )
+                    _log.debug(
+                        "extended baseline name=%s median=%.1fus compile=%.1fs",
+                        eb.name,
+                        eb.benchmark.median_us,
+                        eb.compile_time_s,
                     )
 
         ctx = _SearchContext(
@@ -244,6 +261,7 @@ class Orchestrator:
                 ),
             )
             self._progress(f"cached best: {best_params} ({best_bench.median_us:.1f}us)")
+            _log.info("cached best op=%s median=%.1fus %s", ctx.spec.op_type, best_bench.median_us, best_params)
             if notify:
                 duration_seconds = time.time() - ctx.start_time
                 self.notifier.send_optimization_complete(
@@ -259,6 +277,7 @@ class Orchestrator:
                 )
             else:
                 error_msg = "No candidates to explore"
+            _log.warning("no best found op=%s: %s", ctx.spec.op_type, error_msg)
             self.notifier.send_optimization_error(
                 op_name=ctx.spec.op_type,
                 error_message=error_msg,
@@ -292,6 +311,9 @@ class Orchestrator:
             baseline_name=baseline_name,
             experiments=experiments,
             extended_baselines=ctx.extended,
+            total_time_s=time.time() - ctx.start_time,
+            failed_count=sum(1 for e in experiments if not e.success),
+            incorrect_count=sum(1 for e in experiments if e.success and not e.correct),
         )
 
     def _check_cache(
@@ -326,6 +348,12 @@ class Orchestrator:
         search = search or GridSearch()
         candidates = search.generate(spec, ctx.key.compute_capability, budget=budget)
         self._progress(f"searching {len(candidates)} candidates (cc {ctx.key.compute_capability})")
+        _log.info(
+            "search start op=%s candidates=%d cc=%s",
+            spec.op_type,
+            len(candidates),
+            ctx.key.compute_capability,
+        )
         return candidates
 
     def _explore_candidates(
@@ -365,8 +393,10 @@ class Orchestrator:
                     self._progress(
                         f"{label}/{params.acc_dtype} -> {cand_bench.median_us:.1f}us BEST"
                     )
+                    _log.debug("new best %.1fus %s", cand_bench.median_us, params)
                 else:
                     self._progress(f"{label}/{params.acc_dtype} -> {cand_bench.median_us:.1f}us")
+                    _log.debug("candidate %.1fus %s", cand_bench.median_us, params)
             experiments.append(exp)
 
         return experiments, best_params, best_bench, baseline_bench, baseline_name
@@ -500,6 +530,7 @@ class Orchestrator:
             baseline_us=baseline_bench.median_us if baseline_bench else None,
         )
 
+        all_exps = [e for r in rounds for e in r.experiments]
         return MultiRoundResult(
             spec=spec,
             rounds=rounds,
@@ -511,6 +542,8 @@ class Orchestrator:
             total_candidates_evaluated=total,
             extended_baselines=ctx.extended,
             total_benchmark_time_s=total_benchmark_time_s,
+            failed_count=sum(1 for e in all_exps if not e.success),
+            incorrect_count=sum(1 for e in all_exps if e.success and not e.correct),
         )
 
     def optimize_sha(
@@ -649,6 +682,9 @@ class Orchestrator:
             baseline_name=baseline_name,
             experiments=all_experiments,
             extended_baselines=ctx.extended,
+            total_time_s=time.time() - ctx.start_time,
+            failed_count=sum(1 for e in all_experiments if not e.success),
+            incorrect_count=sum(1 for e in all_experiments if e.success and not e.correct),
         )
 
     def _eval_one(
@@ -667,6 +703,7 @@ class Orchestrator:
             code = generate(spec, params)
         except ValueError as e:
             self._progress(f"{label} SKIP: {e}")
+            _log.debug("SKIP %s: %s", label, e)
             return ExperimentResult(params, False, False, None, str(e)), None, None, None
 
         wr: WorkerResult = run_in_worker(
@@ -685,9 +722,11 @@ class Orchestrator:
 
         if not wr.success:
             self._progress(f"{label} FAIL: {wr.error}")
+            _log.warning("FAIL %s: %s", label, wr.error)
             return ExperimentResult(params, False, False, None, wr.error), None, None, None
         if not wr.correct:
             self._progress(f"{label} INCORRECT")
+            _log.debug("INCORRECT %s", label)
             return ExperimentResult(params, True, False, None, "incorrect"), None, None, None
 
         assert wr.candidate is not None and wr.baseline is not None

@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import functools
 import inspect
+import logging
 from collections.abc import Callable
 from typing import Any
+
+_log = logging.getLogger("forge.decorator")
 
 from forge.cache.repository import KernelRepository
 from forge.codegen.triton_codegen import generate
@@ -70,6 +73,7 @@ def optimize(
             # GPU テンソルが無い / op 判定不能 → eager
             op_type = _resolve_op_type()
             if not tensors or op_type is None or not tensors[0].is_cuda:
+                _log.debug("eager fallback fn=%s op=%s", fn.__qualname__, op_type)
                 return fn(*args, **kwargs)
 
             key = tuple((tuple(t.shape), str(t.dtype)) for t in tensors)
@@ -79,8 +83,9 @@ def optimize(
                     baseline_us = _time_eager(fn, args, kwargs)
                     search_cost_s = budget * per_candidate_s
                     decision = should_run_search(min_invocations, search_cost_s, baseline_us)
-                    _log = progress or (lambda _m: None)
-                    _log(f"adoption: {decision.reason}")
+                    _progress_fn = progress or (lambda _m: None)
+                    _progress_fn(f"adoption: {decision.reason}")
+                    _log.info("adoption fn=%s: %s", fn.__qualname__, decision.reason)
                     if not decision.should_search:
                         compiled[key] = None
                     else:
@@ -141,6 +146,7 @@ def _build(
         constraints=(),
     )
 
+    _log.info("build start op=%s", op_type)
     orch = Orchestrator(
         repo=repo,
         min_speedup=min_speedup,
@@ -149,7 +155,9 @@ def _build(
     )
     result = orch.optimize(spec, budget=budget, search=search)
     if result.best_params is None:
+        _log.info("build no best op=%s — falling back to eager", op_type)
         return None
+    _log.info("build complete op=%s best=%s", op_type, result.best_params)
     code = generate(spec, result.best_params)
     return load_kernel_fn(code)
 
