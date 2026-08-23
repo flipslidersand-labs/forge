@@ -1,3 +1,9 @@
+## [1.13.0](https://github.com/flipslidersand-labs/forge/compare/v1.12.0...v1.13.0) (2026-08-23)
+
+### ✨ Features
+
+* **#190:** ProgressEvent 型を導入し progress コールバックを構造化イベントに変更 ([#247](https://github.com/flipslidersand-labs/forge/issues/247)) ([71d641b](https://github.com/flipslidersand-labs/forge/commit/71d641bb5bafe5127cd8c6f8d59c007bab6bf2fc)), closes [#190](https://github.com/flipslidersand-labs/forge/issues/190) [#190](https://github.com/flipslidersand-labs/forge/issues/190)
+
 ## [1.12.0](https://github.com/flipslidersand-labs/forge/compare/v1.11.0...v1.12.0) (2026-08-23)
 
 ### ✨ Features
