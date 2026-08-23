@@ -8,21 +8,19 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-_log = logging.getLogger("forge.orchestrator")
-
 from forge.benchmark.statistics import BenchmarkResult, is_improvement
 from forge.cache.key import CacheKey
 from forge.cache.repository import CachedKernel, KernelRepository
 from forge.codegen.triton_codegen import generate
 from forge.ir.kernel_spec import KernelSpec
 from forge.notifiers.discord import DiscordNotifier
+from forge.progress import ProgressEvent, make_progress_callback
 from forge.runtime.worker import (
     ExtendedBaselineResult,
     WorkerResult,
     run_extended_baseline_in_worker,
     run_in_worker,
 )
-from forge.progress import ProgressEvent, make_progress_callback
 from forge.search.candidate import CandidateGenerator, HistoryEntry
 from forge.search.grid import GridSearch
 from forge.search.params import SearchParams
@@ -31,6 +29,8 @@ from forge.validation.tolerance import get_tolerance
 
 if TYPE_CHECKING:
     from forge.search.llm_generator import LLMGenerator, TokenUsage
+
+_log = logging.getLogger("forge.orchestrator")
 
 
 @dataclass
@@ -202,7 +202,10 @@ class Orchestrator:
 
         extended: list[ExtendedBaselineResult] = []
         if self.measure_extended:
-            self._progress(ProgressEvent(kind="search_start", label="measuring extended baselines (torch.compile) …"))
+            self._progress(ProgressEvent(
+                kind="search_start",
+                label="measuring extended baselines (torch.compile) …",
+            ))
             extended = run_extended_baseline_in_worker(
                 spec.op_type,
                 bench_input,
@@ -221,7 +224,9 @@ class Orchestrator:
                         f"  extended: {eb.name} median={eb.benchmark.median_us:.1f}µs "
                         f"p95={eb.benchmark.p95_us:.1f}µs compile={eb.compile_time_s:.1f}s"
                     )
-                    self._progress(ProgressEvent(kind="candidate_ok", label=eb_label, median_us=eb.benchmark.median_us))
+                    self._progress(ProgressEvent(
+                        kind="candidate_ok", label=eb_label, median_us=eb.benchmark.median_us
+                    ))
                     _log.debug(
                         "extended baseline name=%s median=%.1fus compile=%.1fs",
                         eb.name,
@@ -275,7 +280,10 @@ class Orchestrator:
                 median_us=best_bench.median_us,
                 speedup=speedup,
             ))
-            _log.info("cached best op=%s median=%.1fus %s", ctx.spec.op_type, best_bench.median_us, best_params)
+            _log.info(
+                "cached best op=%s median=%.1fus %s",
+                ctx.spec.op_type, best_bench.median_us, best_params,
+            )
             if notify:
                 duration_seconds = time.time() - ctx.start_time
                 failed_rate = failed_count / num_candidates if num_candidates > 0 else None
@@ -417,11 +425,17 @@ class Orchestrator:
                     best_params, best_bench = params, cand_bench
                     exp.is_best = True
                     ok_label = f"{label}/{params.acc_dtype} -> {cand_bench.median_us:.1f}us BEST"
-                    self._progress(ProgressEvent(kind="candidate_ok", label=ok_label, params=params, median_us=cand_bench.median_us))
+                    self._progress(ProgressEvent(
+                        kind="candidate_ok", label=ok_label, params=params,
+                        median_us=cand_bench.median_us,
+                    ))
                     _log.debug("new best %.1fus %s", cand_bench.median_us, params)
                 else:
                     ok_label = f"{label}/{params.acc_dtype} -> {cand_bench.median_us:.1f}us"
-                    self._progress(ProgressEvent(kind="candidate_ok", label=ok_label, params=params, median_us=cand_bench.median_us))
+                    self._progress(ProgressEvent(
+                        kind="candidate_ok", label=ok_label, params=params,
+                        median_us=cand_bench.median_us,
+                    ))
                     _log.debug("candidate %.1fus %s", cand_bench.median_us, params)
             experiments.append(exp)
 
@@ -492,7 +506,9 @@ class Orchestrator:
                 f"[round {round_num}/{n_rounds}] generating {candidates_per_round} candidates "
                 f"(history={len(history)})"
             )
-            self._progress(ProgressEvent(kind="search_start", label=rnd_label, round_num=round_num))
+            self._progress(ProgressEvent(
+                kind="search_start", label=rnd_label, round_num=round_num,
+            ))
             candidates = llm.generate(
                 spec,
                 ctx.key.compute_capability,
@@ -506,7 +522,11 @@ class Orchestrator:
 
             for i, params in enumerate(candidates, 1):
                 if params in seen_params:
-                    self._progress(ProgressEvent(kind="candidate_fail", label=f"  [r{round_num}.{i}] skip duplicate", params=params))
+                    self._progress(ProgressEvent(
+                        kind="candidate_fail",
+                        label=f"  [r{round_num}.{i}] skip duplicate",
+                        params=params,
+                    ))
                     continue
                 seen_params.add(params)
                 label = f"  [r{round_num}.{i}] {params.block_size}/{params.num_warps}"
@@ -526,7 +546,13 @@ class Orchestrator:
                     if improved:
                         overall_best_params, overall_best_bench = params, cand_bench
                         exp.is_best = True
-                        self._progress(ProgressEvent(kind="candidate_ok", label=f"  [r{round_num}.{i}] {cand_bench.median_us:.1f}us BEST", params=params, median_us=cand_bench.median_us, round_num=round_num))
+                        self._progress(ProgressEvent(
+                            kind="candidate_ok",
+                            label=f"  [r{round_num}.{i}] {cand_bench.median_us:.1f}us BEST",
+                            params=params,
+                            median_us=cand_bench.median_us,
+                            round_num=round_num,
+                        ))
                     if round_best_us is None or cand_bench.median_us < round_best_us:
                         round_best_params = params
                         round_best_us = cand_bench.median_us
@@ -550,7 +576,10 @@ class Orchestrator:
                 if round_best_us is not None
                 else f"  round {round_num} done: no valid candidates (time={round_elapsed:.1f}s)"
             )
-            self._progress(ProgressEvent(kind="round_done", label=rd_label, round_num=round_num, median_us=round_best_us, params=round_best_params))
+            self._progress(ProgressEvent(
+                kind="round_done", label=rd_label, round_num=round_num,
+                median_us=round_best_us, params=round_best_params,
+            ))
             round_start_time = time.time()
 
         total = sum(len(r.experiments) for r in rounds)
@@ -657,7 +686,9 @@ class Orchestrator:
                 f"  [SHA round {round_num}/{halving_rounds}] {len(surviving)} candidates "
                 f"warmup={warmup} repeat={repeat}"
             )
-            self._progress(ProgressEvent(kind="search_start", label=sha_rnd_label, round_num=round_num))
+            self._progress(ProgressEvent(
+                kind="search_start", label=sha_rnd_label, round_num=round_num,
+            ))
 
             round_results = []
             for i, params in enumerate(surviving, 1):
@@ -680,7 +711,11 @@ class Orchestrator:
                     round_results.append((params, cand_bench))
 
             if not round_results:
-                self._progress(ProgressEvent(kind="round_done", label=f"  [SHA round {round_num}] no valid candidates — stopping", round_num=round_num))
+                self._progress(ProgressEvent(
+                    kind="round_done",
+                    label=f"  [SHA round {round_num}] no valid candidates — stopping",
+                    round_num=round_num,
+                ))
                 break
 
             # 上位 50% に絞る（最終ラウンドは絞らない）
@@ -692,7 +727,10 @@ class Orchestrator:
                     f"  [SHA round {round_num}] keeping top {keep}/{len(round_results)}: "
                     f"best={round_results[0][1].median_us:.1f}us"
                 )
-                self._progress(ProgressEvent(kind="round_done", label=keep_label, round_num=round_num, median_us=round_results[0][1].median_us))
+                self._progress(ProgressEvent(
+                    kind="round_done", label=keep_label, round_num=round_num,
+                    median_us=round_results[0][1].median_us,
+                ))
             else:
                 surviving = [p for p, _ in round_results]
 
@@ -782,7 +820,9 @@ class Orchestrator:
             return ExperimentResult(params, False, False, None, wr.error), None, None, None
         if not wr.correct:
             incorr_label = f"{label} INCORRECT"
-            self._progress(ProgressEvent(kind="candidate_incorrect", label=incorr_label, params=params))
+            self._progress(ProgressEvent(
+                kind="candidate_incorrect", label=incorr_label, params=params,
+            ))
             _log.debug("INCORRECT %s", label)
             return ExperimentResult(params, True, False, None, "incorrect"), None, None, None
 
