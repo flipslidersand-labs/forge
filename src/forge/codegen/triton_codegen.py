@@ -98,6 +98,9 @@ def generate(spec: KernelSpec, params: SearchParams) -> str:
     if spec.op_type in OP_REGISTRY:
         render_kwargs.update(OP_REGISTRY[spec.op_type].render_extra_kwargs_fn(spec))
 
+    # params.block_k always overrides spec.constants["block_k"] — SearchParams is authoritative
+    render_kwargs["block_k"] = params.block_k
+
     return template.render(**render_kwargs)
 
 

@@ -40,6 +40,7 @@ class SearchParams:
     acc_dtype: str = "fp32"
     variant: str = "single_row"
     rows_per_program: int = 1
+    block_k: int = 32
 
     def __post_init__(self) -> None:
         if self.variant not in SUPPORTED_VARIANTS:
@@ -56,6 +57,8 @@ class SearchParams:
             raise ValueError(f"rows_per_program must be >= 1, got {self.rows_per_program}")
         if self.variant != "multi_row" and self.rows_per_program != 1:
             raise ValueError("rows_per_program > 1 is only valid for variant='multi_row'")
+        if self.block_k <= 0 or (self.block_k & (self.block_k - 1)) != 0:
+            raise ValueError(f"block_k must be a positive power of 2, got {self.block_k}")
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
