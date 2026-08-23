@@ -1,3 +1,9 @@
+## [1.9.2](https://github.com/flipslidersand-labs/forge/compare/v1.9.1...v1.9.2) (2026-08-23)
+
+### 🐛 Bug Fixes
+
+* **#206:** atexit → try/finally で /tmp 一時ファイルを即削除 ([#239](https://github.com/flipslidersand-labs/forge/issues/239)) ([c051b02](https://github.com/flipslidersand-labs/forge/commit/c051b021890d6305e6a871b40467f6b5d22161f2)), closes [#206](https://github.com/flipslidersand-labs/forge/issues/206) [#206](https://github.com/flipslidersand-labs/forge/issues/206)
+
 ## [1.9.1](https://github.com/flipslidersand-labs/forge/compare/v1.9.0...v1.9.1) (2026-08-23)
 
 ### 🐛 Bug Fixes
