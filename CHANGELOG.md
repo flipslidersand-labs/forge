@@ -1,3 +1,9 @@
+## [1.9.1](https://github.com/flipslidersand-labs/forge/compare/v1.9.0...v1.9.1) (2026-08-23)
+
+### 🐛 Bug Fixes
+
+* **dx:** pyproject.toml の project.urls を flipslidersand-labs/forge に修正 ([#200](https://github.com/flipslidersand-labs/forge/issues/200)) ([#238](https://github.com/flipslidersand-labs/forge/issues/238)) ([85a9367](https://github.com/flipslidersand-labs/forge/commit/85a9367961152f5fb938e00fdc56eeee910d0f30))
+
 ## [1.9.0](https://github.com/flipslidersand-labs/forge/compare/v1.8.0...v1.9.0) (2026-08-22)
 
 ### ✨ Features
