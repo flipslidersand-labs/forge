@@ -2,77 +2,65 @@
 
 from __future__ import annotations
 
+import tempfile
 from pathlib import Path
-from unittest.mock import patch
 
 _DUMMY_MODULE = """\
 def kernel_fn(*args, **kwargs):
     return None
 """
 
+_RAISE_MODULE = """\
+def kernel_fn(*args, **kwargs):
+    return None
+
+raise RuntimeError("module load error")
+"""
+
 
 def test_file_is_created_and_importable():
-    """load_kernel_fn が一時ファイルを作成し kernel_fn を返す。"""
+    """load_kernel_fn が kernel_fn を返す。"""
     from forge.runtime import loader
 
     fn = loader.load_kernel_fn(_DUMMY_MODULE)
     assert callable(fn)
 
 
-def test_atexit_cleanup_removes_file():
-    """atexit ハンドラが呼ばれるとファイルが削除される。"""
-    import tempfile
-    import uuid
-
-    tmp_dir = Path(tempfile.gettempdir()) / "forge_kernels"
-    tmp_dir.mkdir(parents=True, exist_ok=True)
-    mod_path = tmp_dir / f"kernel_{uuid.uuid4().hex}.py"
-    mod_path.write_text(_DUMMY_MODULE)
-    assert mod_path.exists()
-
-    cleanup = lambda: mod_path.unlink(missing_ok=True)  # noqa: E731
-    cleanup()
-
-    assert not mod_path.exists()
-
-
-def test_atexit_cleanup_missing_ok():
-    """存在しないファイルに unlink(missing_ok=True) してもエラーにならない。"""
-    import tempfile
-    import uuid
-
-    tmp_dir = Path(tempfile.gettempdir()) / "forge_kernels"
-    mod_path = tmp_dir / f"kernel_{uuid.uuid4().hex}.py"
-
-    cleanup = lambda: mod_path.unlink(missing_ok=True)  # noqa: E731
-    cleanup()  # raises nothing
-
-
-def test_load_kernel_fn_registers_atexit():
-    """load_kernel_fn が atexit.register を呼ぶことを確認。"""
+def test_tmp_file_deleted_after_load():
+    """load_kernel_fn が返った後、一時ファイルが削除されている。"""
     from forge.runtime import loader
 
-    registered: list = []
+    tmp_dir = Path(tempfile.gettempdir()) / "forge_kernels"
+    files_before = set(tmp_dir.glob("kernel_*.py")) if tmp_dir.exists() else set()
 
-    # loader モジュールが参照する atexit.register を直接 patch する
-    with patch.object(loader.atexit, "register", side_effect=registered.append):
-        loader.load_kernel_fn(_DUMMY_MODULE)
+    loader.load_kernel_fn(_DUMMY_MODULE)
 
-    assert len(registered) == 1
-    # クリーンアップを手動実行して後始末
-    registered[0]()
+    files_after = set(tmp_dir.glob("kernel_*.py")) if tmp_dir.exists() else set()
+    new_files = files_after - files_before
+    assert new_files == set(), f"一時ファイルが残っている: {new_files}"
 
 
-def test_load_kernel_fn_cleanup_deletes_file():
-    """load_kernel_fn が登録した atexit ハンドラが実際にファイルを削除する。"""
+def test_tmp_file_deleted_on_exec_error():
+    """exec_module が例外を送出しても一時ファイルが削除される。"""
+    import pytest
+
     from forge.runtime import loader
 
-    registered: list = []
+    tmp_dir = Path(tempfile.gettempdir()) / "forge_kernels"
+    files_before = set(tmp_dir.glob("kernel_*.py")) if tmp_dir.exists() else set()
 
-    with patch.object(loader.atexit, "register", side_effect=registered.append):
-        loader.load_kernel_fn(_DUMMY_MODULE)
+    with pytest.raises(RuntimeError, match="module load error"):
+        loader.load_kernel_fn(_RAISE_MODULE)
 
-    cleanup = registered[0]
-    # 削除前にファイルが存在することは確認できないが（UUID が取れないため）、
-    # cleanup を呼んでもエラーにならないことを確認
-    cleanup()
+    files_after = set(tmp_dir.glob("kernel_*.py")) if tmp_dir.exists() else set()
+    new_files = files_after - files_before
+    assert new_files == set(), f"エラー後も一時ファイルが残っている: {new_files}"
+
+
+def test_returns_callable():
+    """load_kernel_fn の戻り値が callable。"""
+    from forge.runtime import loader
+
+    fn = loader.load_kernel_fn(_DUMMY_MODULE)
+    assert callable(fn)
+    assert fn() is None
