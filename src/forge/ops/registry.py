@@ -648,6 +648,8 @@ OP_REGISTRY: dict[str, OpDefinition] = {
         primary_input_fn=_swiglu_primary,
         correctness_cases_fn=_swiglu_cases,
     ),
+    # SDPA 制約: head_dim は 2 のべき乗 ≥ 16 必須。attn_mask / dropout_p / enable_gqa 非対応。
+    # 違反した呼び出しは torch.fx トレース失敗または eager フォールバックになる。
     "scaled_dot_product_attention": OpDefinition(
         op_type="scaled_dot_product_attention",
         kind="matmul",
