@@ -1,3 +1,9 @@
+## [1.17.0](https://github.com/flipslidersand-labs/forge/compare/v1.16.1...v1.17.0) (2026-08-23)
+
+### ✨ Features
+
+* **#213:** search モジュールに Python logging を追加・caplog テスト拡充 ([#243](https://github.com/flipslidersand-labs/forge/issues/243)) ([3fc6639](https://github.com/flipslidersand-labs/forge/commit/3fc663979b21dc670f72ae1f7c8b5f4dbfd5162d)), closes [#213](https://github.com/flipslidersand-labs/forge/issues/213)
+
 ## [1.16.1](https://github.com/flipslidersand-labs/forge/compare/v1.16.0...v1.16.1) (2026-08-23)
 
 ### 🐛 Bug Fixes
