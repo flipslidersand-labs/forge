@@ -30,7 +30,7 @@ def optimize(
     min_invocations: int = 0,
     per_candidate_s: float = 2.0,
     python_executable: str | None = None,
-    progress: Callable[[str], None] | None = None,
+    progress: Callable[..., None] | None = None,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """純粋な PyTorch 演算を最速の Triton 実装へ自動置換するデコレータ。
 
