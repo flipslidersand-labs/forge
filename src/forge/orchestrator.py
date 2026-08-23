@@ -9,8 +9,6 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal
 
-_log = logging.getLogger("forge.orchestrator")
-
 from forge.benchmark.statistics import BenchmarkResult, is_improvement
 from forge.cache.key import CacheKey
 from forge.cache.repository import CachedKernel, KernelRepository
@@ -28,6 +26,8 @@ from forge.search.grid import GridSearch
 from forge.search.params import SearchParams
 from forge.validation.test_cases import correctness_cases, primary_input
 from forge.validation.tolerance import get_tolerance
+
+_log = logging.getLogger("forge.orchestrator")
 
 if TYPE_CHECKING:
     from forge.search.llm_generator import LLMGenerator, TokenUsage
@@ -329,7 +329,12 @@ class Orchestrator:
                 ),
             )
             self._progress(f"cached best: {best_params} ({best_bench.median_us:.1f}us)")
-            _log.info("cached best op=%s median=%.1fus %s", ctx.spec.op_type, best_bench.median_us, best_params)
+            _log.info(
+                "cached best op=%s median=%.1fus %s",
+                ctx.spec.op_type,
+                best_bench.median_us,
+                best_params,
+            )
             if notify:
                 duration_seconds = time.time() - ctx.start_time
                 failed_rate = failed_count / num_candidates if num_candidates > 0 else None
@@ -377,8 +382,13 @@ class Orchestrator:
         if best_bench and baseline_bench and best_bench.median_us > 0:
             speedup = baseline_bench.median_us / best_bench.median_us
         self._persist_result(
-            ctx, best_params, best_bench, len(candidates), baseline_bench,
-            failed_count=failed_count, speedup=speedup,
+            ctx,
+            best_params,
+            best_bench,
+            len(candidates),
+            baseline_bench,
+            failed_count=failed_count,
+            speedup=speedup,
         )
 
         return SearchResult(
@@ -819,11 +829,23 @@ class Orchestrator:
         )
 
         if not wr.success:
-            self._emit(ProgressEvent(kind="candidate_fail", label=f"{label} FAIL: {wr.error}", params=params))
+            self._emit(
+                ProgressEvent(
+                    kind="candidate_fail",
+                    label=f"{label} FAIL: {wr.error}",
+                    params=params,
+                )
+            )
             _log.warning("FAIL %s: %s", label, wr.error)
             return ExperimentResult(params, False, False, None, wr.error), None, None, None
         if not wr.correct:
-            self._emit(ProgressEvent(kind="candidate_incorrect", label=f"{label} INCORRECT", params=params))
+            self._emit(
+                ProgressEvent(
+                    kind="candidate_incorrect",
+                    label=f"{label} INCORRECT",
+                    params=params,
+                )
+            )
             _log.debug("INCORRECT %s", label)
             return ExperimentResult(params, True, False, None, "incorrect"), None, None, None
 

@@ -6,8 +6,6 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-_log = logging.getLogger("forge.decorator")
-
 from forge.cache.repository import KernelRepository
 from forge.codegen.triton_codegen import generate
 from forge.ir.kernel_spec import KernelSpec
@@ -17,6 +15,8 @@ from forge.orchestrator import Orchestrator
 from forge.runtime.loader import load_kernel_fn
 from forge.search.adoption import should_run_search
 from forge.search.candidate import CandidateGenerator
+
+_log = logging.getLogger("forge.decorator")
 
 
 def optimize(

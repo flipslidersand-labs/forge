@@ -150,7 +150,9 @@ class TestOptimizationCompleteNewFields:
             import json
 
             captured["payload"] = json.loads(req.data.decode())
-            mock_resp = type("R", (), {"status": 204, "__enter__": lambda s: s, "__exit__": lambda s, *a: None})()
+            mock_resp = type(
+                "R", (), {"status": 204, "__enter__": lambda s: s, "__exit__": lambda s, *a: None}
+            )()
             return mock_resp
 
         with patch("forge.notifiers.discord.urlopen", side_effect=_fake_urlopen):

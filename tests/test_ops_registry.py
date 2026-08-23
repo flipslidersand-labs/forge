@@ -40,9 +40,7 @@ def test_is_elementwise_uses_registry() -> None:
     from forge.ops.registry import OP_REGISTRY
 
     for op, defn in OP_REGISTRY.items():
-        assert is_elementwise(op) == (defn.kind == "elementwise"), (
-            f"{op}: is_elementwise mismatch"
-        )
+        assert is_elementwise(op) == (defn.kind == "elementwise"), f"{op}: is_elementwise mismatch"
 
 
 def test_is_matmul_uses_registry() -> None:

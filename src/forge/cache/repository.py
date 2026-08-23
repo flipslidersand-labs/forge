@@ -9,11 +9,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-_log = logging.getLogger("forge.cache")
-
 from forge.benchmark.statistics import BenchmarkResultDict
 
 from .key import CacheKey
+
+_log = logging.getLogger("forge.cache")
 
 # CLI (forge.cli) と KernelRepository が共有する既定 DB パスの単一定義。
 # FORGE_DB_PATH 環境変数でオーバーライド可能。
@@ -111,8 +111,7 @@ class KernelRepository:
     def _run_migrations(self) -> None:
         """未適用のマイグレーションを昇順に実行する。ロック内から呼ぶこと。"""
         applied = {
-            row[0]
-            for row in self.conn.execute("SELECT version FROM schema_migrations").fetchall()
+            row[0] for row in self.conn.execute("SELECT version FROM schema_migrations").fetchall()
         }
         # 旧 DB（baseline_us 列あり・schema_migrations なし）の後方互換:
         # 既に列が存在するなら version 1 を適用済みとみなしてスキップする。

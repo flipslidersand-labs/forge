@@ -81,7 +81,7 @@ def test_tensor_spec_equality_is_reflexive(spec) -> None:
 @settings(max_examples=100)
 def test_tensor_spec_equality_matches_field_values(a, b) -> None:
     """TensorSpec の __eq__ はフィールド値の一致と一致する。"""
-    fields_equal = (a.shape == b.shape and a.dtype == b.dtype and a.is_contiguous == b.is_contiguous)
+    fields_equal = a.shape == b.shape and a.dtype == b.dtype and a.is_contiguous == b.is_contiguous
     assert (a == b) == fields_equal
 
 
