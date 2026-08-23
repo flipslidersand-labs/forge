@@ -21,7 +21,6 @@ from forge.orchestrator import Orchestrator
 from forge.runtime.worker import WorkerResult, run_in_worker
 from forge.search.params import SearchParams
 
-
 # --------------------------------------------------------------------------- #
 # helpers                                                                      #
 # --------------------------------------------------------------------------- #
@@ -253,3 +252,58 @@ class TestOrchestratorLogging:
         assert logger.name == "forge.orchestrator"
         assert logger.parent is not None
         assert logger.parent.name in ("forge", "root")
+
+    def test_forge_root_level_suppresses_info(self, caplog: pytest.LogCaptureFixture) -> None:
+        """logging.getLogger("forge").setLevel(WARNING) で INFO が抑制される。"""
+        spec = _spec()
+        repo = _tmp_repo()
+        orch = Orchestrator(repo=repo)
+
+        with (
+            caplog.at_level(logging.WARNING, logger="forge"),
+            patch("forge.orchestrator.run_in_worker", return_value=self._mock_worker_success()),
+            patch("forge.orchestrator.generate", return_value="# stub"),
+        ):
+            orch.optimize(spec, budget=1)
+
+        info_records = [r for r in caplog.records if r.levelno == logging.INFO]
+        assert not info_records, "INFO logs should be suppressed at WARNING level"
+        repo.close()
+
+
+# --------------------------------------------------------------------------- #
+# forge.search logger                                                          #
+# --------------------------------------------------------------------------- #
+
+
+class TestSearchLogging:
+    def test_grid_search_logs_debug(self, caplog: pytest.LogCaptureFixture) -> None:
+        from forge.search.grid import GridSearch
+
+        spec = _spec()
+        gs = GridSearch()
+        with caplog.at_level(logging.DEBUG, logger="forge.search.grid"):
+            candidates = gs.generate(spec, compute_capability="8.0", budget=5)
+
+        assert len(candidates) <= 5
+        debug_msgs = [r.message for r in caplog.records if r.name == "forge.search.grid"]
+        assert debug_msgs, "GridSearch.generate should emit a DEBUG log"
+
+    def test_random_search_logs_debug(self, caplog: pytest.LogCaptureFixture) -> None:
+        from forge.search.random_search import RandomSearch
+
+        spec = _spec()
+        rs = RandomSearch(seed=42)
+        with caplog.at_level(logging.DEBUG, logger="forge.search.random"):
+            candidates = rs.generate(spec, compute_capability="8.0", budget=3)
+
+        assert len(candidates) <= 3
+        debug_msgs = [r.message for r in caplog.records if r.name == "forge.search.random"]
+        assert debug_msgs, "RandomSearch.generate should emit a DEBUG log"
+
+    def test_search_logger_hierarchy(self) -> None:
+        import logging
+
+        grid_log = logging.getLogger("forge.search.grid")
+        assert grid_log.parent is not None
+        assert "forge" in grid_log.parent.name or grid_log.parent.name == "root"

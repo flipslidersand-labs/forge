@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import logging
+
 from forge.ir.kernel_spec import KernelSpec
 
 from .candidate import HistoryEntry
 from .params import SearchParams
 from .space import SearchSpace
+
+_log = logging.getLogger("forge.search.random")
 
 
 class RandomSearch:
@@ -30,8 +34,18 @@ class RandomSearch:
     ) -> list[SearchParams]:
         candidates = list(self.space.enumerate(spec, compute_capability))
         shuffled = _lcg_shuffle(candidates, self.seed)
+        total = len(shuffled)
         if budget is not None:
             shuffled = shuffled[:budget]
+        _log.debug(
+            "random search op=%s cc=%s total=%d budget=%s returning=%d seed=%d",
+            spec.op_type,
+            compute_capability,
+            total,
+            budget,
+            len(shuffled),
+            self.seed,
+        )
         return shuffled
 
     def reset_usage(self) -> None:
