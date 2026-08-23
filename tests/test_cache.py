@@ -214,6 +214,60 @@ class TestKernelRepository:
             assert repo.count() == 2
             repo.close()
 
+    def test_schema_migrations_table_created_on_fresh_db(self) -> None:
+        import sqlite3
+
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "cache.db"
+            repo = KernelRepository(path)
+            conn = sqlite3.connect(str(path))
+            tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            assert "schema_migrations" in tables
+            version = conn.execute("SELECT version FROM schema_migrations").fetchone()
+            assert version is not None
+            assert version[0] == 1
+            conn.close()
+            repo.close()
+
+    def test_schema_migrations_not_reapplied_on_second_init(self) -> None:
+        import sqlite3
+
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "cache.db"
+            repo1 = KernelRepository(path)
+            repo1.close()
+            repo2 = KernelRepository(path)
+            repo2.close()
+            conn = sqlite3.connect(str(path))
+            count = conn.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0]
+            assert count == 1  # 2 回目で重複登録されていない
+            conn.close()
+
+    def test_legacy_db_gets_migration_record(self) -> None:
+        """旧スキーマ DB（schema_migrations なし）でも version 1 が登録される。"""
+        import sqlite3
+
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "cache.db"
+            # baseline_us 列あり・schema_migrations テーブルなし の旧スキーマを模擬
+            conn = sqlite3.connect(str(path))
+            conn.executescript(
+                "CREATE TABLE kernels ("
+                "cache_key_hash TEXT PRIMARY KEY, cache_key_json TEXT NOT NULL, "
+                "params_json TEXT NOT NULL, kernel_code TEXT NOT NULL, "
+                "benchmark_json TEXT NOT NULL, baseline_us REAL, created_at TEXT NOT NULL);"
+            )
+            conn.commit()
+            conn.close()
+
+            repo = KernelRepository(path)
+            repo.close()
+
+            conn = sqlite3.connect(str(path))
+            version = conn.execute("SELECT version FROM schema_migrations").fetchone()
+            assert version is not None and version[0] == 1
+            conn.close()
+
     def test_persists_across_instances(self) -> None:
         with tempfile.TemporaryDirectory() as d:
             path = Path(d) / "cache.db"
