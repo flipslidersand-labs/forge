@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 
 # 演算ごとのメタデータ。SearchSpace（block 制約）と validation（入力構成）が参照する。
@@ -9,44 +10,45 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class OpInfo:
+    """非推奨。OP_REGISTRY の kind / n_tensor_inputs を直接参照してください。"""
+
     kind: str  # "reduction" | "elementwise"
     n_tensor_inputs: int  # kernel_fn に渡す tensor 入力数
 
 
+from forge.ops.registry import OP_REGISTRY, OpDefinition  # noqa: E402
+
+# OP_INFO は非推奨。OP_REGISTRY から動的に生成する（後方互換）。
 OP_INFO: dict[str, OpInfo] = {
-    "rmsnorm": OpInfo(kind="reduction", n_tensor_inputs=2),  # x, weight
-    "softmax": OpInfo(kind="reduction", n_tensor_inputs=1),  # x
-    "layernorm": OpInfo(kind="reduction", n_tensor_inputs=3),  # x, weight, bias
-    "gelu": OpInfo(kind="elementwise", n_tensor_inputs=1),  # x
-    "swiglu": OpInfo(kind="elementwise", n_tensor_inputs=2),  # x, gate
-    "rope": OpInfo(kind="reduction", n_tensor_inputs=3),  # x, cos, sin — single_row kernel
-    "fused_add_rmsnorm": OpInfo(kind="reduction", n_tensor_inputs=3),  # x, residual, weight
-    # Q, K, V の 3D テンソル [B*H, S, D]。block_size は S（シーケンス長）に対応。
-    "scaled_dot_product_attention": OpInfo(kind="matmul", n_tensor_inputs=3),
-    # x:[M,K], weight:[N,K], bias:[N] → out:[M,N]。F.linear は weight が転置済みで渡る。
-    "linear": OpInfo(kind="gemm", n_tensor_inputs=3),
+    op: OpInfo(kind=defn.kind, n_tensor_inputs=defn.n_tensor_inputs)
+    for op, defn in OP_REGISTRY.items()
 }
 
 
 def get_op_info(op_type: str) -> OpInfo:
-    if op_type not in OP_INFO:
+    """非推奨。OP_REGISTRY[op_type].kind / n_tensor_inputs を直接参照してください。"""
+    warnings.warn(
+        "get_op_info() は非推奨です。OP_REGISTRY[op_type] を直接参照してください。",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    if op_type not in OP_REGISTRY:
         raise ValueError(f"Unknown op_type: {op_type!r}")
-    return OP_INFO[op_type]
+    d = OP_REGISTRY[op_type]
+    return OpInfo(kind=d.kind, n_tensor_inputs=d.n_tensor_inputs)
 
 
 def is_elementwise(op_type: str) -> bool:
-    return get_op_info(op_type).kind == "elementwise"
+    return OP_REGISTRY[op_type].kind == "elementwise"
 
 
 def is_matmul(op_type: str) -> bool:
-    return get_op_info(op_type).kind == "matmul"
+    return OP_REGISTRY[op_type].kind == "matmul"
 
 
 def is_gemm(op_type: str) -> bool:
-    return get_op_info(op_type).kind == "gemm"
+    return OP_REGISTRY[op_type].kind == "gemm"
 
-
-from forge.ops.registry import OP_REGISTRY, OpDefinition  # noqa: E402
 
 __all__ = [
     "OpInfo",
