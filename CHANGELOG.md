@@ -1,3 +1,9 @@
+## [1.16.1](https://github.com/flipslidersand-labs/forge/compare/v1.16.0...v1.16.1) (2026-08-23)
+
+### 🐛 Bug Fixes
+
+* **#220:** _worker_entry で KeyboardInterrupt/SystemExit が握り潰されないことをテスト ([#257](https://github.com/flipslidersand-labs/forge/issues/257)) ([f2f77f0](https://github.com/flipslidersand-labs/forge/commit/f2f77f0a0c17cbb43dd12cc0cccaa8b75e993348)), closes [#220](https://github.com/flipslidersand-labs/forge/issues/220)
+
 ## [1.16.0](https://github.com/flipslidersand-labs/forge/compare/v1.15.0...v1.16.0) (2026-08-23)
 
 ### ✨ Features
