@@ -25,6 +25,9 @@ class DiscordNotifier:
         best_time: float,
         num_candidates: int,
         duration_seconds: float,
+        speedup: float | None = None,
+        best_round: int | None = None,
+        failed_rate: float | None = None,
     ) -> bool:
         """Send notification when optimization completes.
 
@@ -33,6 +36,9 @@ class DiscordNotifier:
             best_time: Best execution time in milliseconds
             num_candidates: Number of candidates explored
             duration_seconds: Total optimization duration
+            speedup: baseline_us / best_us ratio (optional)
+            best_round: Round number where best was found (optional)
+            failed_rate: failed_count / num_candidates (optional)
 
         Returns:
             True if notification sent successfully
@@ -42,6 +48,19 @@ class DiscordNotifier:
             return False
 
         try:
+            fields: list[dict[str, Any]] = [
+                {"name": "Operation", "value": op_name, "inline": True},
+                {"name": "Best Time", "value": f"{best_time:.3f}ms", "inline": True},
+                {"name": "Candidates", "value": str(num_candidates), "inline": True},
+                {"name": "Optimization Time", "value": f"{duration_seconds:.2f}s", "inline": True},
+            ]
+            if speedup is not None:
+                fields.append({"name": "Speedup", "value": f"{speedup:.2f}×", "inline": True})
+            if best_round is not None:
+                fields.append({"name": "Best Round", "value": str(best_round), "inline": True})
+            if failed_rate is not None:
+                fields.append({"name": "Fail Rate", "value": f"{failed_rate:.0%}", "inline": True})
+
             embed = {
                 "title": f"GPU Kernel Optimized: {op_name}",
                 "description": (
@@ -49,20 +68,7 @@ class DiscordNotifier:
                     f"Best execution time: **{best_time:.3f}ms**"
                 ),
                 "color": 65280,  # Green
-                "fields": [
-                    {"name": "Operation", "value": op_name, "inline": True},
-                    {"name": "Best Time", "value": f"{best_time:.3f}ms", "inline": True},
-                    {
-                        "name": "Candidates",
-                        "value": str(num_candidates),
-                        "inline": True,
-                    },
-                    {
-                        "name": "Optimization Time",
-                        "value": f"{duration_seconds:.2f}s",
-                        "inline": True,
-                    },
-                ],
+                "fields": fields,
                 "timestamp": datetime.now(UTC).isoformat(),
             }
 
