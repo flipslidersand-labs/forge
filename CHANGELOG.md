@@ -1,3 +1,9 @@
+## [1.11.0](https://github.com/flipslidersand-labs/forge/compare/v1.10.0...v1.11.0) (2026-08-23)
+
+### ✨ Features
+
+* **#188:** SearchResult / MultiRoundResult に total_time_s・failed_count・incorrect_count 追加 ([#244](https://github.com/flipslidersand-labs/forge/issues/244)) ([4ac4450](https://github.com/flipslidersand-labs/forge/commit/4ac4450752c94c0da6141aa96a4acc115178f1e1)), closes [#188](https://github.com/flipslidersand-labs/forge/issues/188) [#213](https://github.com/flipslidersand-labs/forge/issues/213) [#188](https://github.com/flipslidersand-labs/forge/issues/188) [#188](https://github.com/flipslidersand-labs/forge/issues/188)
+
 ## [1.10.0](https://github.com/flipslidersand-labs/forge/compare/v1.9.2...v1.10.0) (2026-08-23)
 
 ### ✨ Features
