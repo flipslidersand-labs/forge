@@ -1,3 +1,9 @@
+## [1.17.2](https://github.com/flipslidersand-labs/forge/compare/v1.17.1...v1.17.2) (2026-08-23)
+
+### 🐛 Bug Fixes
+
+* **decorator:** graph_hash を関数ソース由来の一意 hash に変更 ([#197](https://github.com/flipslidersand-labs/forge/issues/197)) ([#232](https://github.com/flipslidersand-labs/forge/issues/232)) ([f6dcee7](https://github.com/flipslidersand-labs/forge/commit/f6dcee7248b73022b6b844ffac9b8636b50e6dbc))
+
 ## [1.17.1](https://github.com/flipslidersand-labs/forge/compare/v1.17.0...v1.17.1) (2026-08-23)
 
 ### 🐛 Bug Fixes
