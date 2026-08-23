@@ -18,9 +18,14 @@ from forge.validation.tolerance import Tolerance
 
 @dataclass
 class OpDefinition:
-    """1つの op に関するすべてのメタデータ。"""
+    """1つの op に関するすべてのメタデータ。
+
+    kind / n_tensor_inputs は旧 OP_INFO の情報を統合したもの。OP_INFO は非推奨。
+    """
 
     op_type: str
+    kind: str  # "reduction" | "elementwise" | "matmul" | "gemm"
+    n_tensor_inputs: int
     reference_fn: Callable[..., torch.Tensor]
     baseline_fn: Callable[..., torch.Tensor]
     baseline_display_name: str
@@ -568,6 +573,8 @@ _TOL = Tolerance  # alias for brevity
 OP_REGISTRY: dict[str, OpDefinition] = {
     "rmsnorm": OpDefinition(
         op_type="rmsnorm",
+        kind="reduction",
+        n_tensor_inputs=2,
         reference_fn=_rmsnorm_reference,
         baseline_fn=_rmsnorm_baseline,
         baseline_display_name=_rmsnorm_baseline_name(),
@@ -577,6 +584,8 @@ OP_REGISTRY: dict[str, OpDefinition] = {
     ),
     "softmax": OpDefinition(
         op_type="softmax",
+        kind="reduction",
+        n_tensor_inputs=1,
         reference_fn=_softmax_reference,
         baseline_fn=_softmax_baseline,
         baseline_display_name="F.softmax",
@@ -586,6 +595,8 @@ OP_REGISTRY: dict[str, OpDefinition] = {
     ),
     "layernorm": OpDefinition(
         op_type="layernorm",
+        kind="reduction",
+        n_tensor_inputs=3,
         reference_fn=_layernorm_reference,
         baseline_fn=_layernorm_baseline,
         baseline_display_name="F.layer_norm",
@@ -595,6 +606,8 @@ OP_REGISTRY: dict[str, OpDefinition] = {
     ),
     "fused_add_rmsnorm": OpDefinition(
         op_type="fused_add_rmsnorm",
+        kind="reduction",
+        n_tensor_inputs=3,
         reference_fn=_fused_add_rmsnorm_reference,
         baseline_fn=_fused_add_rmsnorm_baseline,
         baseline_display_name="(x+residual) then F.rms_norm",
@@ -604,6 +617,8 @@ OP_REGISTRY: dict[str, OpDefinition] = {
     ),
     "gelu": OpDefinition(
         op_type="gelu",
+        kind="elementwise",
+        n_tensor_inputs=1,
         reference_fn=_gelu_reference,
         baseline_fn=_gelu_baseline,
         baseline_display_name="F.gelu",
@@ -613,6 +628,8 @@ OP_REGISTRY: dict[str, OpDefinition] = {
     ),
     "rope": OpDefinition(
         op_type="rope",
+        kind="reduction",
+        n_tensor_inputs=3,
         reference_fn=_rope_reference,
         baseline_fn=_rope_baseline,
         baseline_display_name="x*cos + rotate_half(x)*sin",
@@ -622,6 +639,8 @@ OP_REGISTRY: dict[str, OpDefinition] = {
     ),
     "swiglu": OpDefinition(
         op_type="swiglu",
+        kind="elementwise",
+        n_tensor_inputs=2,
         reference_fn=_swiglu_reference,
         baseline_fn=_swiglu_baseline,
         baseline_display_name="F.silu(gate) * x",
@@ -631,6 +650,8 @@ OP_REGISTRY: dict[str, OpDefinition] = {
     ),
     "scaled_dot_product_attention": OpDefinition(
         op_type="scaled_dot_product_attention",
+        kind="matmul",
+        n_tensor_inputs=3,
         reference_fn=_sdpa_reference,
         baseline_fn=_sdpa_baseline,
         baseline_display_name="F.scaled_dot_product_attention",
@@ -641,6 +662,8 @@ OP_REGISTRY: dict[str, OpDefinition] = {
     ),
     "linear": OpDefinition(
         op_type="linear",
+        kind="gemm",
+        n_tensor_inputs=3,
         reference_fn=_linear_reference,
         baseline_fn=_linear_baseline,
         baseline_display_name="F.linear",
