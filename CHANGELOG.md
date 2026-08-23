@@ -1,3 +1,9 @@
+## [1.14.0](https://github.com/flipslidersand-labs/forge/compare/v1.13.0...v1.14.0) (2026-08-23)
+
+### ✨ Features
+
+* **#205:** OP_REGISTRY に kind/n_tensor_inputs を統合し OP_INFO を動的導出に変更 ([#249](https://github.com/flipslidersand-labs/forge/issues/249)) ([c6a583c](https://github.com/flipslidersand-labs/forge/commit/c6a583cc113dce788827bdcf9813901abd18ddb9)), closes [#205](https://github.com/flipslidersand-labs/forge/issues/205) [#205](https://github.com/flipslidersand-labs/forge/issues/205)
+
 ## [1.13.0](https://github.com/flipslidersand-labs/forge/compare/v1.12.0...v1.13.0) (2026-08-23)
 
 ### ✨ Features
