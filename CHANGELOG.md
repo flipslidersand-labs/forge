@@ -1,3 +1,9 @@
+## [1.16.0](https://github.com/flipslidersand-labs/forge/compare/v1.15.0...v1.16.0) (2026-08-23)
+
+### ✨ Features
+
+* **#216:** schema_migrations テーブルによる DB マイグレーションバージョン管理 ([#256](https://github.com/flipslidersand-labs/forge/issues/256)) ([3f9f594](https://github.com/flipslidersand-labs/forge/commit/3f9f594ce9df7158a9b61433aebfa8dce9f2a671)), closes [#216](https://github.com/flipslidersand-labs/forge/issues/216)
+
 ## [1.15.0](https://github.com/flipslidersand-labs/forge/compare/v1.14.0...v1.15.0) (2026-08-23)
 
 ### ✨ Features
