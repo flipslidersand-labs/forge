@@ -629,6 +629,13 @@ OP_REGISTRY: dict[str, OpDefinition] = {
         primary_input_fn=_swiglu_primary,
         correctness_cases_fn=_swiglu_cases,
     ),
+    # scaled_dot_product_attention — Flash Attention 2 スタイル（causal / non-causal）
+    # 使用制約:
+    #   - head_dim >= 16 かつ head_dim % 16 == 0（2 のべき乗推奨）
+    #   - attn_mask=None のみ対応（任意マスクは torch.fx パターンが変わり認識不可）
+    #   - dropout_p=0.0 のみ対応
+    #   - enable_gqa=False のみ対応（GQA/MQA は別パターン）
+    #   - is_causal は True/False どちらも対応（causal_opt バリアントを自動選択）
     "scaled_dot_product_attention": OpDefinition(
         op_type="scaled_dot_product_attention",
         reference_fn=_sdpa_reference,

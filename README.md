@@ -73,7 +73,27 @@ torch.compile と PyTorch Eager との比較。中央値計測。
 
 ## 対応演算
 
-RMSNorm / Softmax / LayerNorm / GELU / ScaledDotProductAttention（Flash Attention 2 スタイル・causal マスク対応）
+| op_type | 別名 | 制約・備考 |
+| --- | --- | --- |
+| `rmsnorm` | RMSNorm | — |
+| `softmax` | Softmax | — |
+| `layernorm` | LayerNorm | — |
+| `gelu` | GELU | exact (erf) のみ。tanh 近似は誤差超過で eager フォールバック |
+| `swiglu` | SwiGLU | — |
+| `rope` | RoPE | — |
+| `fused_add_rmsnorm` | Fused Add+RMSNorm | — |
+| `linear` | Linear (GEMM) | バイアスあり/なし両対応 |
+| `scaled_dot_product_attention` | SDPA | **下記制約参照** |
+
+### SDPA 使用制約
+
+`@forge.optimize` を `F.scaled_dot_product_attention` に適用する場合の必須条件:
+
+- **`head_dim` は 16 の倍数かつ ≥ 16**（推奨: 2 のべき乗）。非対応 head_dim は eager フォールバック
+- **`attn_mask` 非対応** — 任意マスクは torch.fx トレース不能。`attn_mask=None` のみ
+- **`dropout_p > 0.0` 非対応** — `dropout_p=0.0` のみ
+- **`enable_gqa=True` 非対応** — GQA / MQA は異なる op パターンのため認識されない
+- **causal / non-causal の自動検出** — `is_causal` フラグは引数で渡す（計算グラフから判定）
 
 ## 仕組み
 
