@@ -1,3 +1,9 @@
+## [1.10.0](https://github.com/flipslidersand-labs/forge/compare/v1.9.2...v1.10.0) (2026-08-23)
+
+### ✨ Features
+
+* **#208:** SearchParams に block_k フィールド追加・GEMM 探索空間を [16,32,64] に拡張 ([#241](https://github.com/flipslidersand-labs/forge/issues/241)) ([47bffcc](https://github.com/flipslidersand-labs/forge/commit/47bffcc1baac1c095a3bc7620758370e5e186e03)), closes [#208](https://github.com/flipslidersand-labs/forge/issues/208) [#208](https://github.com/flipslidersand-labs/forge/issues/208)
+
 ## [1.9.2](https://github.com/flipslidersand-labs/forge/compare/v1.9.1...v1.9.2) (2026-08-23)
 
 ### 🐛 Bug Fixes
