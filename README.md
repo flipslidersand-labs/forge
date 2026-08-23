@@ -285,11 +285,51 @@ tests/              CPU テスト + GPU テスト（@pytest.mark.gpu）
 設計判断は `docs/adr/` を参照（Triton 採用、SQLite、subprocess 隔離、
 統計的ベンチ判定、LLM 構造化生成）。
 
+## 対応演算と制約
+
+forge が最適化を試みる演算の一覧と、各演算固有の制約です。
+未対応・torch.fx トレース不能（動的 dim 等）な場合は元の eager 実装に透過フォールバックします。
+
+| 演算 | op_type | 制約・備考 |
+| --- | --- | --- |
+| RMSNorm | `rmsnorm` | `eps` は定数で記述すること |
+| LayerNorm | `layer_norm` | `normalized_shape` は定数 |
+| GELU | `gelu` | exact（erf）のみ。tanh 近似は許容誤差を超えて eager になり得る |
+| Softmax | `softmax` | `dim` は定数で記述すること |
+| SiLU | `silu` | 制約なし |
+| SwiGLU | `swiglu` | — |
+| SDPA | `scaled_dot_product_attention` | **[下記参照](#sdpa-制約)** |
+| Linear | `linear` | bias は任意 |
+| Matmul | `matmul` | — |
+
+### SDPA 制約
+
+`torch.nn.functional.scaled_dot_product_attention` に `@forge.optimize` を適用する際は
+以下の条件を満たす必要があります。条件を満たさない場合は eager にフォールバックします。
+
+| 項目 | 要件 |
+| --- | --- |
+| `head_dim` (テンソルの最終次元) | **2 のべき乗 かつ ≥ 16**（例: 16, 32, 64, 128） |
+| `attn_mask` | **非対応**。`None` のみ受け付ける |
+| `dropout_p` | **非対応**（`> 0.0` は eager フォールバック） |
+| `enable_gqa` | **非対応**（GQA / MQA は異なる op パターン） |
+| `is_causal` | `True` / `False` どちらも対応 |
+| `scale` | 任意（`None` = デフォルトスケール） |
+| テンソル形状 | `(batch_heads, seq_len, head_dim)` の 3-D |
+
+```python
+# ✅ 動作する
+@forge.optimize()
+def attention(q, k, v):
+    return F.scaled_dot_product_attention(q, k, v, is_causal=True)
+
+# ❌ head_dim=12 は 2 のべき乗でない → eager フォールバック
+# ❌ attn_mask を渡す → torch.fx トレース不能 → eager フォールバック
+# ❌ dropout_p=0.1 → eager フォールバック
+```
+
 ## 既知の制約
 
-- 判定できる演算は上記 5 種のみ。未対応・trace 不能（動的 dim 等）は eager フォールバック
-- SDPA は attn_mask / dropout / enable_gqa 非対応。head_dim は 2 のべき乗 ≥ 16 が必須
-- GELU は exact（erf）のみ。tanh 近似の関数は許容誤差を超えて eager になり得る
 - 演算は標準的な式の形のみ認識（torch.fx の call_function 多重集合でマッチ）
 - 開発・検証は GTX 1080（compute capability 6.1、Triton 公式サポート外）で実施
 
