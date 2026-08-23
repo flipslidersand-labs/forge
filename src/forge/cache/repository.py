@@ -57,6 +57,13 @@ class KernelSummary:
     created_at: str
 
 
+# 番号付きマイグレーションリスト。追加するときは末尾に append するだけでよい。
+# version 1: baseline_us 列追加（旧 DB との後方互換）
+_MIGRATIONS: list[tuple[int, str]] = [
+    (1, "ALTER TABLE kernels ADD COLUMN baseline_us REAL"),
+]
+
+
 class KernelRepository:
     """SQLite を使った Triton カーネルキャッシュの永続化・検索・管理。
 
@@ -93,12 +100,40 @@ class KernelRepository:
                     baseline_us     REAL,
                     created_at      TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS schema_migrations (
+                    version     INTEGER PRIMARY KEY,
+                    applied_at  TEXT NOT NULL
+                );
             """)
-            # 既存 DB（baseline_us 列なし）を破壊せずマイグレーションする。
-            cols = {row[1] for row in self.conn.execute("PRAGMA table_info(kernels)")}
-            if "baseline_us" not in cols:
-                self.conn.execute("ALTER TABLE kernels ADD COLUMN baseline_us REAL")
+            self._run_migrations()
             self.conn.commit()
+
+    def _run_migrations(self) -> None:
+        """未適用のマイグレーションを昇順に実行する。ロック内から呼ぶこと。"""
+        applied = {
+            row[0]
+            for row in self.conn.execute("SELECT version FROM schema_migrations").fetchall()
+        }
+        # 旧 DB（baseline_us 列あり・schema_migrations なし）の後方互換:
+        # 既に列が存在するなら version 1 を適用済みとみなしてスキップする。
+        cols = {row[1] for row in self.conn.execute("PRAGMA table_info(kernels)")}
+        if "baseline_us" in cols and 1 not in applied:
+            self.conn.execute(
+                "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (1, ?)",
+                (datetime.now(UTC).isoformat(),),
+            )
+            applied.add(1)
+
+        for version, sql in sorted(_MIGRATIONS):
+            if version in applied:
+                continue
+            _log.info("applying schema migration v%d", version)
+            self.conn.execute(sql)
+            self.conn.execute(
+                "INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+                (version, datetime.now(UTC).isoformat()),
+            )
+            _log.info("schema migration v%d applied", version)
 
     def get(self, key: CacheKey) -> CachedKernel | None:
         with self._lock:
