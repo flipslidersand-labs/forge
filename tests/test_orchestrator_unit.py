@@ -16,6 +16,7 @@ from forge.orchestrator import (
     MultiRoundResult,
     Orchestrator,
     RoundResult,
+    SearchResult,
 )
 from forge.runtime.worker import ExtendedBaselineResult, WorkerResult
 from forge.search.llm_generator import TokenUsage
@@ -284,3 +285,96 @@ class TestEvalOneFailureBranches:
         assert cand is bench
         assert bl is bench
         assert bl_name == "ref"
+
+
+class TestSearchResultMetrics:
+    """SearchResult の新メトリクスフィールドのユニットテスト。"""
+
+    def _make_search_result(self, experiments):
+        from forge.ir.kernel_spec import KernelSpec
+        from forge.ir.tensor_spec import TensorSpec
+        import torch
+
+        spec = KernelSpec(
+            op_type="rmsnorm",
+            input_specs=(TensorSpec((16, 64), torch.float16, True), TensorSpec((64,), torch.float16, True)),
+            output_specs=(TensorSpec((16, 64), torch.float16, True),),
+            constants={"eps": 1e-6},
+            graph_hash="h",
+            constraints=(),
+        )
+        return SearchResult(
+            spec=spec,
+            cache_hit=False,
+            best_params=None,
+            best_benchmark=None,
+            baseline_benchmark=None,
+            baseline_name=None,
+            experiments=experiments,
+        )
+
+    def _exp(self, success, correct, error=None):
+        params = SearchParams(block_size=64, num_warps=4, num_stages=1)
+        return ExperimentResult(params=params, success=success, correct=correct, median_us=None, error=error)
+
+    def test_default_values(self):
+        r = self._make_search_result([])
+        assert r.total_time_s == 0.0
+        assert r.failed_count == 0
+        assert r.incorrect_count == 0
+
+    def test_failed_count_counts_unsuccessful(self):
+        exps = [
+            self._exp(True, True),
+            self._exp(False, False, "crash"),
+            self._exp(False, False, "timeout"),
+        ]
+        r = self._make_search_result(exps)
+        r = SearchResult(
+            spec=r.spec, cache_hit=False, best_params=None, best_benchmark=None,
+            baseline_benchmark=None, baseline_name=None, experiments=exps,
+            failed_count=sum(1 for e in exps if not e.success),
+            incorrect_count=sum(1 for e in exps if e.success and not e.correct),
+        )
+        assert r.failed_count == 2
+        assert r.incorrect_count == 0
+
+    def test_incorrect_count_counts_correct_false_success_true(self):
+        exps = [
+            self._exp(True, True),
+            self._exp(True, False),
+            self._exp(True, False),
+        ]
+        r = SearchResult(
+            spec=self._make_search_result([]).spec,
+            cache_hit=False, best_params=None, best_benchmark=None,
+            baseline_benchmark=None, baseline_name=None, experiments=exps,
+            failed_count=sum(1 for e in exps if not e.success),
+            incorrect_count=sum(1 for e in exps if e.success and not e.correct),
+        )
+        assert r.failed_count == 0
+        assert r.incorrect_count == 2
+
+
+class TestMultiRoundResultMetrics:
+    """MultiRoundResult の新メトリクスフィールドのユニットテスト。"""
+
+    def test_default_values(self):
+        from forge.ir.kernel_spec import KernelSpec
+        from forge.ir.tensor_spec import TensorSpec
+        import torch
+
+        spec = KernelSpec(
+            op_type="rmsnorm",
+            input_specs=(TensorSpec((16, 64), torch.float16, True), TensorSpec((64,), torch.float16, True)),
+            output_specs=(TensorSpec((16, 64), torch.float16, True),),
+            constants={"eps": 1e-6},
+            graph_hash="h",
+            constraints=(),
+        )
+        r = MultiRoundResult(
+            spec=spec, rounds=[], best_params=None, best_benchmark=None,
+            baseline_benchmark=None, baseline_name=None, token_usage=None,
+        )
+        assert r.failed_count == 0
+        assert r.incorrect_count == 0

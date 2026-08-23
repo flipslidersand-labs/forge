@@ -52,6 +52,9 @@ class SearchResult:
     baseline_name: str | None
     experiments: list[ExperimentResult]
     extended_baselines: list[ExtendedBaselineResult] = field(default_factory=list)
+    total_time_s: float = field(default=0.0)
+    failed_count: int = field(default=0)
+    incorrect_count: int = field(default=0)
 
     @property
     def speedup(self) -> float | None:
@@ -84,6 +87,8 @@ class MultiRoundResult:
     total_candidates_evaluated: int = field(default=0)
     extended_baselines: list[ExtendedBaselineResult] = field(default_factory=list)
     total_benchmark_time_s: float = field(default=0.0)  # コスト計測用
+    failed_count: int = field(default=0)
+    incorrect_count: int = field(default=0)
 
     @property
     def speedup(self) -> float | None:
@@ -306,6 +311,9 @@ class Orchestrator:
             baseline_name=baseline_name,
             experiments=experiments,
             extended_baselines=ctx.extended,
+            total_time_s=time.time() - ctx.start_time,
+            failed_count=sum(1 for e in experiments if not e.success),
+            incorrect_count=sum(1 for e in experiments if e.success and not e.correct),
         )
 
     def _check_cache(
@@ -522,6 +530,7 @@ class Orchestrator:
             baseline_us=baseline_bench.median_us if baseline_bench else None,
         )
 
+        all_exps = [e for r in rounds for e in r.experiments]
         return MultiRoundResult(
             spec=spec,
             rounds=rounds,
@@ -533,6 +542,8 @@ class Orchestrator:
             total_candidates_evaluated=total,
             extended_baselines=ctx.extended,
             total_benchmark_time_s=total_benchmark_time_s,
+            failed_count=sum(1 for e in all_exps if not e.success),
+            incorrect_count=sum(1 for e in all_exps if e.success and not e.correct),
         )
 
     def optimize_sha(
@@ -671,6 +682,9 @@ class Orchestrator:
             baseline_name=baseline_name,
             experiments=all_experiments,
             extended_baselines=ctx.extended,
+            total_time_s=time.time() - ctx.start_time,
+            failed_count=sum(1 for e in all_experiments if not e.success),
+            incorrect_count=sum(1 for e in all_experiments if e.success and not e.correct),
         )
 
     def _eval_one(
