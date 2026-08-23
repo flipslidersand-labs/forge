@@ -118,28 +118,26 @@ class SearchSpace:
                         )
 
     def _enumerate_gemm(self, stages: list[int]) -> Iterator[SearchParams]:
-        """GEMM (linear) 向け探索空間。BLOCK_M=BLOCK_N=block_size で探索。
-
-        BLOCK_K は codegen が spec.constants["block_k"]（デフォルト 32）から読む。
-        SearchParams に block_k フィールドがないため、MVP では BLOCK_K 固定で探索する。
-        """
+        """GEMM (linear) 向け探索空間。BLOCK_M=BLOCK_N=block_size, BLOCK_K in [16,32,64] で探索。"""
         seen: set[tuple] = set()
         for block_mn in self.gemm_output_blocks:
-            for warps in self.num_warps:
-                for stage in stages:
-                    for acc in self.acc_dtypes:
-                        key = (block_mn, warps, stage, acc)
-                        if key in seen:
-                            continue
-                        seen.add(key)
-                        yield SearchParams(
-                            block_size=block_mn,
-                            num_warps=warps,
-                            num_stages=stage,
-                            acc_dtype=acc,
-                            variant="gemm",
-                            rows_per_program=1,
-                        )
+            for block_k in [16, 32, 64]:
+                for warps in self.num_warps:
+                    for stage in stages:
+                        for acc in self.acc_dtypes:
+                            key = (block_mn, block_k, warps, stage, acc)
+                            if key in seen:
+                                continue
+                            seen.add(key)
+                            yield SearchParams(
+                                block_size=block_mn,
+                                num_warps=warps,
+                                num_stages=stage,
+                                acc_dtype=acc,
+                                variant="gemm",
+                                rows_per_program=1,
+                                block_k=block_k,
+                            )
 
     def enumerate(self, spec: KernelSpec, compute_capability: str) -> Iterator[SearchParams]:
         """spec と GPU に対して有効な SearchParams を列挙する。

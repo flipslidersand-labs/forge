@@ -98,6 +98,10 @@ def generate(spec: KernelSpec, params: SearchParams) -> str:
     if spec.op_type in OP_REGISTRY:
         render_kwargs.update(OP_REGISTRY[spec.op_type].render_extra_kwargs_fn(spec))
 
+    # params.block_k takes precedence over spec.constants["block_k"]
+    if params.variant == "gemm":
+        render_kwargs["block_k"] = params.block_k
+
     return template.render(**render_kwargs)
 
 

@@ -292,3 +292,32 @@ def test_pascal_cc_restricts_stages_to_one(op_type: str, shape_kw: dict) -> None
     assert all(c.num_stages == 1 for c in candidates), (
         f"{op_type}: non-stage-1 found in Pascal candidates"
     )
+
+
+def test_search_params_block_k_field() -> None:
+    """SearchParams.block_k フィールドが存在し、デフォルト値 32 を持つ。"""
+    p = SearchParams(block_size=64, num_warps=4, num_stages=1, variant="gemm")
+    assert p.block_k == 32
+
+
+def test_search_params_block_k_custom() -> None:
+    """SearchParams(block_k=16).block_k == 16。"""
+    p = SearchParams(block_size=64, num_warps=4, num_stages=1, variant="gemm", block_k=16)
+    assert p.block_k == 16
+
+
+def test_search_params_block_k_invalid() -> None:
+    """block_k に非 2 冪を渡すと ValueError。"""
+    import pytest
+
+    with pytest.raises(ValueError, match="block_k"):
+        SearchParams(block_size=64, num_warps=4, num_stages=1, variant="gemm", block_k=48)
+
+
+def test_enumerate_gemm_includes_block_k_variants() -> None:
+    """linear spec の enumerate で block_k=16 と block_k=64 の候補が含まれる。"""
+    spec_ = _make_spec("linear", m=16, k=4096, n=4096)
+    candidates = list(SearchSpace().enumerate(spec_, "8.0"))
+    block_k_values = {c.block_k for c in candidates}
+    assert 16 in block_k_values, f"block_k=16 not found; got {block_k_values}"
+    assert 64 in block_k_values, f"block_k=64 not found; got {block_k_values}"
