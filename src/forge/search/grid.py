@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import logging
+
 from forge.ir.kernel_spec import KernelSpec
 
 from .candidate import HistoryEntry
 from .params import SearchParams
 from .space import SearchSpace
+
+_log = logging.getLogger("forge.search.grid")
 
 
 class GridSearch:
@@ -25,8 +29,17 @@ class GridSearch:
         history: list[HistoryEntry] | None = None,
     ) -> list[SearchParams]:
         candidates = list(self.space.enumerate(spec, compute_capability))
+        total = len(candidates)
         if budget is not None:
             candidates = candidates[:budget]
+        _log.debug(
+            "grid search op=%s cc=%s total=%d budget=%s returning=%d",
+            spec.op_type,
+            compute_capability,
+            total,
+            budget,
+            len(candidates),
+        )
         return candidates
 
     def reset_usage(self) -> None:
