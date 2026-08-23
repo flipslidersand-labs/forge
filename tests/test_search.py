@@ -204,49 +204,62 @@ def _make_spec(op_type: str, **kw: int) -> KernelSpec:
         n_in = {"rmsnorm": 2, "layernorm": 3, "softmax": 1, "gelu": 1}[op_type]
         inputs = [_f16((m, n))] * n_in
         return KernelSpec(
-            op_type=op_type, input_specs=tuple(inputs),
-            output_specs=(_f16((m, n)),), constants={"eps": 1e-6},
-            graph_hash=f"{op_type}_v1", constraints=(),
+            op_type=op_type,
+            input_specs=tuple(inputs),
+            output_specs=(_f16((m, n)),),
+            constants={"eps": 1e-6},
+            graph_hash=f"{op_type}_v1",
+            constraints=(),
         )
     if op_type == "swiglu":
         m, n = kw["m"], kw["n"]
         return KernelSpec(
             op_type="swiglu",
             input_specs=(_f16((m, n)), _f16((m, n))),
-            output_specs=(_f16((m, n)),), constants={},
-            graph_hash="swiglu_v1", constraints=(),
+            output_specs=(_f16((m, n)),),
+            constants={},
+            graph_hash="swiglu_v1",
+            constraints=(),
         )
     if op_type == "rope":
         m, n = kw["m"], kw["n"]
         return KernelSpec(
             op_type="rope",
             input_specs=(_f16((m, n)), _f16((m, n)), _f16((m, n))),
-            output_specs=(_f16((m, n)),), constants={},
-            graph_hash="rope_v1", constraints=(),
+            output_specs=(_f16((m, n)),),
+            constants={},
+            graph_hash="rope_v1",
+            constraints=(),
         )
     if op_type == "fused_add_rmsnorm":
         m, n = kw["m"], kw["n"]
         return KernelSpec(
             op_type="fused_add_rmsnorm",
             input_specs=(_f16((m, n)), _f16((m, n)), _f16((n,))),
-            output_specs=(_f16((m, n)),), constants={"eps": 1e-6},
-            graph_hash="fused_add_rmsnorm_v1", constraints=(),
+            output_specs=(_f16((m, n)),),
+            constants={"eps": 1e-6},
+            graph_hash="fused_add_rmsnorm_v1",
+            constraints=(),
         )
     if op_type == "linear":
         m, k, n = kw["m"], kw["k"], kw["n"]
         return KernelSpec(
             op_type="linear",
             input_specs=(_f16((m, k)), _f16((n, k)), _f16((n,))),
-            output_specs=(_f16((m, n)),), constants={},
-            graph_hash="linear_v1", constraints=(),
+            output_specs=(_f16((m, n)),),
+            constants={},
+            graph_hash="linear_v1",
+            constraints=(),
         )
     if op_type == "scaled_dot_product_attention":
         bh, s, d = kw["bh"], kw["s"], kw["d"]
         return KernelSpec(
             op_type="scaled_dot_product_attention",
             input_specs=(_f16((bh, s, d)), _f16((bh, s, d)), _f16((bh, s, d))),
-            output_specs=(_f16((bh, s, d)),), constants={},
-            graph_hash="sdpa_v1", constraints=(),
+            output_specs=(_f16((bh, s, d)),),
+            constants={},
+            graph_hash="sdpa_v1",
+            constraints=(),
         )
     raise ValueError(f"unknown op_type: {op_type}")
 

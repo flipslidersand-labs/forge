@@ -291,13 +291,17 @@ class TestSearchResultMetrics:
     """SearchResult の新メトリクスフィールドのユニットテスト。"""
 
     def _make_search_result(self, experiments):
+        import torch
+
         from forge.ir.kernel_spec import KernelSpec
         from forge.ir.tensor_spec import TensorSpec
-        import torch
 
         spec = KernelSpec(
             op_type="rmsnorm",
-            input_specs=(TensorSpec((16, 64), torch.float16, True), TensorSpec((64,), torch.float16, True)),
+            input_specs=(
+                TensorSpec((16, 64), torch.float16, True),
+                TensorSpec((64,), torch.float16, True),
+            ),
             output_specs=(TensorSpec((16, 64), torch.float16, True),),
             constants={"eps": 1e-6},
             graph_hash="h",
@@ -315,7 +319,9 @@ class TestSearchResultMetrics:
 
     def _exp(self, success, correct, error=None):
         params = SearchParams(block_size=64, num_warps=4, num_stages=1)
-        return ExperimentResult(params=params, success=success, correct=correct, median_us=None, error=error)
+        return ExperimentResult(
+            params=params, success=success, correct=correct, median_us=None, error=error
+        )
 
     def test_default_values(self):
         r = self._make_search_result([])
@@ -331,8 +337,13 @@ class TestSearchResultMetrics:
         ]
         r = self._make_search_result(exps)
         r = SearchResult(
-            spec=r.spec, cache_hit=False, best_params=None, best_benchmark=None,
-            baseline_benchmark=None, baseline_name=None, experiments=exps,
+            spec=r.spec,
+            cache_hit=False,
+            best_params=None,
+            best_benchmark=None,
+            baseline_benchmark=None,
+            baseline_name=None,
+            experiments=exps,
             failed_count=sum(1 for e in exps if not e.success),
             incorrect_count=sum(1 for e in exps if e.success and not e.correct),
         )
@@ -347,8 +358,12 @@ class TestSearchResultMetrics:
         ]
         r = SearchResult(
             spec=self._make_search_result([]).spec,
-            cache_hit=False, best_params=None, best_benchmark=None,
-            baseline_benchmark=None, baseline_name=None, experiments=exps,
+            cache_hit=False,
+            best_params=None,
+            best_benchmark=None,
+            baseline_benchmark=None,
+            baseline_name=None,
+            experiments=exps,
             failed_count=sum(1 for e in exps if not e.success),
             incorrect_count=sum(1 for e in exps if e.success and not e.correct),
         )
@@ -360,21 +375,30 @@ class TestMultiRoundResultMetrics:
     """MultiRoundResult の新メトリクスフィールドのユニットテスト。"""
 
     def test_default_values(self):
+        import torch
+
         from forge.ir.kernel_spec import KernelSpec
         from forge.ir.tensor_spec import TensorSpec
-        import torch
 
         spec = KernelSpec(
             op_type="rmsnorm",
-            input_specs=(TensorSpec((16, 64), torch.float16, True), TensorSpec((64,), torch.float16, True)),
+            input_specs=(
+                TensorSpec((16, 64), torch.float16, True),
+                TensorSpec((64,), torch.float16, True),
+            ),
             output_specs=(TensorSpec((16, 64), torch.float16, True),),
             constants={"eps": 1e-6},
             graph_hash="h",
             constraints=(),
         )
         r = MultiRoundResult(
-            spec=spec, rounds=[], best_params=None, best_benchmark=None,
-            baseline_benchmark=None, baseline_name=None, token_usage=None,
+            spec=spec,
+            rounds=[],
+            best_params=None,
+            best_benchmark=None,
+            baseline_benchmark=None,
+            baseline_name=None,
+            token_usage=None,
         )
         assert r.failed_count == 0
         assert r.incorrect_count == 0
@@ -412,6 +436,7 @@ class TestProgressEvent:
             msgs.append(msg)
 
         import warnings
+
         with warnings.catch_warnings(record=True):
             warnings.simplefilter("always")
             orch = Orchestrator(progress=on_str)
@@ -428,6 +453,7 @@ class TestProgressEvent:
     def test_worker_fail_emits_candidate_fail_event(self):
         """_eval_one でワーカー失敗 → candidate_fail イベント。"""
         import tempfile
+
         from forge.orchestrator import Orchestrator, ProgressEvent
 
         events: list[ProgressEvent] = []
@@ -450,6 +476,7 @@ class TestProgressEvent:
     def test_worker_success_emits_candidate_ok_event(self):
         """_eval_one でワーカー成功 → candidate_ok イベント。"""
         import tempfile
+
         from forge.orchestrator import Orchestrator, ProgressEvent
 
         events: list[ProgressEvent] = []
@@ -463,8 +490,11 @@ class TestProgressEvent:
                 with patch(
                     "forge.orchestrator.run_in_worker",
                     return_value=WorkerResult(
-                        success=True, correct=True,
-                        candidate=bench, baseline=bench, baseline_name="ref",
+                        success=True,
+                        correct=True,
+                        candidate=bench,
+                        baseline=bench,
+                        baseline_name="ref",
                     ),
                 ):
                     orch._eval_one(*_eval_args(orch))

@@ -17,9 +17,7 @@ def _make_payload(**overrides) -> str:
     base = {
         "op_type": "rmsnorm",
         "kernel_code": "pass",
-        "benchmark_input": [
-            {"shape": [4], "dtype": "float16", "init": "randn", "seed": 0}
-        ],
+        "benchmark_input": [{"shape": [4], "dtype": "float16", "init": "randn", "seed": 0}],
     }
     base.update(overrides)
     return json.dumps(base)
@@ -84,4 +82,3 @@ def test_no_bare_exception_in_source() -> None:
     source = inspect.getsource(mod)
     assert "except Exception" not in source, "bare except Exception が残っています"
     assert "noqa: BLE001" not in source, "noqa: BLE001 が残っています"
-

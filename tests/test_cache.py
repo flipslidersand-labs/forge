@@ -222,8 +222,7 @@ class TestKernelRepository:
             repo = KernelRepository(path)
             conn = sqlite3.connect(str(path))
             tables = {
-                row[0]
-                for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
             }
             assert "schema_migrations" in tables
             version = conn.execute("SELECT version FROM schema_migrations").fetchone()
@@ -585,12 +584,14 @@ class TestForgeDbPathEnvVar:
         custom = str(tmp_path / "custom.db")
         monkeypatch.setenv("FORGE_DB_PATH", custom)
         import forge.cache.repository as repo_mod
+
         importlib.reload(repo_mod)
         assert repo_mod.DEFAULT_DB_PATH == custom
 
     def test_default_used_when_env_not_set(self, monkeypatch) -> None:
         monkeypatch.delenv("FORGE_DB_PATH", raising=False)
         import forge.cache.repository as repo_mod
+
         importlib.reload(repo_mod)
         assert repo_mod.DEFAULT_DB_PATH == "~/.forge/cache.db"
 
@@ -599,6 +600,7 @@ class TestForgeDbPathEnvVar:
         cli_db = str(tmp_path / "cli.db")
         monkeypatch.setenv("FORGE_DB_PATH", env_db)
         from forge.cli import main
+
         rc = main(["cache", "list", "--db", cli_db])
         assert rc == 0
         assert not Path(env_db).exists()  # 環境変数パスは使われない

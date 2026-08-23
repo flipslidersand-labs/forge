@@ -42,8 +42,11 @@ def _spec(op_type: str = "rmsnorm") -> KernelSpec:
 
 def _bench(median: float = 100.0) -> BenchmarkResult:
     return BenchmarkResult(
-        median_us=median, p20_us=median * 0.9, p80_us=median * 1.1,
-        p95_us=median * 1.2, samples_us=[median] * 5,
+        median_us=median,
+        p20_us=median * 0.9,
+        p80_us=median * 1.1,
+        p95_us=median * 1.2,
+        samples_us=[median] * 5,
     )
 
 
@@ -106,7 +109,9 @@ class TestCacheLogging:
 class TestRuntimeLogging:
     def test_timeout_logged_as_warning(self, caplog: pytest.LogCaptureFixture) -> None:
         with caplog.at_level(logging.WARNING, logger="forge.runtime"):
-            with patch("subprocess.run", side_effect=__import__("subprocess").TimeoutExpired("x", 0.1)):
+            with patch(
+                "subprocess.run", side_effect=__import__("subprocess").TimeoutExpired("x", 0.1)
+            ):
                 result = run_in_worker(
                     kernel_code="# stub",
                     op_type="rmsnorm",
@@ -115,7 +120,9 @@ class TestRuntimeLogging:
                     timeout_s=0.1,
                 )
         assert not result.success
-        warnings = [r for r in caplog.records if r.name == "forge.runtime" and r.levelno == logging.WARNING]
+        warnings = [
+            r for r in caplog.records if r.name == "forge.runtime" and r.levelno == logging.WARNING
+        ]
         assert warnings, "timeout should emit a WARNING"
         assert "timeout" in warnings[0].message.lower()
 
@@ -133,7 +140,9 @@ class TestRuntimeLogging:
                     constants={},
                 )
         assert not result.success
-        warnings = [r for r in caplog.records if r.name == "forge.runtime" and r.levelno == logging.WARNING]
+        warnings = [
+            r for r in caplog.records if r.name == "forge.runtime" and r.levelno == logging.WARNING
+        ]
         assert warnings
         assert "crash" in warnings[0].message.lower()
 
@@ -165,7 +174,11 @@ class TestOrchestratorLogging:
         ):
             orch.optimize(spec, budget=1)
 
-        info_msgs = [r.message for r in caplog.records if r.name == "forge.orchestrator" and r.levelno == logging.INFO]
+        info_msgs = [
+            r.message
+            for r in caplog.records
+            if r.name == "forge.orchestrator" and r.levelno == logging.INFO
+        ]
         assert any("search start" in m for m in info_msgs)
         repo.close()
 
@@ -210,7 +223,11 @@ class TestOrchestratorLogging:
         ):
             orch.optimize(spec, budget=1)
 
-        warns = [r for r in caplog.records if r.name == "forge.orchestrator" and r.levelno == logging.WARNING]
+        warns = [
+            r
+            for r in caplog.records
+            if r.name == "forge.orchestrator" and r.levelno == logging.WARNING
+        ]
         assert any("FAIL" in r.message for r in warns)
         repo.close()
 
@@ -226,7 +243,11 @@ class TestOrchestratorLogging:
         ):
             orch.optimize(spec, budget=1)
 
-        info_msgs = [r.message for r in caplog.records if r.name == "forge.orchestrator" and r.levelno == logging.INFO]
+        info_msgs = [
+            r.message
+            for r in caplog.records
+            if r.name == "forge.orchestrator" and r.levelno == logging.INFO
+        ]
         assert any("cached best" in m for m in info_msgs)
         repo.close()
 
@@ -243,7 +264,11 @@ class TestOrchestratorLogging:
         ):
             orch.optimize(spec, budget=1)
 
-        warns = [r.message for r in caplog.records if r.name == "forge.orchestrator" and r.levelno == logging.WARNING]
+        warns = [
+            r.message
+            for r in caplog.records
+            if r.name == "forge.orchestrator" and r.levelno == logging.WARNING
+        ]
         assert any("no best found" in m for m in warns)
         repo.close()
 
