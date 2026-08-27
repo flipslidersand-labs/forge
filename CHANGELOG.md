@@ -1,3 +1,10 @@
+## [1.17.4](https://github.com/flipslidersand-labs/forge/compare/v1.17.3...v1.17.4) (2026-08-27)
+
+### 🐛 Bug Fixes
+
+* **#273:** make DiscordNotifier._send_webhook non-blocking via daemon thread ([#292](https://github.com/flipslidersand-labs/forge/issues/292)) ([370f728](https://github.com/flipslidersand-labs/forge/commit/370f728db2e52ca3a5bd27be759f3cb641bc9697)), closes [#273](https://github.com/flipslidersand-labs/forge/issues/273) [#273](https://github.com/flipslidersand-labs/forge/issues/273) [#273](https://github.com/flipslidersand-labs/forge/issues/273)
+* **ci:** add timeout-minutes to gpu-test and replace silent skip with explicit fail guard ([#274](https://github.com/flipslidersand-labs/forge/issues/274)) ([#294](https://github.com/flipslidersand-labs/forge/issues/294)) ([c34c520](https://github.com/flipslidersand-labs/forge/commit/c34c520c54aa2530eb490ccb44c6c99f915675b3))
+
 ## [1.17.3](https://github.com/flipslidersand-labs/forge/compare/v1.17.2...v1.17.3) (2026-08-27)
 
 ### 🐛 Bug Fixes
