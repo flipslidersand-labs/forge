@@ -39,6 +39,32 @@ class TestTensorSpec:
         spec = TensorSpec(shape=(1,), dtype=torch.float16, is_contiguous=True)
         assert spec.dtype_str() == "float16"
 
+    @pytest.mark.parametrize(
+        ("dtype", "expected"),
+        [
+            (torch.float16, "float16"),
+            (torch.float32, "float32"),
+            (torch.float64, "float64"),
+            (torch.bfloat16, "bfloat16"),
+            (torch.int8, "int8"),
+            (torch.int16, "int16"),
+            (torch.int32, "int32"),
+            (torch.int64, "int64"),
+            (torch.uint8, "uint8"),
+            (torch.bool, "bool"),
+        ],
+    )
+    def test_dtype_str_all_supported(self, dtype: torch.dtype, expected: str) -> None:
+        spec = TensorSpec(shape=(1,), dtype=dtype, is_contiguous=True)
+        assert spec.dtype_str() == expected
+
+    def test_dtype_str_unknown_raises(self) -> None:
+        """未知の dtype は repr() フォールバックでなく ValueError を上げること。"""
+        # torch.complex64 はマップ未登録なので ValueError になるはず
+        spec = TensorSpec(shape=(1,), dtype=torch.complex64, is_contiguous=True)
+        with pytest.raises(ValueError, match="Unsupported dtype for CacheKey"):
+            spec.dtype_str()
+
     def test_frozen(self) -> None:
         spec = TensorSpec(shape=(1,), dtype=torch.float32, is_contiguous=True)
         with pytest.raises(FrozenInstanceError):
