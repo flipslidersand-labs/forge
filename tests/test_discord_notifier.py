@@ -11,12 +11,16 @@ from unittest.mock import MagicMock, patch
 from forge.notifiers.discord import DiscordNotifier
 
 
+_VALID_COMPLETION = "https://discord.com/api/webhooks/000/completion"
+_VALID_ERRORS = "https://discord.com/api/webhooks/000/errors"
+
+
 def _configured() -> DiscordNotifier:
     with patch.dict(
         "os.environ",
         {
-            "DISCORD_WEBHOOK_COMPLETION": "https://discord.test/completion",
-            "DISCORD_WEBHOOK_ERRORS": "https://discord.test/errors",
+            "DISCORD_WEBHOOK_COMPLETION": _VALID_COMPLETION,
+            "DISCORD_WEBHOOK_ERRORS": _VALID_ERRORS,
         },
     ):
         return DiscordNotifier()
@@ -191,3 +195,49 @@ class TestOptimizationCompleteNewFields:
         assert "Speedup" not in field_names
         assert "Best Round" not in field_names
         assert "Fail Rate" not in field_names
+
+
+class TestWebhookUrlValidation:
+    """_validate_webhook_url が SSRF を防ぐことを検証（#262）。"""
+
+    def test_valid_discord_com_url_passes(self) -> None:
+        """https://discord.com/... は ValueError を出さない。"""
+        DiscordNotifier._validate_webhook_url("https://discord.com/api/webhooks/123/abc")
+
+    def test_valid_subdomain_discord_com_passes(self) -> None:
+        """https://canary.discord.com/... も許可される。"""
+        DiscordNotifier._validate_webhook_url("https://canary.discord.com/api/webhooks/123/abc")
+
+    def test_http_scheme_raises(self) -> None:
+        """http:// は拒否（暗号化なし）。"""
+        import pytest
+
+        with pytest.raises(ValueError, match="Invalid Discord webhook URL"):
+            DiscordNotifier._validate_webhook_url("http://discord.com/api/webhooks/123/abc")
+
+    def test_metadata_endpoint_raises(self) -> None:
+        """SSRF: AWS EC2 メタデータエンドポイントへの送信を拒否。"""
+        import pytest
+
+        with pytest.raises(ValueError, match="Invalid Discord webhook URL"):
+            DiscordNotifier._validate_webhook_url("https://169.254.169.254/latest/meta-data/")
+
+    def test_internal_host_raises(self) -> None:
+        """SSRF: 内部ホスト名への送信を拒否。"""
+        import pytest
+
+        with pytest.raises(ValueError, match="Invalid Discord webhook URL"):
+            DiscordNotifier._validate_webhook_url("https://internal-service/webhook")
+
+    def test_non_discord_com_domain_raises(self) -> None:
+        """discord.com を含まない外部ドメインを拒否。"""
+        import pytest
+
+        with pytest.raises(ValueError, match="Invalid Discord webhook URL"):
+            DiscordNotifier._validate_webhook_url("https://evil.com/discord.com/webhook")
+
+    def test_send_webhook_invalid_url_returns_false(self) -> None:
+        """_send_webhook に不正 URL を渡すと False を返し例外を伝播しない。"""
+        n = _configured()
+        result = n._send_webhook("https://169.254.169.254/latest/meta-data/", {"embeds": []})
+        assert result is False
