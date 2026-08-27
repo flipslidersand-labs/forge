@@ -69,9 +69,9 @@ def _cmd_list(args: argparse.Namespace) -> int:
         print(json.dumps([]) if args.json else "キャッシュは空です。(DB 未作成)")
         return 0
 
-    repo = KernelRepository(args.db)
     try:
-        summaries = repo.list_summaries()
+        with KernelRepository(args.db) as repo:
+            summaries = repo.list_summaries()
     except (sqlite3.OperationalError, sqlite3.DatabaseError) as e:
         print(
             f"エラー: キャッシュ DB の読み取りに失敗しました: {e}\n"
@@ -79,8 +79,6 @@ def _cmd_list(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 1
-    finally:
-        repo.close()
 
     if args.json:
         print(
@@ -147,18 +145,18 @@ def _cmd_clear(args: argparse.Namespace) -> int:
         print("キャッシュは空です。(DB 未作成)")
         return 0
 
-    repo = KernelRepository(args.db)
     try:
-        n = repo.count()
-        if n == 0:
-            print("キャッシュは空です。")
-            return 0
-        if not args.force and not _confirm(
-            f"{n} 件のキャッシュを削除します。よろしいですか? [y/N] "
-        ):
-            print("中止しました。")
-            return 0
-        deleted = repo.clear()
+        with KernelRepository(args.db) as repo:
+            n = repo.count()
+            if n == 0:
+                print("キャッシュは空です。")
+                return 0
+            if not args.force and not _confirm(
+                f"{n} 件のキャッシュを削除します。よろしいですか? [y/N] "
+            ):
+                print("中止しました。")
+                return 0
+            deleted = repo.clear()
     except (sqlite3.OperationalError, sqlite3.DatabaseError) as e:
         print(
             f"エラー: キャッシュ DB の操作に失敗しました: {e}\n"
@@ -166,8 +164,6 @@ def _cmd_clear(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 1
-    finally:
-        repo.close()
     print(f"{deleted} 件削除しました。")
     return 0
 
@@ -180,12 +176,19 @@ def _cmd_prune(args: argparse.Namespace) -> int:
         try:
             before_dt = datetime.strptime(args.before, "%Y-%m-%d").replace(tzinfo=UTC)
         except ValueError:
-            print(f"エラー: --before の日付形式が正しくありません: {args.before!r} (YYYY-MM-DD)")
+            print(
+                f"エラー: --before の日付形式が正しくありません: {args.before!r} (YYYY-MM-DD)",
+                file=sys.stderr,
+            )
             return 1
 
     keep_latest: int | None = args.keep_latest
-    if keep_latest is not None and keep_latest < 0:
-        print("エラー: --keep-latest には 0 以上の整数を指定してください。")
+    if keep_latest is not None and keep_latest < 1:
+        print(
+            "エラー: --keep-latest には 1 以上の整数を指定してください。"
+            " 全件削除は `forge cache clear` を使ってください。",
+            file=sys.stderr,
+        )
         return 1
 
     if before_dt is None and keep_latest is None:

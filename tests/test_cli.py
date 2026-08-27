@@ -280,7 +280,7 @@ def test_cache_prune_invalid_date_errors(tmp_path, capsys) -> None:
     db = tmp_path / "cache.db"
     rc = main(["cache", "prune", "--before", "not-a-date", "--db", str(db)])
     assert rc == 1
-    assert "エラー" in capsys.readouterr().out
+    assert "エラー" in capsys.readouterr().err
 
 
 def test_cache_prune_prompt_aborts(tmp_path, capsys, monkeypatch) -> None:
@@ -293,8 +293,17 @@ def test_cache_prune_prompt_aborts(tmp_path, capsys, monkeypatch) -> None:
     assert KernelRepository(db).count() == 3
 
 
+def test_cache_prune_keep_latest_zero_errors(tmp_path, capsys) -> None:
+    db = tmp_path / "cache.db"
+    rc = main(["cache", "prune", "--keep-latest", "0", "--force", "--db", str(db)])
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert "エラー" in err
+    assert "cache clear" in err
+
+
 def test_cache_prune_does_not_create_db(tmp_path, capsys) -> None:
     db = tmp_path / "no" / "such" / "cache.db"
-    rc = main(["cache", "prune", "--keep-latest", "0", "--force", "--db", str(db)])
+    rc = main(["cache", "prune", "--keep-latest", "1", "--force", "--db", str(db)])
     assert rc == 0
     assert not db.exists()
