@@ -544,7 +544,6 @@ class Orchestrator:
         baseline_name: str | None = None
         seen_params: set[SearchParams] = set()
         total_benchmark_time_s = 0.0
-        round_start_time = time.time()
 
         for round_num in range(1, n_rounds + 1):
             self._progress(
@@ -557,6 +556,8 @@ class Orchestrator:
                 budget=candidates_per_round,
                 history=history,
             )
+            # LLM 推論時間を除外するため、候補生成後にタイマーを開始する
+            round_start_time = time.time()
 
             round_experiments: list[ExperimentResult] = []
             round_best_params: SearchParams | None = None
@@ -608,7 +609,6 @@ class Orchestrator:
                 if round_best_us is not None
                 else f"  round {round_num} done: no valid candidates (time={round_elapsed:.1f}s)"
             )
-            round_start_time = time.time()
 
         total = sum(len(r.experiments) for r in rounds)
         all_exps_for_rounds = [e for r in rounds for e in r.experiments]
