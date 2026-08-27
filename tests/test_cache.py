@@ -543,9 +543,10 @@ class TestKernelRepositoryThreadSafety:
         )
 
     def test_concurrent_puts_no_exception_correct_count(self) -> None:
-        """10 スレッドが同一 KernelRepository インスタンスに同時書き込みしても例外なし。"""
-        n_threads = 10
+        """50 スレッドが Barrier で同期してから同時 put しても例外なし・件数一致。"""
+        n_threads = 50
         errors: list[Exception] = []
+        barrier = threading.Barrier(n_threads)
 
         with tempfile.TemporaryDirectory() as d:
             repo = KernelRepository(Path(d) / "cache.db")
@@ -553,6 +554,7 @@ class TestKernelRepositoryThreadSafety:
             def _write(idx: int) -> None:
                 try:
                     key = self._make_key(f"kernel_{idx}")
+                    barrier.wait()  # 全スレッドが揃ってから一斉に put する
                     repo.put(
                         key,
                         CachedKernel(
@@ -574,6 +576,71 @@ class TestKernelRepositoryThreadSafety:
 
             assert errors == [], f"Thread errors: {errors}"
             assert repo.count() == n_threads
+            repo.close()
+
+    def test_wal_mode_enabled(self) -> None:
+        """KernelRepository は WAL journal_mode で初期化されること。"""
+        import sqlite3
+
+        with tempfile.TemporaryDirectory() as d:
+            with KernelRepository(Path(d) / "cache.db") as repo:
+                mode = repo.conn.execute("PRAGMA journal_mode").fetchone()[0]
+            # WAL モードは close 後も DB ファイルに残るが、open 中に検証する
+            with sqlite3.connect(str(Path(d) / "cache.db")) as conn:
+                mode_after = conn.execute("PRAGMA journal_mode").fetchone()[0]
+        assert mode == "wal", f"expected WAL, got {mode!r}"
+        assert mode_after == "wal", f"expected WAL after close, got {mode_after!r}"
+
+    def test_concurrent_put_get_list_mixed(self) -> None:
+        """put / get / list_summaries を混在させた 60 スレッドストレステスト。
+
+        writer 40 スレッドと reader 20 スレッドが Barrier で同時に動く。
+        例外が発生しないこと、writer 分の件数が最終的に一致することを確認する。
+        """
+        n_writers = 40
+        n_readers = 20
+        n_total = n_writers + n_readers
+        errors: list[Exception] = []
+        barrier = threading.Barrier(n_total)
+
+        with tempfile.TemporaryDirectory() as d:
+            repo = KernelRepository(Path(d) / "cache.db")
+
+            def _writer(idx: int) -> None:
+                try:
+                    key = self._make_key(f"mixed_kernel_{idx}")
+                    barrier.wait()
+                    repo.put(
+                        key,
+                        CachedKernel(
+                            cache_key=key,
+                            params={"block_size": 128},
+                            kernel_code="def k(): pass",
+                            benchmark_json={"median_us": float(idx)},
+                            created_at=datetime.now(UTC),
+                        ),
+                    )
+                except Exception as e:
+                    errors.append(e)
+
+            def _reader(idx: int) -> None:
+                try:
+                    barrier.wait()
+                    # put が完了していないキーも get する（miss は許容）
+                    repo.get(self._make_key(f"mixed_kernel_{idx}"))
+                    repo.list_summaries()
+                except Exception as e:
+                    errors.append(e)
+
+            threads = [threading.Thread(target=_writer, args=(i,)) for i in range(n_writers)]
+            threads += [threading.Thread(target=_reader, args=(i,)) for i in range(n_readers)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+
+            assert errors == [], f"Thread errors: {errors}"
+            assert repo.count() == n_writers
             repo.close()
 
 
