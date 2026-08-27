@@ -33,15 +33,19 @@ jobs:
   gpu-smoke:
     name: GPU Smoke Test (PR)
     runs-on: [self-hosted, gpu]
-    if: >-
-      github.event_name == 'pull_request' &&
-      vars.GPU_RUNNER_AVAILABLE == 'true'
+    if: github.event_name == 'pull_request'
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Check GPU_RUNNER_AVAILABLE
+        run: |
+          if [ "${{ vars.GPU_RUNNER_AVAILABLE }}" != "true" ]; then
+            echo "::error::GPU_RUNNER_AVAILABLE is not set to 'true'. Set the variable or disable this job."
+            exit 1
+          fi
       - name: nvidia-smi check
         run: nvidia-smi
       - name: Install dependencies (CUDA torch)
@@ -64,6 +68,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Check GPU_RUNNER_AVAILABLE
+        run: |
+          if [ "${{ vars.GPU_RUNNER_AVAILABLE }}" != "true" ]; then
+            echo "::error::GPU_RUNNER_AVAILABLE is not set to 'true'. Set the variable or disable this job."
+            exit 1
+          fi
       - name: nvidia-smi check
         run: nvidia-smi
       - name: Install dependencies (CUDA torch)
