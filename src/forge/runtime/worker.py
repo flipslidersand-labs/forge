@@ -184,15 +184,27 @@ def run_extended_baseline_in_worker(
             timeout=timeout_s,
         )
     except subprocess.TimeoutExpired:
+        _log.warning("extended_baseline worker timeout op=%s after %.1fs", op_type, timeout_s)
         return []
 
     if proc.returncode != 0:
+        stderr = proc.stderr.strip()
+        detail = stderr[:4096] if stderr else f"exit {proc.returncode}"
+        _log.warning(
+            "extended_baseline worker crashed op=%s rc=%d: %s", op_type, proc.returncode, detail
+        )
         return []
 
     try:
         result = json.loads(proc.stdout.strip().splitlines()[-1])
         if not result.get("success"):
+            err = result.get("error", "unknown error")
+            _log.warning("extended_baseline worker reported failure op=%s: %s", op_type, err)
             return []
         return [ExtendedBaselineResult.from_dict(b) for b in result.get("baselines", [])]
-    except (json.JSONDecodeError, IndexError, KeyError):
+    except (json.JSONDecodeError, IndexError, KeyError) as exc:
+        snippet = proc.stdout.strip()[:4096]
+        _log.warning(
+            "extended_baseline bad worker output op=%s: %r stdout=%r", op_type, exc, snippet
+        )
         return []
