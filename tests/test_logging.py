@@ -6,7 +6,9 @@ import json
 import logging
 import sqlite3
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Generator
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -54,9 +56,14 @@ def _params() -> SearchParams:
     return SearchParams(block_size=4096, num_warps=8, num_stages=1, acc_dtype="fp32")
 
 
-def _tmp_repo() -> KernelRepository:
-    tmp = Path(tempfile.mkdtemp()) / "test.db"
-    return KernelRepository(tmp)
+@contextmanager
+def _tmp_repo() -> Generator[KernelRepository, None, None]:
+    with tempfile.TemporaryDirectory() as d:
+        repo = KernelRepository(Path(d) / "test.db")
+        try:
+            yield repo
+        finally:
+            repo.close()
 
 
 # --------------------------------------------------------------------------- #
@@ -66,39 +73,37 @@ def _tmp_repo() -> KernelRepository:
 
 class TestCacheLogging:
     def test_miss_logged_at_debug(self, caplog: pytest.LogCaptureFixture) -> None:
-        repo = _tmp_repo()
-        key = CacheKey.from_spec_and_env(_spec())
-        with caplog.at_level(logging.DEBUG, logger="forge.cache"):
-            result = repo.get(key)
+        with _tmp_repo() as repo:
+            key = CacheKey.from_spec_and_env(_spec())
+            with caplog.at_level(logging.DEBUG, logger="forge.cache"):
+                result = repo.get(key)
         assert result is None
         assert any("miss" in r.message for r in caplog.records if r.name == "forge.cache")
-        repo.close()
 
     def test_hit_logged_at_debug(self, caplog: pytest.LogCaptureFixture) -> None:
         from datetime import UTC, datetime
 
         from forge.cache.repository import CachedKernel
 
-        repo = _tmp_repo()
         spec = _spec()
-        key = CacheKey.from_spec_and_env(spec)
-        kernel = CachedKernel(
-            cache_key=key,
-            params=_params().to_dict(),
-            kernel_code="# stub",
-            benchmark_json=_bench().to_dict(),
-            baseline_us=200.0,
-            created_at=datetime.now(UTC),
-        )
-        with caplog.at_level(logging.DEBUG, logger="forge.cache"):
-            repo.put(key, kernel)
-        assert any("write" in r.message for r in caplog.records if r.name == "forge.cache")
+        with _tmp_repo() as repo:
+            key = CacheKey.from_spec_and_env(spec)
+            kernel = CachedKernel(
+                cache_key=key,
+                params=_params().to_dict(),
+                kernel_code="# stub",
+                benchmark_json=_bench().to_dict(),
+                baseline_us=200.0,
+                created_at=datetime.now(UTC),
+            )
+            with caplog.at_level(logging.DEBUG, logger="forge.cache"):
+                repo.put(key, kernel)
+            assert any("write" in r.message for r in caplog.records if r.name == "forge.cache")
 
-        caplog.clear()
-        with caplog.at_level(logging.DEBUG, logger="forge.cache"):
-            repo.get(key)
+            caplog.clear()
+            with caplog.at_level(logging.DEBUG, logger="forge.cache"):
+                repo.get(key)
         assert any("hit" in r.message for r in caplog.records if r.name == "forge.cache")
-        repo.close()
 
 
 # --------------------------------------------------------------------------- #
@@ -164,15 +169,15 @@ class TestOrchestratorLogging:
 
     def test_search_start_logged_at_info(self, caplog: pytest.LogCaptureFixture) -> None:
         spec = _spec()
-        repo = _tmp_repo()
-        orch = Orchestrator(repo=repo)
+        with _tmp_repo() as repo:
+            orch = Orchestrator(repo=repo)
 
-        with (
-            caplog.at_level(logging.INFO, logger="forge.orchestrator"),
-            patch("forge.orchestrator.run_in_worker", return_value=self._mock_worker_success()),
-            patch("forge.orchestrator.generate", return_value="# stub"),
-        ):
-            orch.optimize(spec, budget=1)
+            with (
+                caplog.at_level(logging.INFO, logger="forge.orchestrator"),
+                patch("forge.orchestrator.run_in_worker", return_value=self._mock_worker_success()),
+                patch("forge.orchestrator.generate", return_value="# stub"),
+            ):
+                orch.optimize(spec, budget=1)
 
         info_msgs = [
             r.message
@@ -180,7 +185,6 @@ class TestOrchestratorLogging:
             if r.name == "forge.orchestrator" and r.levelno == logging.INFO
         ]
         assert any("search start" in m for m in info_msgs)
-        repo.close()
 
     def test_cache_hit_logged_at_info(self, caplog: pytest.LogCaptureFixture) -> None:
         from datetime import UTC, datetime
@@ -188,40 +192,39 @@ class TestOrchestratorLogging:
         from forge.cache.repository import CachedKernel
 
         spec = _spec()
-        repo = _tmp_repo()
-        key = CacheKey.from_spec_and_env(spec)
-        repo.put(
-            key,
-            CachedKernel(
-                cache_key=key,
-                params=_params().to_dict(),
-                kernel_code="# stub",
-                benchmark_json=_bench().to_dict(),
-                baseline_us=200.0,
-                created_at=datetime.now(UTC),
-            ),
-        )
+        with _tmp_repo() as repo:
+            key = CacheKey.from_spec_and_env(spec)
+            repo.put(
+                key,
+                CachedKernel(
+                    cache_key=key,
+                    params=_params().to_dict(),
+                    kernel_code="# stub",
+                    benchmark_json=_bench().to_dict(),
+                    baseline_us=200.0,
+                    created_at=datetime.now(UTC),
+                ),
+            )
 
-        orch = Orchestrator(repo=repo)
-        with caplog.at_level(logging.INFO, logger="forge.orchestrator"):
-            orch.optimize(spec, budget=1)
+            orch = Orchestrator(repo=repo)
+            with caplog.at_level(logging.INFO, logger="forge.orchestrator"):
+                orch.optimize(spec, budget=1)
 
         info_msgs = [r.message for r in caplog.records if r.name == "forge.orchestrator"]
         assert any("cache HIT" in m for m in info_msgs)
-        repo.close()
 
     def test_worker_fail_logged_as_warning(self, caplog: pytest.LogCaptureFixture) -> None:
         spec = _spec()
-        repo = _tmp_repo()
-        orch = Orchestrator(repo=repo)
-        fail = WorkerResult(success=False, error="CUDA boom")
+        with _tmp_repo() as repo:
+            orch = Orchestrator(repo=repo)
+            fail = WorkerResult(success=False, error="CUDA boom")
 
-        with (
-            caplog.at_level(logging.WARNING, logger="forge.orchestrator"),
-            patch("forge.orchestrator.run_in_worker", return_value=fail),
-            patch("forge.orchestrator.generate", return_value="# stub"),
-        ):
-            orch.optimize(spec, budget=1)
+            with (
+                caplog.at_level(logging.WARNING, logger="forge.orchestrator"),
+                patch("forge.orchestrator.run_in_worker", return_value=fail),
+                patch("forge.orchestrator.generate", return_value="# stub"),
+            ):
+                orch.optimize(spec, budget=1)
 
         warns = [
             r
@@ -229,19 +232,18 @@ class TestOrchestratorLogging:
             if r.name == "forge.orchestrator" and r.levelno == logging.WARNING
         ]
         assert any("FAIL" in r.message for r in warns)
-        repo.close()
 
     def test_cached_best_logged_at_info(self, caplog: pytest.LogCaptureFixture) -> None:
         spec = _spec()
-        repo = _tmp_repo()
-        orch = Orchestrator(repo=repo)
+        with _tmp_repo() as repo:
+            orch = Orchestrator(repo=repo)
 
-        with (
-            caplog.at_level(logging.INFO, logger="forge.orchestrator"),
-            patch("forge.orchestrator.run_in_worker", return_value=self._mock_worker_success()),
-            patch("forge.orchestrator.generate", return_value="# stub"),
-        ):
-            orch.optimize(spec, budget=1)
+            with (
+                caplog.at_level(logging.INFO, logger="forge.orchestrator"),
+                patch("forge.orchestrator.run_in_worker", return_value=self._mock_worker_success()),
+                patch("forge.orchestrator.generate", return_value="# stub"),
+            ):
+                orch.optimize(spec, budget=1)
 
         info_msgs = [
             r.message
@@ -249,20 +251,19 @@ class TestOrchestratorLogging:
             if r.name == "forge.orchestrator" and r.levelno == logging.INFO
         ]
         assert any("cached best" in m for m in info_msgs)
-        repo.close()
 
     def test_no_best_found_logged_as_warning(self, caplog: pytest.LogCaptureFixture) -> None:
         spec = _spec()
-        repo = _tmp_repo()
-        orch = Orchestrator(repo=repo)
-        fail = WorkerResult(success=False, error="bad")
+        with _tmp_repo() as repo:
+            orch = Orchestrator(repo=repo)
+            fail = WorkerResult(success=False, error="bad")
 
-        with (
-            caplog.at_level(logging.WARNING, logger="forge.orchestrator"),
-            patch("forge.orchestrator.run_in_worker", return_value=fail),
-            patch("forge.orchestrator.generate", return_value="# stub"),
-        ):
-            orch.optimize(spec, budget=1)
+            with (
+                caplog.at_level(logging.WARNING, logger="forge.orchestrator"),
+                patch("forge.orchestrator.run_in_worker", return_value=fail),
+                patch("forge.orchestrator.generate", return_value="# stub"),
+            ):
+                orch.optimize(spec, budget=1)
 
         warns = [
             r.message
@@ -270,7 +271,6 @@ class TestOrchestratorLogging:
             if r.name == "forge.orchestrator" and r.levelno == logging.WARNING
         ]
         assert any("no best found" in m for m in warns)
-        repo.close()
 
     def test_logger_hierarchy(self) -> None:
         logger = logging.getLogger("forge.orchestrator")
@@ -281,19 +281,18 @@ class TestOrchestratorLogging:
     def test_forge_root_level_suppresses_info(self, caplog: pytest.LogCaptureFixture) -> None:
         """logging.getLogger("forge").setLevel(WARNING) で INFO が抑制される。"""
         spec = _spec()
-        repo = _tmp_repo()
-        orch = Orchestrator(repo=repo)
+        with _tmp_repo() as repo:
+            orch = Orchestrator(repo=repo)
 
-        with (
-            caplog.at_level(logging.WARNING, logger="forge"),
-            patch("forge.orchestrator.run_in_worker", return_value=self._mock_worker_success()),
-            patch("forge.orchestrator.generate", return_value="# stub"),
-        ):
-            orch.optimize(spec, budget=1)
+            with (
+                caplog.at_level(logging.WARNING, logger="forge"),
+                patch("forge.orchestrator.run_in_worker", return_value=self._mock_worker_success()),
+                patch("forge.orchestrator.generate", return_value="# stub"),
+            ):
+                orch.optimize(spec, budget=1)
 
         info_records = [r for r in caplog.records if r.levelno == logging.INFO]
         assert not info_records, "INFO logs should be suppressed at WARNING level"
-        repo.close()
 
 
 # --------------------------------------------------------------------------- #
