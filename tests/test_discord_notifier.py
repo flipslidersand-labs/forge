@@ -10,7 +10,6 @@ from unittest.mock import MagicMock, patch
 
 from forge.notifiers.discord import DiscordNotifier
 
-
 _VALID_COMPLETION = "https://discord.com/api/webhooks/000/completion"
 _VALID_ERRORS = "https://discord.com/api/webhooks/000/errors"
 
