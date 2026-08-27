@@ -242,7 +242,7 @@ class KernelRepository:
                 f"(SELECT cache_key_hash FROM kernels ORDER BY created_at DESC LIMIT {n})"
             )
 
-        where = " OR ".join(conditions)
+        where = " AND ".join(conditions)
 
         with self._lock:
             if dry_run:
