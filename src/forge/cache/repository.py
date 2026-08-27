@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from forge.benchmark.statistics import BenchmarkResultDict
+from forge.runtime.loader import sign_kernel_code, verify_kernel_code
 
 from .key import CacheKey
 
@@ -145,10 +146,11 @@ class KernelRepository:
             _log.debug("cache miss key=%s", key.digest()[:8])
             return None
         _log.debug("cache hit key=%s", key.digest()[:8])
+        kernel_code = verify_kernel_code(row[2])
         return CachedKernel(
             cache_key=key,
             params=json.loads(row[1]),
-            kernel_code=row[2],
+            kernel_code=kernel_code,
             benchmark_json=json.loads(row[3]),
             baseline_us=row[4],
             created_at=datetime.fromisoformat(row[5]),
@@ -156,6 +158,7 @@ class KernelRepository:
 
     def put(self, key: CacheKey, kernel: CachedKernel) -> None:
         _log.debug("cache write key=%s", key.digest()[:8])
+        signed_code = sign_kernel_code(kernel.kernel_code)
         with self._lock:
             self.conn.execute(
                 "INSERT OR REPLACE INTO kernels "
@@ -165,7 +168,7 @@ class KernelRepository:
                     key.digest(),
                     json.dumps(key.__dict__, default=list),
                     json.dumps(kernel.params),
-                    kernel.kernel_code,
+                    signed_code,
                     json.dumps(kernel.benchmark_json),
                     kernel.baseline_us,
                     datetime.now(UTC).isoformat(),
