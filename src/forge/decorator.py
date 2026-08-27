@@ -4,7 +4,7 @@ import functools
 import inspect
 import logging
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Literal
 
 from forge.cache.repository import KernelRepository
 from forge.codegen.triton_codegen import generate
@@ -18,11 +18,14 @@ from forge.search.candidate import CandidateGenerator
 
 _log = logging.getLogger("forge.decorator")
 
+SUPPORTED_BACKENDS: tuple[str, ...] = ("triton",)
+SUPPORTED_OBJECTIVES: tuple[str, ...] = ("latency", "economic")
+
 
 def optimize(
     budget: int = 50,
-    backend: str = "triton",
-    objective: str = "latency",
+    backend: Literal["triton"] = "triton",
+    objective: Literal["latency", "economic"] = "latency",
     *,
     repo: KernelRepository | None = None,
     search: CandidateGenerator | None = None,
@@ -45,6 +48,12 @@ def optimize(
     と判断した場合は探索をスキップして eager にフォールバックする。
     per_candidate_s は 1 候補あたりの探索コスト見積もり（秒）。GPU の速度に応じて調整する。
     """
+    if backend not in SUPPORTED_BACKENDS:
+        raise ValueError(f"Unsupported backend: {backend!r}. Choose from {SUPPORTED_BACKENDS}.")
+    if objective not in SUPPORTED_OBJECTIVES:
+        raise ValueError(
+            f"Unsupported objective: {objective!r}. Choose from {SUPPORTED_OBJECTIVES}."
+        )
 
     def deco(fn: Callable[..., Any]) -> Callable[..., Any]:
         sig = inspect.signature(fn)

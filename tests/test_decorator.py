@@ -8,11 +8,29 @@ import torch
 
 import forge
 from forge.cache.repository import KernelRepository
+from forge.decorator import SUPPORTED_BACKENDS, SUPPORTED_OBJECTIVES
 from forge.search.grid import GridSearch
 from forge.search.space import SearchSpace
 
 pytestmark = pytest.mark.gpu
 _SKIP = pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA GPU")
+
+
+def test_invalid_backend_raises_value_error() -> None:
+    with pytest.raises(ValueError, match="Unsupported backend"):
+        forge.optimize(backend="invalid")
+
+
+def test_invalid_objective_raises_value_error() -> None:
+    with pytest.raises(ValueError, match="Unsupported objective"):
+        forge.optimize(objective="throughput")
+
+
+def test_supported_backends_and_objectives_do_not_raise() -> None:
+    for backend in SUPPORTED_BACKENDS:
+        for objective in SUPPORTED_OBJECTIVES:
+            # Should not raise
+            forge.optimize(backend=backend, objective=objective)
 
 
 def _ref(x, weight, eps=1e-6):
