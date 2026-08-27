@@ -253,7 +253,6 @@ class TestOptimizationCompleteNewFields:
         assert "Fail Rate" not in field_names
 
 
-<<<<<<< HEAD
 class TestWebhookUrlValidation:
     """_validate_webhook_url が SSRF を防ぐことを検証（#262）。"""
 
@@ -298,7 +297,8 @@ class TestWebhookUrlValidation:
         n = _configured()
         result = n._send_webhook("https://169.254.169.254/latest/meta-data/", {"embeds": []})
         assert result is False
-=======
+
+
 class TestAsyncBehavior:
     """_send_webhook のバックグラウンド実行を検証するテスト群。"""
 
@@ -372,4 +372,3 @@ class TestAsyncBehavior:
             n.send_cache_hit("rmsnorm")
             _wait_for_notifier_thread()
         assert call_count == 2, f"Expected 2 calls (initial + retry), got {call_count}"
->>>>>>> 6e06dc7 (fix(#273): make DiscordNotifier._send_webhook non-blocking via daemon thread)
