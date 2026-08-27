@@ -3,13 +3,18 @@
 import json
 import logging
 import os
+import threading
+import time
 from datetime import UTC, datetime
+from http.client import HTTPResponse
 from typing import Any
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 logger = logging.getLogger(__name__)
+
+_RETRY_AFTER_DEFAULT = 1.0  # seconds to wait after a 429 with no Retry-After header
 
 
 class DiscordNotifier:
@@ -42,7 +47,7 @@ class DiscordNotifier:
             failed_rate: failed_count / num_candidates (optional)
 
         Returns:
-            True if notification sent successfully
+            True if notification dispatched to background thread
         """
         if not self.completion_webhook:
             logger.debug("Discord completion webhook not configured")
@@ -75,7 +80,7 @@ class DiscordNotifier:
 
             return self._send_webhook(self.completion_webhook, {"embeds": [embed]})
         except Exception as e:
-            logger.error(f"Failed to send optimization notification: {e}")
+            logger.warning(f"Failed to send optimization notification: {e}", exc_info=True)
             return False
 
     def send_optimization_error(
@@ -92,7 +97,7 @@ class DiscordNotifier:
             error_type: Error type (optional)
 
         Returns:
-            True if notification sent successfully
+            True if notification dispatched to background thread
         """
         if not self.error_webhook:
             logger.debug("Discord error webhook not configured")
@@ -117,7 +122,7 @@ class DiscordNotifier:
 
             return self._send_webhook(self.error_webhook, {"embeds": [embed]})
         except Exception as e:
-            logger.error(f"Failed to send error notification: {e}")
+            logger.warning(f"Failed to send error notification: {e}", exc_info=True)
             return False
 
     def send_cache_hit(self, op_name: str) -> bool:
@@ -127,7 +132,7 @@ class DiscordNotifier:
             op_name: Operation name
 
         Returns:
-            True if notification sent successfully
+            True if notification dispatched to background thread
         """
         if not self.completion_webhook:
             return False
@@ -142,7 +147,7 @@ class DiscordNotifier:
 
             return self._send_webhook(self.completion_webhook, {"embeds": [embed]})
         except Exception as e:
-            logger.error(f"Failed to send cache hit notification: {e}")
+            logger.warning(f"Failed to send cache hit notification: {e}", exc_info=True)
             return False
 
     @staticmethod
@@ -158,35 +163,93 @@ class DiscordNotifier:
             raise ValueError(f"Invalid Discord webhook URL: {url!r}")
 
     def _send_webhook(self, webhook_url: str, payload: dict[str, Any]) -> bool:
-        """Send payload to Discord webhook.
+        """Dispatch payload to Discord webhook in a daemon background thread.
+
+        The HTTP request is performed off the critical path so that DNS delays
+        or Discord congestion cannot block ``optimize()`` completion or inflate
+        ``total_time_s`` measurements.  A single 429 retry (honouring
+        ``Retry-After``) is attempted before giving up.
 
         Args:
             webhook_url: Discord webhook URL
             payload: JSON payload to send
 
         Returns:
-            True if successful (HTTP 204)
+            True immediately (thread successfully started); False if thread
+            could not be created.
         """
         try:
             self._validate_webhook_url(webhook_url)
             data = json.dumps(payload).encode("utf-8")
+        except Exception as e:
+            logger.warning(f"Failed to serialise Discord payload: {e}", exc_info=True)
+            return False
+
+        def _do_send() -> None:
             req = Request(
                 webhook_url,
                 data=data,
                 headers={"Content-Type": "application/json"},
                 method="POST",
             )
-
-            with urlopen(req, timeout=5) as response:
-                if response.status == 204:
-                    logger.debug("Discord notification sent successfully")
-                    return True
+            try:
+                with urlopen(req, timeout=5) as response:
+                    _handle_response(response)
+            except HTTPError as exc:
+                if exc.code == 429:
+                    retry_after = _retry_after_seconds(exc)
+                    logger.warning(
+                        "Discord webhook rate-limited (429); retrying after %.1fs", retry_after
+                    )
+                    time.sleep(retry_after)
+                    _retry_once(webhook_url, data)
                 else:
-                    logger.error(f"Discord webhook returned {response.status}")
-                    return False
-        except URLError as e:
-            logger.error(f"Failed to connect to Discord: {e}")
-            return False
+                    logger.warning("Discord webhook HTTP error %s: %s", exc.code, exc)
+            except URLError as e:
+                logger.warning(f"Failed to connect to Discord: {e}", exc_info=True)
+            except Exception as e:
+                logger.warning(f"Unexpected error sending Discord notification: {e}", exc_info=True)
+
+        try:
+            t = threading.Thread(target=_do_send, daemon=True, name="discord-notifier")
+            t.start()
+            return True
         except Exception as e:
-            logger.error(f"Unexpected error sending Discord notification: {e}")
+            logger.warning(f"Failed to start Discord notifier thread: {e}", exc_info=True)
             return False
+
+
+# ---------------------------------------------------------------------------
+# Module-level helpers (no access to self needed)
+# ---------------------------------------------------------------------------
+
+
+def _handle_response(response: HTTPResponse) -> None:
+    if response.status == 204:
+        logger.debug("Discord notification sent successfully")
+    else:
+        logger.warning("Discord webhook returned %s", response.status)
+
+
+def _retry_after_seconds(exc: HTTPError) -> float:
+    """Parse Retry-After header from a 429 HTTPError; fall back to default."""
+    try:
+        value = exc.headers.get("Retry-After", "")
+        return float(value) if value else _RETRY_AFTER_DEFAULT
+    except (ValueError, AttributeError):
+        return _RETRY_AFTER_DEFAULT
+
+
+def _retry_once(webhook_url: str, data: bytes) -> None:
+    """Attempt a single retry of the webhook POST after a 429."""
+    req = Request(
+        webhook_url,
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urlopen(req, timeout=5) as response:
+            _handle_response(response)
+    except Exception as e:
+        logger.warning("Discord webhook retry failed: %s", e, exc_info=True)
