@@ -6,6 +6,7 @@ import os
 from datetime import UTC, datetime
 from typing import Any
 from urllib.error import URLError
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 logger = logging.getLogger(__name__)
@@ -144,6 +145,18 @@ class DiscordNotifier:
             logger.error(f"Failed to send cache hit notification: {e}")
             return False
 
+    @staticmethod
+    def _validate_webhook_url(url: str) -> None:
+        """Validate that the webhook URL is a legitimate Discord HTTPS endpoint.
+
+        Raises:
+            ValueError: If the URL scheme is not https or the host is not
+                        a discord.com subdomain (SSRF prevention).
+        """
+        parsed = urlparse(url)
+        if parsed.scheme != "https" or not (parsed.hostname or "").endswith("discord.com"):
+            raise ValueError(f"Invalid Discord webhook URL: {url!r}")
+
     def _send_webhook(self, webhook_url: str, payload: dict[str, Any]) -> bool:
         """Send payload to Discord webhook.
 
@@ -155,6 +168,7 @@ class DiscordNotifier:
             True if successful (HTTP 204)
         """
         try:
+            self._validate_webhook_url(webhook_url)
             data = json.dumps(payload).encode("utf-8")
             req = Request(
                 webhook_url,
