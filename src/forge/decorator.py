@@ -3,6 +3,7 @@ from __future__ import annotations
 import functools
 import inspect
 import logging
+import threading
 from collections.abc import Callable
 from typing import Any, Literal
 
@@ -62,10 +63,16 @@ def optimize(
         op_type_box: list[
             str | None
         ] = []  # 一度だけ判定（[] 未判定 / [None] 不可 / [str] 判定済み）
+        _lock = threading.Lock()
 
         def _resolve_op_type() -> str | None:
-            if not op_type_box:
-                op_type_box.append(identify(fn) if backend == "triton" else None)
+            # ロック外の高速パス: すでに判定済みならそのまま返す
+            if op_type_box:
+                return op_type_box[0]
+            with _lock:
+                # ダブルチェック: 他スレッドが先に入れた可能性
+                if not op_type_box:
+                    op_type_box.append(identify(fn) if backend == "triton" else None)
             return op_type_box[0]
 
         @functools.wraps(fn)
@@ -86,43 +93,49 @@ def optimize(
                 return fn(*args, **kwargs)
 
             key = tuple((tuple(t.shape), str(t.dtype)) for t in tensors)
+            # ロック外の高速パス: すでにコンパイル済みならそのまま実行
             if key not in compiled:
-                # economic: eager を 1 回タイムしてから探索判断
-                if objective == "economic" and min_invocations > 0:
-                    baseline_us = _time_eager(fn, args, kwargs)
-                    search_cost_s = budget * per_candidate_s
-                    decision = should_run_search(min_invocations, search_cost_s, baseline_us)
-                    _progress_fn = progress or (lambda _m: None)
-                    _progress_fn(f"adoption: {decision.reason}")
-                    _log.info("adoption fn=%s: %s", fn.__qualname__, decision.reason)
-                    if not decision.should_search:
-                        compiled[key] = None
-                    else:
-                        compiled[key] = _build(
-                            fn,
-                            op_type,
-                            tensors,
-                            constants,
-                            budget,
-                            repo,
-                            search,
-                            min_speedup,
-                            python_executable,
-                            progress,
-                        )
-                else:
-                    compiled[key] = _build(
-                        fn,
-                        op_type,
-                        tensors,
-                        constants,
-                        budget,
-                        repo,
-                        search,
-                        min_speedup,
-                        python_executable,
-                        progress,
-                    )
+                with _lock:
+                    # ダブルチェック: 他スレッドが先に _build を完了した可能性
+                    if key not in compiled:
+                        # economic: eager を 1 回タイムしてから探索判断
+                        if objective == "economic" and min_invocations > 0:
+                            baseline_us = _time_eager(fn, args, kwargs)
+                            search_cost_s = budget * per_candidate_s
+                            decision = should_run_search(
+                                min_invocations, search_cost_s, baseline_us
+                            )
+                            _progress_fn = progress or (lambda _m: None)
+                            _progress_fn(f"adoption: {decision.reason}")
+                            _log.info("adoption fn=%s: %s", fn.__qualname__, decision.reason)
+                            if not decision.should_search:
+                                compiled[key] = None
+                            else:
+                                compiled[key] = _build(
+                                    fn,
+                                    op_type,
+                                    tensors,
+                                    constants,
+                                    budget,
+                                    repo,
+                                    search,
+                                    min_speedup,
+                                    python_executable,
+                                    progress,
+                                )
+                        else:
+                            compiled[key] = _build(
+                                fn,
+                                op_type,
+                                tensors,
+                                constants,
+                                budget,
+                                repo,
+                                search,
+                                min_speedup,
+                                python_executable,
+                                progress,
+                            )
             kfn = compiled[key]
             if kfn is None:
                 return fn(*args, **kwargs)
