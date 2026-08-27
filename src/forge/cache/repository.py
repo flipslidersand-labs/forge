@@ -236,11 +236,13 @@ class KernelRepository:
             params.append(before.isoformat())
 
         if keep_latest is not None:
-            n = int(keep_latest)
+            if not isinstance(keep_latest, int):
+                raise TypeError(f"keep_latest must be int, got {type(keep_latest).__name__!r}")
             conditions.append(
-                f"cache_key_hash NOT IN "
-                f"(SELECT cache_key_hash FROM kernels ORDER BY created_at DESC LIMIT {n})"
+                "cache_key_hash NOT IN "
+                "(SELECT cache_key_hash FROM kernels ORDER BY created_at DESC LIMIT ?)"
             )
+            params.append(keep_latest)
 
         where = " OR ".join(conditions)
 
