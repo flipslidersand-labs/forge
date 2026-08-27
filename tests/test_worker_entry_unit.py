@@ -73,6 +73,28 @@ def test_runtime_error_captured_with_error_type(monkeypatch, capsys) -> None:
     assert result["error_type"] == "RuntimeError"
 
 
+def test_unknown_op_type_returns_error(monkeypatch, capsys) -> None:
+    """未知の op_type は OP_REGISTRY 検証で弾かれ success=False を返す (#266)。"""
+    from forge.runtime._worker_entry import main
+
+    payload = json.dumps(
+        {
+            "op_type": "../../evil",
+            "kernel_code": "pass",
+            "benchmark_input": [{"shape": [4], "dtype": "float16", "init": "randn", "seed": 0}],
+        }
+    )
+    monkeypatch.setattr(sys, "stdin", io.StringIO(payload))
+
+    main()
+
+    out = capsys.readouterr().out.strip()
+    result = json.loads(out)
+    assert result["success"] is False
+    assert "unknown op_type" in result["error"]
+    assert "../../evil" in result["error"]
+
+
 def test_no_bare_exception_in_source() -> None:
     """ソース内に bare 'except Exception' が無いことを静的確認。"""
     import inspect

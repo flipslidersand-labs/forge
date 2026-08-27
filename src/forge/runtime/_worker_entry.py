@@ -81,10 +81,16 @@ def main() -> None:
         import torch
 
         from forge.benchmark.timer import measure
+        from forge.ops.registry import OP_REGISTRY
         from forge.runtime.loader import load_kernel_fn
         from forge.runtime.reference import baseline_name, get_baseline, get_reference
 
         op_type = payload["op_type"]
+
+        if op_type not in OP_REGISTRY:
+            print(json.dumps({"success": False, "error": f"unknown op_type: {op_type!r}"}))
+            return
+
         constants = payload.get("constants", {})
         task = payload.get("task", "full")
         tol = payload.get("tolerance", {"atol": 2e-3, "rtol": 1e-2, "equal_nan": False})
