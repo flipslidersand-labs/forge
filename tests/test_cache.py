@@ -431,20 +431,39 @@ class TestKernelRepositoryPrune:
                 assert target == 3
                 assert repo.count() == 4
 
-    def test_prune_both_options_union(self) -> None:
-        """--before と --keep-latest の同時指定は OR 条件で削除する。"""
+    def test_prune_both_options_intersection(self) -> None:
+        """--before と --keep-latest の同時指定は AND 条件（両方を満たすものだけ削除）。
+
+        keep_latest 保護が before より優先される: 最新 N 件に入っていれば
+        日付が古くても削除されない（#263 バグ修正）。
+        """
         with tempfile.TemporaryDirectory() as d:
             with KernelRepository(Path(d) / "cache.db") as repo:
                 self._put(repo, "old")
                 cutoff = datetime.now(UTC)
                 for i in range(4):
                     self._put(repo, f"new{i}")
-                # keep_latest=2 → 最新2件を保持: new2,new3 が残る
-                # before=cutoff  → old が削除対象
-                # OR条件: old + new0 + new1 の計3件が削除される
+                # keep_latest=2 → 最新2件(new2,new3)を保護
+                # before=cutoff  → old のみ日付条件を満たす
+                # AND条件: old だけが両条件を同時に満たすため 1 件のみ削除
                 deleted = repo.prune(before=cutoff, keep_latest=2)
-                assert deleted == 3
-                assert repo.count() == 2
+                assert deleted == 1
+                assert repo.count() == 4
+
+    def test_prune_keep_latest_protects_old_entry_in_top_n(self) -> None:
+        """keep_latest の保護は before より優先される（#263 バグ修正の核心）。
+
+        最新 N 件に入っている古いエントリは before 条件があっても削除されない。
+        """
+        with tempfile.TemporaryDirectory() as d:
+            with KernelRepository(Path(d) / "cache.db") as repo:
+                # 1 件だけ登録して cutoff を設定 → 全体が before に該当
+                self._put(repo, "only")
+                cutoff = datetime.now(UTC)
+                # keep_latest=1 → "only" は最新 1 件に含まれる → 保護される
+                deleted = repo.prune(before=cutoff, keep_latest=1)
+                assert deleted == 0
+                assert repo.count() == 1
 
     def test_prune_empty_db_returns_zero(self) -> None:
         with tempfile.TemporaryDirectory() as d:

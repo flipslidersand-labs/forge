@@ -244,7 +244,7 @@ class KernelRepository:
             )
             params.append(keep_latest)
 
-        where = " OR ".join(conditions)
+        where = " AND ".join(conditions)
 
         with self._lock:
             if dry_run:
