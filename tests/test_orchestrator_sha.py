@@ -314,3 +314,31 @@ class TestOptimizeSHACPU:
         assert result.best_params is None
         assert result.best_benchmark is None
         repo.close()
+
+    def test_round_results_empty_when_all_rounds_break_no_deadcode(self):
+        """全ラウンドが break（round_results 空）のとき SearchResult が不整合にならない。
+
+        回帰テスト: #268 — all_experiments を走査する中間ループ（デッドコード）を削除後、
+        round_results が空のまま _finalize に到達しても best_params=best_bench=None が
+        一貫して返され、incorrect_count が all_experiments から正しく集計される。
+        """
+        # ラウンド 1 のみ実行され、全候補が INCORRECT → round_results が空 → break
+        with tempfile.TemporaryDirectory() as d:
+            repo = KernelRepository(Path(d) / "c.db")
+            orch = Orchestrator(repo=repo)
+            spec = _rmsnorm_spec()
+
+            with patch("forge.orchestrator.run_in_worker", return_value=_incorrect_result()):
+                result = orch.optimize_sha(
+                    spec, initial_budget=4, halving_rounds=3, search=_tiny_grid()
+                )
+
+        # round_results 空なので best は None
+        assert result.best_params is None
+        assert result.best_benchmark is None
+        # experiments は評価済みのものが入っている
+        assert len(result.experiments) > 0
+        # incorrect_count は all_experiments から一貫して集計される
+        assert result.incorrect_count == len(result.experiments)
+        assert result.failed_count == 0
+        repo.close()
