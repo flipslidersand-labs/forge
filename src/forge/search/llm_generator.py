@@ -36,7 +36,7 @@ class TokenUsage:
 
 _SYSTEM = (
     "You are a GPU kernel autotuning assistant. You propose Triton kernel "
-    "configurations for an RMSNorm kernel and a one-line hypothesis for each. "
+    "configurations for a given operation and a one-line hypothesis for each. "
     "You do NOT write code — only structured parameters. Favor configurations "
     "likely to be both correct and fast, and learn from the provided history."
 )
@@ -60,6 +60,23 @@ class LLMGenerator(_BaseGenerator):
         default_n: int = 12,
         propose_fn: ProposeFn | None = None,
     ) -> None:
+        try:
+            import typing
+
+            from anthropic.types import ModelParam
+
+            # ModelParam は Union[Literal["claude-..."], str] 型。
+            # Literal の引数だけ取り出して既知モデルセットを構築する。
+            _known: set[str] = set()
+            for arg in ModelParam.__args__:  # type: ignore[union-attr]
+                if hasattr(arg, "__args__"):
+                    _known.update(a for a in typing.get_args(arg) if isinstance(a, str))
+            if _known and model not in _known:
+                raise ValueError(
+                    f"Unknown Anthropic model: {model!r}. Known models: {sorted(_known)}"
+                )
+        except ImportError:
+            pass  # anthropic SDK 未インストール時はスキップ
         self.model = model
         self.client = client
         self.default_n = default_n
