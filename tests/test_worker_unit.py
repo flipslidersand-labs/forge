@@ -159,12 +159,37 @@ class TestRunExtendedBaselineInWorkerErrorPaths:
 
         assert result == []
 
+    def test_timeout_logs_warning(self) -> None:
+        with patch(
+            "subprocess.run",
+            side_effect=subprocess.TimeoutExpired(cmd="python", timeout=180.0),
+        ):
+            with patch("forge.runtime.worker._log") as mock_log:
+                run_extended_baseline_in_worker(
+                    _DUMMY_OP, _DUMMY_INPUT, _DUMMY_CONSTANTS, timeout_s=180.0
+                )
+        mock_log.warning.assert_called_once()
+        call_args = mock_log.warning.call_args[0]
+        assert "timeout" in call_args[0]
+        assert _DUMMY_OP in call_args[1]
+
     def test_nonzero_returncode_returns_empty_list(self) -> None:
         proc = _proc(returncode=1, stderr="crash")
         with patch("subprocess.run", return_value=proc):
             result = run_extended_baseline_in_worker(_DUMMY_OP, _DUMMY_INPUT, _DUMMY_CONSTANTS)
 
         assert result == []
+
+    def test_nonzero_returncode_logs_warning(self) -> None:
+        proc = _proc(returncode=1, stderr="CUDA error: illegal memory access")
+        with patch("subprocess.run", return_value=proc):
+            with patch("forge.runtime.worker._log") as mock_log:
+                result = run_extended_baseline_in_worker(_DUMMY_OP, _DUMMY_INPUT, _DUMMY_CONSTANTS)
+        assert result == []
+        mock_log.warning.assert_called_once()
+        call_args = mock_log.warning.call_args[0]
+        assert "crashed" in call_args[0]
+        assert _DUMMY_OP in call_args[1]
 
     def test_bad_json_returns_empty_list(self) -> None:
         proc = _proc(returncode=0, stdout="not json")
@@ -173,12 +198,33 @@ class TestRunExtendedBaselineInWorkerErrorPaths:
 
         assert result == []
 
+    def test_bad_json_logs_warning(self) -> None:
+        proc = _proc(returncode=0, stdout="not json")
+        with patch("subprocess.run", return_value=proc):
+            with patch("forge.runtime.worker._log") as mock_log:
+                result = run_extended_baseline_in_worker(_DUMMY_OP, _DUMMY_INPUT, _DUMMY_CONSTANTS)
+        assert result == []
+        mock_log.warning.assert_called_once()
+        call_args = mock_log.warning.call_args[0]
+        assert "bad worker output" in call_args[0]
+
     def test_success_false_in_payload_returns_empty_list(self) -> None:
         proc = _proc(returncode=0, stdout=json.dumps({"success": False}))
         with patch("subprocess.run", return_value=proc):
             result = run_extended_baseline_in_worker(_DUMMY_OP, _DUMMY_INPUT, _DUMMY_CONSTANTS)
 
         assert result == []
+
+    def test_success_false_logs_warning(self) -> None:
+        proc = _proc(returncode=0, stdout=json.dumps({"success": False, "error": "OOM"}))
+        with patch("subprocess.run", return_value=proc):
+            with patch("forge.runtime.worker._log") as mock_log:
+                result = run_extended_baseline_in_worker(_DUMMY_OP, _DUMMY_INPUT, _DUMMY_CONSTANTS)
+        assert result == []
+        mock_log.warning.assert_called_once()
+        call_args = mock_log.warning.call_args[0]
+        assert "failure" in call_args[0]
+        assert _DUMMY_OP in call_args[1]
 
     def test_success_path_returns_baselines(self) -> None:
         bench = {"median_us": 80.0, "p20_us": 78.0, "p80_us": 82.0, "p95_us": 85.0}
