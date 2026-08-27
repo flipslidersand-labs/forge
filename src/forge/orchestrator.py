@@ -752,13 +752,8 @@ class Orchestrator:
 
         best_params: SearchParams | None = None
         best_bench: BenchmarkResult | None = None
-        # 最終ラウンドの生存候補から最良を選出
-        for exp in all_experiments:
-            if exp.correct and exp.median_us is not None:
-                if best_bench is None or exp.median_us < best_bench.median_us:
-                    best_params = exp.params
-                    # BenchmarkResult は _eval_one 戻り値から取れないので再構築
-        # last round_results が残っているので流用
+        # 最終ラウンドの round_results（ソート済み）の先頭が最良。
+        # round_results が空（全ラウンド break）の場合は None のまま _finalize に委ねる。
         if round_results:
             best_params, best_bench = round_results[0]
             for exp in all_experiments:
