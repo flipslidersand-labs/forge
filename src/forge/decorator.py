@@ -147,13 +147,13 @@ def _build(
     )
 
     _log.info("build start op=%s", op_type)
-    orch = Orchestrator(
+    with Orchestrator(
         repo=repo,
         min_speedup=min_speedup,
         python_executable=python_executable,
         progress=progress or (lambda _m: None),
-    )
-    result = orch.optimize(spec, budget=budget, search=search)
+    ) as orch:
+        result = orch.optimize(spec, budget=budget, search=search)
     if result.best_params is None:
         _log.info("build no best op=%s — falling back to eager", op_type)
         return None
