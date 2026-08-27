@@ -177,30 +177,34 @@ class KernelRepository:
         """キャッシュ済みカーネルを新しい順に要約して返す（`forge cache list` 用）。
 
         speedup = baseline_us / median_us。baseline 未保存の旧キャッシュでは None。
+
+        各行を fetchall() で一括展開せず、カーソルを逐次イテレートしながら
+        JSON デシリアライズを行う。raw 行と KernelSummary を同時にメモリに
+        保持しないため、エントリ数が多い場合のピーク使用量を削減できる。
         """
+        summaries: list[KernelSummary] = []
         with self._lock:
-            rows = self.conn.execute(
+            cur = self.conn.execute(
                 "SELECT cache_key_hash, cache_key_json, benchmark_json, baseline_us, created_at "
                 "FROM kernels ORDER BY created_at DESC"
-            ).fetchall()
-        summaries: list[KernelSummary] = []
-        for key_hash, key_json, bench_json, baseline_us, created_at in rows:
-            cache_key = CacheKey.from_json(key_json)
-            bench = json.loads(bench_json)
-            median = bench.get("median_us")
-            median_us = float(median) if median is not None else None
-            speedup: float | None = None
-            if baseline_us is not None and median_us is not None and median_us > 0:
-                speedup = float(baseline_us) / median_us
-            summaries.append(
-                KernelSummary(
-                    cache_key_hash=key_hash,
-                    cache_key=cache_key,
-                    median_us=median_us,
-                    speedup=speedup,
-                    created_at=created_at,
-                )
             )
+            for key_hash, key_json, bench_json, baseline_us, created_at in cur:
+                cache_key = CacheKey.from_json(key_json)
+                bench = json.loads(bench_json)
+                median = bench.get("median_us")
+                median_us = float(median) if median is not None else None
+                speedup: float | None = None
+                if baseline_us is not None and median_us is not None and median_us > 0:
+                    speedup = float(baseline_us) / median_us
+                summaries.append(
+                    KernelSummary(
+                        cache_key_hash=key_hash,
+                        cache_key=cache_key,
+                        median_us=median_us,
+                        speedup=speedup,
+                        created_at=created_at,
+                    )
+                )
         return summaries
 
     def count(self) -> int:
