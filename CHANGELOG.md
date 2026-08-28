@@ -1,3 +1,9 @@
+## [1.17.5](https://github.com/flipslidersand-labs/forge/compare/v1.17.4...v1.17.5) (2026-08-28)
+
+### 🐛 Bug Fixes
+
+* **ci:** typecheck を ubuntu-latest に固定 — self-hosted runner に libatomic1 なし ([#300](https://github.com/flipslidersand-labs/forge/issues/300)) ([0ba94b1](https://github.com/flipslidersand-labs/forge/commit/0ba94b1dc5dc4d2f135d5b74908f23764f536d7f))
+
 ## [1.17.4](https://github.com/flipslidersand-labs/forge/compare/v1.17.3...v1.17.4) (2026-08-27)
 
 ### 🐛 Bug Fixes
