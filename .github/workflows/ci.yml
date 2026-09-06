@@ -8,6 +8,9 @@ on:
 
 jobs:
   quality:
+    permissions:
+      contents: read
+      pull-requests: write
     uses: flipslidersand-labs/qa-workflows/.github/workflows/python-test.yml@main
     with:
       pre-install: pip install torch --index-url https://download.pytorch.org/whl/cpu
