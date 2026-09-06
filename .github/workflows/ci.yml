@@ -18,6 +18,9 @@ jobs:
       pytest-args: '-k "not gpu"'
       coverage-threshold: 71
 
+  reviewdog:
+    uses: flipslidersand-labs/qa-workflows/.github/workflows/reviewdog-python.yml@main
+
   typecheck:
     name: Type check
     runs-on: ubuntu-latest
