@@ -1,3 +1,9 @@
+## [1.17.6](https://github.com/flipslidersand-labs/forge/compare/v1.17.5...v1.17.6) (2026-09-06)
+
+### 🐛 Bug Fixes
+
+* **ci:** grant pull-requests:write to quality job for reusable workflow ([#305](https://github.com/flipslidersand-labs/forge/issues/305)) ([6889af3](https://github.com/flipslidersand-labs/forge/commit/6889af365fb27e326bbebe533f5b0595972f2ba4))
+
 ## [1.17.5](https://github.com/flipslidersand-labs/forge/compare/v1.17.4...v1.17.5) (2026-08-28)
 
 ### 🐛 Bug Fixes
