@@ -1,3 +1,9 @@
+## [1.19.0](https://github.com/flipslidersand-labs/forge/compare/v1.18.0...v1.19.0) (2026-09-07)
+
+### ✨ Features
+
+* **issue 775:** add design-phase issue template + PR checklist ([#306](https://github.com/flipslidersand-labs/forge/issues/306)) ([dbd1f1e](https://github.com/flipslidersand-labs/forge/commit/dbd1f1e088094b539606c369b1fe6b865f9b61c2))
+
 ## [1.18.0](https://github.com/flipslidersand-labs/forge/compare/v1.17.6...v1.18.0) (2026-09-07)
 
 ### ✨ Features
