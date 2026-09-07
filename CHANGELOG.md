@@ -1,3 +1,9 @@
+## [1.20.0](https://github.com/flipslidersand-labs/forge/compare/v1.19.0...v1.20.0) (2026-09-07)
+
+### ✨ Features
+
+* **issue 776:** stale-pr bot + size-label + PR template checklist ([#308](https://github.com/flipslidersand-labs/forge/issues/308)) ([4c698d7](https://github.com/flipslidersand-labs/forge/commit/4c698d75c521698667b35d1f0e358da76aa6eb74)), closes [772/#774](https://github.com/772/forge/issues/774)
+
 ## [1.19.0](https://github.com/flipslidersand-labs/forge/compare/v1.18.0...v1.19.0) (2026-09-07)
 
 ### ✨ Features
