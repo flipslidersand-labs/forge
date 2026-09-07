@@ -1,3 +1,9 @@
+## [1.18.0](https://github.com/flipslidersand-labs/forge/compare/v1.17.6...v1.18.0) (2026-09-07)
+
+### ✨ Features
+
+* **issue 774:** add reviewdog job for automated PR review ([#304](https://github.com/flipslidersand-labs/forge/issues/304)) ([f68a6d6](https://github.com/flipslidersand-labs/forge/commit/f68a6d68483fdaabbc5b20ac7763595a1a45a6d7)), closes [forge#305](https://github.com/flipslidersand-labs/forge/issues/305) [#774](https://github.com/flipslidersand-labs/forge/issues/774)
+
 ## [1.17.6](https://github.com/flipslidersand-labs/forge/compare/v1.17.5...v1.17.6) (2026-09-06)
 
 ### 🐛 Bug Fixes
