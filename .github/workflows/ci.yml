@@ -19,6 +19,10 @@ jobs:
       coverage-threshold: 71
 
   reviewdog:
+    permissions:
+      contents: read
+      pull-requests: write
+      checks: write
     uses: flipslidersand-labs/qa-workflows/.github/workflows/reviewdog-python.yml@main
 
   typecheck:
