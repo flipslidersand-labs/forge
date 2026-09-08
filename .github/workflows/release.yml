@@ -12,7 +12,10 @@ permissions:
 
 jobs:
   release:
-    runs-on: ${{ vars.GATE_RUNNER || 'ubuntu-latest' }}
+    # linux-general ARC ランナーには docker socket が無く、pypa/gh-action-pypi-publish
+    # (docker composite action) が "failed to connect to the docker API" で毎回落ちる。
+    # PyPI publish を含む release ジョブは ubuntu-latest 固定。
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
