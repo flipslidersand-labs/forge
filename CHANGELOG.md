@@ -1,3 +1,9 @@
+## [1.20.1](https://github.com/flipslidersand-labs/forge/compare/v1.20.0...v1.20.1) (2026-09-08)
+
+### 🐛 Bug Fixes
+
+* **release:** release ジョブを ubuntu-latest 固定に変更 ([#313](https://github.com/flipslidersand-labs/forge/issues/313)) ([922784e](https://github.com/flipslidersand-labs/forge/commit/922784e34e749f8c507e67ff35f101d7fc4a35fc)), closes [#310](https://github.com/flipslidersand-labs/forge/issues/310)
+
 ## [1.20.0](https://github.com/flipslidersand-labs/forge/compare/v1.19.0...v1.20.0) (2026-09-07)
 
 ### ✨ Features
