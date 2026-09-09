@@ -89,9 +89,15 @@
       }
     ],
     [
+      "@semantic-release/exec",
+      {
+        "prepareCmd": "sed -i 's/^version = \".*\"/version = \"${nextRelease.version}\"/' pyproject.toml && sed -i 's/^__version__ = \".*\"/__version__ = \"${nextRelease.version}\"/' src/forge/_version.py"
+      }
+    ],
+    [
       "@semantic-release/git",
       {
-        "assets": ["CHANGELOG.md", "pyproject.toml"],
+        "assets": ["CHANGELOG.md", "pyproject.toml", "src/forge/_version.py"],
         "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
       }
     ],
