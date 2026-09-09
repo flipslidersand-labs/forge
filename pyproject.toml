@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "kernelsmith"
-version = "0.1.0"
+version = "1.20.2"
 description = "Automatic GPU kernel optimizer for PyTorch operations"
 readme = "README.md"
 license = { text = "MIT" }

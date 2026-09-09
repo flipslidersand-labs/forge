@@ -1,3 +1,9 @@
+## [1.20.2](https://github.com/flipslidersand-labs/forge/compare/v1.20.1...v1.20.2) (2026-09-09)
+
+### 🐛 Bug Fixes
+
+* **release:** pyproject.toml / _version.py のバージョンドリフトを解消 ([#315](https://github.com/flipslidersand-labs/forge/issues/315)) ([7501ead](https://github.com/flipslidersand-labs/forge/commit/7501ead538ac8f0ef6c56874ee0648893b5f44e9)), closes [#311](https://github.com/flipslidersand-labs/forge/issues/311)
+
 ## [1.20.1](https://github.com/flipslidersand-labs/forge/compare/v1.20.0...v1.20.1) (2026-09-08)
 
 ### 🐛 Bug Fixes
