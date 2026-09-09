@@ -1,3 +1,9 @@
+## [1.20.3](https://github.com/flipslidersand-labs/forge/compare/v1.20.2...v1.20.3) (2026-09-09)
+
+### 🐛 Bug Fixes
+
+* **#307:** typecheck ジョブを linux-general self-hosted に戻す ([#317](https://github.com/flipslidersand-labs/forge/issues/317)) ([a54e8a3](https://github.com/flipslidersand-labs/forge/commit/a54e8a35d69a5ccf5cb55482ef64b07c88b5332f)), closes [#307](https://github.com/flipslidersand-labs/forge/issues/307) [dev-infrastructure#796](https://github.com/flipslidersand-labs/dev-infrastructure/issues/796) [#302](https://github.com/flipslidersand-labs/forge/issues/302)
+
 ## [1.20.2](https://github.com/flipslidersand-labs/forge/compare/v1.20.1...v1.20.2) (2026-09-09)
 
 ### 🐛 Bug Fixes
