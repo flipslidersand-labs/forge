@@ -27,7 +27,9 @@ jobs:
 
   typecheck:
     name: Type check
-    runs-on: ubuntu-latest
+    # linux-general に libatomic1 を追加(flipslidersand-labs/dev-infrastructure#796)
+    # したため self-hosted に戻す。exit 127 が再発したら ubuntu-latest に戻すこと。
+    runs-on: ${{ vars.GATE_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
