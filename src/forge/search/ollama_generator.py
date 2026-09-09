@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 from forge.ir.kernel_spec import KernelSpec
@@ -9,6 +10,8 @@ from forge.search.llm_generator import build_prompt
 
 if TYPE_CHECKING:
     from forge.search.candidate import HistoryEntry
+
+_log = logging.getLogger("forge.search.ollama_generator")
 
 _DEFAULT_MODEL = "qwen2.5-coder:latest"
 _DEFAULT_HOST = "http://localhost:11434"
@@ -65,5 +68,6 @@ class OllamaGenerator(_BaseGenerator):
             content = resp.message.content or ""
             proposal = Proposal.model_validate_json(content)
             return [c.model_dump() for c in proposal.candidates]
-        except Exception:  # noqa: BLE001 — ollama connection/JSON parse failure → return empty candidates
+        except Exception as exc:  # noqa: BLE001 — ollama connection/JSON parse failure → return empty candidates
+            _log.warning("OllamaGenerator._propose failed: %s", exc, exc_info=True)
             return []

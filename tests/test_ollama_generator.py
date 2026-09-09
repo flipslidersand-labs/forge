@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import pytest
 import torch
 
 from forge.ir.kernel_spec import KernelSpec
@@ -137,6 +138,17 @@ class TestOllamaGeneratorOffline:
             result = gen.generate(_spec(), "8.6", budget=5)
 
         assert result == []
+
+    def test_propose_logs_warning_on_ollama_error(self, caplog: pytest.LogCaptureFixture) -> None:
+        gen = self._gen()
+        with (
+            patch("ollama.Client") as mock_client,
+            caplog.at_level("WARNING", logger="forge.search.ollama_generator"),
+        ):
+            mock_client.return_value.chat.side_effect = ConnectionError("ollama not running")
+            gen.generate(_spec(), "8.6", budget=5)
+
+        assert any("_propose failed" in r.message for r in caplog.records)
 
     def test_generate_drops_invalid_params(self) -> None:
         # block_size が hidden size 未満 → single_row では invalid
