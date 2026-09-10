@@ -158,7 +158,9 @@ def _fn_graph_hash(fn: Callable[..., Any]) -> str:
 
     try:
         src_hash = hashlib.sha256(inspect.getsource(fn).encode()).hexdigest()[:12]
-    except OSError:
+    except (OSError, TypeError):
+        # OSError: ソースファイル不明（lambda・REPL等）。
+        # TypeError: ソース取得不能な対象（functools.partial・組み込み関数・exec生成関数等）。
         src_hash = "nosrc"
     return f"{fn.__qualname__}:{src_hash}"
 
