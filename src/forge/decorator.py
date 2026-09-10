@@ -160,7 +160,9 @@ def _fn_graph_hash(fn: Callable[..., Any]) -> str:
         src_hash = hashlib.sha256(inspect.getsource(fn).encode()).hexdigest()[:12]
     except (OSError, TypeError):
         # OSError: ソースファイル不明（lambda・REPL等）。
-        # TypeError: ソース取得不能な対象（functools.partial・組み込み関数・exec生成関数等）。
+        # TypeError: ソース取得不能な対象（組み込み関数・exec生成関数等）。
+        # 注意: functools.partial 等 __qualname__ を持たない callable は
+        # このフォールバック到達前に別の AttributeError で落ちる（別問題・未対応）。
         src_hash = "nosrc"
     return f"{fn.__qualname__}:{src_hash}"
 
