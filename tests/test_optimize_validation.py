@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import pytest
 
 import forge
@@ -39,3 +41,19 @@ def test_per_candidate_s_negative_raises_value_error() -> None:
 
 def test_valid_values_do_not_raise() -> None:
     forge.optimize(budget=1, min_speedup=1.03, per_candidate_s=2.0)
+
+
+def test_budget_nan_raises_value_error() -> None:
+    """`nan < 1` は False のため `<` 比較では素通りしてしまう罠の回帰テスト。"""
+    with pytest.raises(ValueError, match="budget"):
+        forge.optimize(budget=math.nan)
+
+
+def test_min_speedup_nan_raises_value_error() -> None:
+    with pytest.raises(ValueError, match="min_speedup"):
+        forge.optimize(min_speedup=math.nan)
+
+
+def test_per_candidate_s_nan_raises_value_error() -> None:
+    with pytest.raises(ValueError, match="per_candidate_s"):
+        forge.optimize(per_candidate_s=math.nan)
