@@ -84,7 +84,9 @@ class KernelRepository:
         """
         db_path = Path(path).expanduser()
         db_path.parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(str(db_path), check_same_thread=False)
+        # デフォルトの busy timeout (5.0s) は複数プロセスが同時に put() する
+        # CI/並行ベンチマーク環境では短すぎ、database is locked を招きやすい(#322)。
+        self.conn = sqlite3.connect(str(db_path), check_same_thread=False, timeout=30.0)
         self.conn.execute("PRAGMA journal_mode=WAL")
         self._lock = threading.Lock()
         self._init_schema()
