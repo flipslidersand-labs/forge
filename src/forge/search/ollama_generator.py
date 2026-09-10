@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
+from pydantic import ValidationError
+
 from forge.ir.kernel_spec import KernelSpec
 from forge.search._base_generator import _BaseGenerator
 from forge.search._proposal_models import Proposal
@@ -68,6 +70,15 @@ class OllamaGenerator(_BaseGenerator):
             content = resp.message.content or ""
             proposal = Proposal.model_validate_json(content)
             return [c.model_dump() for c in proposal.candidates]
-        except Exception as exc:  # noqa: BLE001 — ollama connection/JSON parse failure → return empty candidates
-            _log.warning("OllamaGenerator._propose failed: %s", exc, exc_info=True)
+        except ValidationError as exc:
+            # モデルの応答スキーマ不正。ollama 自体は生きている — warning で継続。
+            _log.warning(
+                "OllamaGenerator._propose: model returned invalid response: %s",
+                exc,
+                exc_info=True,
+            )
+            return []
+        except Exception as exc:  # noqa: BLE001 — ollama connection/API failure → return empty candidates
+            # 接続断・API エラーはモデル出力の問題と区別がつくよう error レベルで記録する。
+            _log.error("OllamaGenerator._propose: ollama request failed: %s", exc, exc_info=True)
             return []

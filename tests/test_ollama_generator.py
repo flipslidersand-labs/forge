@@ -139,7 +139,10 @@ class TestOllamaGeneratorOffline:
 
         assert result == []
 
-    def test_propose_logs_warning_on_ollama_error(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_propose_logs_error_on_connection_failure(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """#324: 接続失敗はモデル出力不正と区別できるよう ERROR レベルで記録する。"""
         gen = self._gen()
         with (
             patch("ollama.Client") as mock_client,
@@ -148,7 +151,27 @@ class TestOllamaGeneratorOffline:
             mock_client.return_value.chat.side_effect = ConnectionError("ollama not running")
             gen.generate(_spec(), "8.6", budget=5)
 
-        assert any("_propose failed" in r.message for r in caplog.records)
+        records = [r for r in caplog.records if "ollama request failed" in r.message]
+        assert records
+        assert records[0].levelname == "ERROR"
+
+    def test_propose_logs_warning_on_invalid_model_response(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """#324: モデル応答のスキーマ不正は接続断と区別し WARNING レベルに留める。"""
+        gen = self._gen()
+        with (
+            patch("ollama.Client") as mock_client,
+            caplog.at_level("WARNING", logger="forge.search.ollama_generator"),
+        ):
+            mock_client.return_value.chat.return_value = _mock_chat_response(
+                "not valid json at all"
+            )
+            gen.generate(_spec(), "8.6", budget=5)
+
+        records = [r for r in caplog.records if "invalid response" in r.message]
+        assert records
+        assert records[0].levelname == "WARNING"
 
     def test_generate_drops_invalid_params(self) -> None:
         # block_size が hidden size 未満 → single_row では invalid
