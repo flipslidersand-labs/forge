@@ -303,24 +303,40 @@ class TestAsyncBehavior:
     """_send_webhook のバックグラウンド実行を検証するテスト群。"""
 
     def test_send_webhook_does_not_block_on_slow_urlopen(self) -> None:
-        """urlopen が遅くても send_* は即座に制御を返す。"""
-        import time
+        """urlopen が遅くても send_* は即座に制御を返す。
 
-        call_times: list[float] = []
+        #326: 絶対時間しきい値（旧: elapsed < 0.040s）はCI環境（self-hosted ARC の
+        Pod共有・CPUスロットリング等）でスレッド起動遅延だけで超過しフレーキーだった。
+        代わりに threading.Event で urlopen を無期限ブロックさせ、
+        「urlopen が完了する前に呼び出し元へ制御が戻ること」を検証する
+        （非同期でなければ後続の done.wait がタイムアウトし明確に失敗する）。
+        """
+        release_urlopen = threading.Event()
 
-        def _slow_urlopen(req, timeout=None):
-            time.sleep(0.05)  # 50ms delay
+        def _blocked_urlopen(req, timeout=None):
+            release_urlopen.wait(timeout=5)  # 明示的に解放するまでブロック
             raise OSError("simulated slow failure")
 
         n = _configured()
-        t0 = time.monotonic()
-        with patch("forge.notifiers.discord.urlopen", side_effect=_slow_urlopen):
+        done = threading.Event()
+
+        def _call() -> None:
             n.send_cache_hit("rmsnorm")
-        elapsed = time.monotonic() - t0
+            done.set()
+
+        with patch("forge.notifiers.discord.urlopen", side_effect=_blocked_urlopen):
+            caller = threading.Thread(target=_call)
+            caller.start()
+            # urlopen をブロックしたままでも send_cache_hit 自体は即座に返るはず。
+            # 余裕を持った 1s 以内に返らなければバックグラウンド委譲が壊れている。
+            returned_promptly = done.wait(timeout=1.0)
+            release_urlopen.set()
+            caller.join(timeout=5)
+
         _wait_for_notifier_thread()
-        # send_cache_hit は HTTP 待機前に即座に返るはず（< 10ms が理想だが余裕を持って < 40ms）
-        assert elapsed < 0.040, f"send_cache_hit blocked for {elapsed:.3f}s"
-        call_times.append(elapsed)
+        assert returned_promptly, (
+            "send_cache_hit blocked on urlopen instead of delegating to a background thread"
+        )
 
     def test_send_webhook_runs_in_daemon_thread(self) -> None:
         """_send_webhook が daemon スレッドを起動することを確認する。"""
