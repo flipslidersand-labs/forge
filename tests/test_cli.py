@@ -229,6 +229,78 @@ class TestSQLiteErrorHandling:
         assert rc == 1
         assert "no such table" in capsys.readouterr().err
 
+    def test_prune_count_operational_error_returns_1(self, tmp_path, capsys, monkeypatch) -> None:
+        """#325: フィルタ無し(件数表示のみ)経路でも DB 破損時に生トレースバックを出さない。"""
+        import sqlite3
+
+        db = tmp_path / "cache.db"
+        _seed(db, n=1)
+
+        from forge.cache import repository as repo_mod
+
+        original_cls = repo_mod.KernelRepository
+
+        class _BrokenRepo(original_cls):
+            def count(self):
+                raise sqlite3.OperationalError("database disk image is malformed")
+
+        monkeypatch.setattr(repo_mod, "KernelRepository", _BrokenRepo)
+        rc = main(["cache", "prune", "--db", str(db)])
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "malformed" in err
+        assert "rm" in err
+
+    def test_prune_operational_error_returns_1(self, tmp_path, capsys, monkeypatch) -> None:
+        """#325: _cmd_prune には元々 try/except が無く生トレースバックが露出していた。"""
+        import sqlite3
+
+        db = tmp_path / "cache.db"
+        _seed(db, n=1)
+
+        from forge.cache import repository as repo_mod
+
+        original_cls = repo_mod.KernelRepository
+
+        class _BrokenRepo(original_cls):
+            def prune(self, *a, **kw):
+                raise sqlite3.OperationalError("database disk image is malformed")
+
+        monkeypatch.setattr(repo_mod, "KernelRepository", _BrokenRepo)
+        rc = main(["cache", "prune", "--keep-latest", "1", "--force", "--db", str(db)])
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "malformed" in err
+        assert "rm" in err
+
+
+class TestMainUnexpectedExceptionFallback:
+    """#325: main() は各コマンドの try/except を抜けた想定外の例外を捕捉し、
+    生トレースバックの代わりに `エラー: ...` と rc=1 を返す最終防波堤を持つ。"""
+
+    def test_unexpected_exception_returns_1_with_message(self, monkeypatch, capsys) -> None:
+        from forge import cli as cli_mod
+
+        def _boom(_args):
+            raise RuntimeError("disk full")
+
+        monkeypatch.setattr(cli_mod, "_cmd_list", _boom)
+        rc = main(["cache", "list"])
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "エラー" in err
+        assert "disk full" in err
+
+    def test_keyboard_interrupt_is_not_swallowed(self, monkeypatch) -> None:
+        from forge import cli as cli_mod
+
+        def _boom(_args):
+            raise KeyboardInterrupt
+
+        monkeypatch.setattr(cli_mod, "_cmd_list", _boom)
+        with pytest.raises(KeyboardInterrupt):
+            main(["cache", "list"])
+
 
 # --- forge cache prune ---
 
