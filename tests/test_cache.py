@@ -283,6 +283,32 @@ class TestKernelRepository:
             assert result is not None
             repo2.close()
 
+    def test_get_treats_hmac_key_mismatch_as_cache_miss(self, caplog) -> None:
+        """#327: 別プロセス（=別 _HMAC_KEY）で書かれたエントリは例外を送出せず
+        キャッシュミス扱い（None）で再探索にフォールバックさせる。"""
+        import forge.runtime.loader as loader_mod
+
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "cache.db"
+            key = self._make_key()
+
+            repo1 = KernelRepository(path)
+            repo1.put(key, self._make_kernel(key))
+            repo1.close()
+
+            original_key = loader_mod._HMAC_KEY
+            loader_mod._HMAC_KEY = b"\x00" * 32  # 別プロセス相当の鍵に差し替え
+            try:
+                repo2 = KernelRepository(path)
+                with caplog.at_level("WARNING", logger="forge.cache"):
+                    result = repo2.get(key)
+                repo2.close()
+            finally:
+                loader_mod._HMAC_KEY = original_key
+
+            assert result is None
+            assert any("HMAC verification" in r.message for r in caplog.records)
+
     def test_context_manager(self) -> None:
         with tempfile.TemporaryDirectory() as d:
             key = self._make_key()

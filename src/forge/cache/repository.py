@@ -145,8 +145,19 @@ class KernelRepository:
         if row is None:
             _log.debug("cache miss key=%s", key.digest()[:8])
             return None
+        try:
+            kernel_code = verify_kernel_code(row[2])
+        except ValueError as exc:
+            # #327: _HMAC_KEY はプロセス起動毎に再生成されるため、別プロセスが
+            # 書き込んだエントリは検証に失敗しうる。改ざんと区別できないが、
+            # クラッシュさせず再探索にフォールバックさせる（キャッシュミス扱い）。
+            _log.warning(
+                "cache entry failed HMAC verification, treating as miss key=%s: %s",
+                key.digest()[:8],
+                exc,
+            )
+            return None
         _log.debug("cache hit key=%s", key.digest()[:8])
-        kernel_code = verify_kernel_code(row[2])
         return CachedKernel(
             cache_key=key,
             params=json.loads(row[1]),
