@@ -92,6 +92,20 @@ def optimize(
                 _log.debug("eager fallback fn=%s op=%s", fn.__qualname__, op_type)
                 return fn(*args, **kwargs)
 
+            # #328: 引数テンソル間でデバイスが不一致だと Triton/CUDA レベルの
+            # 分かりにくいエラーでクラッシュしうる。早期に検出して eager に
+            # フォールバックし、原因を特定しやすい warning ログを残す。
+            first_device = tensors[0].device
+            if any(t.device != first_device for t in tensors[1:]):
+                devices = [str(t.device) for t in tensors]
+                _log.warning(
+                    "forge.optimize: 引数テンソルのデバイスが一致していません "
+                    "fn=%s devices=%s — eager にフォールバックします",
+                    fn.__qualname__,
+                    devices,
+                )
+                return fn(*args, **kwargs)
+
             key = tuple((tuple(t.shape), str(t.dtype)) for t in tensors)
             # ロック外の高速パス: すでにコンパイル済みならそのまま実行
             if key not in compiled:
