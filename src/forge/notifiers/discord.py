@@ -159,7 +159,8 @@ class DiscordNotifier:
                         a discord.com subdomain (SSRF prevention).
         """
         parsed = urlparse(url)
-        if parsed.scheme != "https" or not (parsed.hostname or "").endswith("discord.com"):
+        host = (parsed.hostname or "").lower()
+        if parsed.scheme != "https" or not (host == "discord.com" or host.endswith(".discord.com")):
             raise ValueError(f"Invalid Discord webhook URL: {url!r}")
 
     def _send_webhook(self, webhook_url: str, payload: dict[str, Any]) -> bool:
