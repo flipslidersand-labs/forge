@@ -14,6 +14,7 @@ from .params import SUPPORTED_ACC_DTYPES, SUPPORTED_VARIANTS
 ProposeFn = Callable[[KernelSpec, str, int, list[HistoryEntry]], list[dict[str, Any]]]
 
 DEFAULT_MODEL = "claude-opus-4-8"
+DEFAULT_TIMEOUT_S = 60.0
 
 
 @dataclass
@@ -51,6 +52,12 @@ class LLMGenerator(_BaseGenerator):
     API 呼び出しは ``propose_fn`` で差し替え可能。テストや非ネットワーク環境では
     canned な dict を返す関数を注入する。省略時は Anthropic SDK を遅延 import して
     ``claude-opus-4-8`` を呼ぶ（ANTHROPIC_API_KEY が必要）。
+
+    Args:
+        timeout: デフォルトクライアント（``client`` 未指定時）に設定するリクエスト
+            タイムアウト（秒）。Anthropic SDK のデフォルトは約10分と長く、
+            adaptive thinking モードではさらに遅くなりうるため明示する（#323）。
+            ``client`` を自前で渡す場合はそちらの設定が優先される。
     """
 
     def __init__(
@@ -59,6 +66,7 @@ class LLMGenerator(_BaseGenerator):
         client: Any | None = None,
         default_n: int = 12,
         propose_fn: ProposeFn | None = None,
+        timeout: float = DEFAULT_TIMEOUT_S,
     ) -> None:
         try:
             import typing
@@ -81,6 +89,7 @@ class LLMGenerator(_BaseGenerator):
         self.client = client
         self.default_n = default_n
         self._propose_fn = propose_fn
+        self.timeout = timeout
         self.token_usage = TokenUsage()
 
     def reset_usage(self) -> None:
@@ -111,7 +120,7 @@ class LLMGenerator(_BaseGenerator):
 
         from ._proposal_models import Proposal
 
-        client = self.client or anthropic.Anthropic()
+        client = self.client or anthropic.Anthropic(timeout=self.timeout)
         prompt = build_prompt(spec, compute_capability, n, history)
         resp = client.messages.parse(
             model=self.model,
