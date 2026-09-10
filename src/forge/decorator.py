@@ -55,6 +55,12 @@ def optimize(
         raise ValueError(
             f"Unsupported objective: {objective!r}. Choose from {SUPPORTED_OBJECTIVES}."
         )
+    if budget < 1:
+        raise ValueError(f"budget must be >= 1, got {budget!r}.")
+    if min_speedup <= 0:
+        raise ValueError(f"min_speedup must be > 0, got {min_speedup!r}.")
+    if per_candidate_s <= 0:
+        raise ValueError(f"per_candidate_s must be > 0, got {per_candidate_s!r}.")
 
     def deco(fn: Callable[..., Any]) -> Callable[..., Any]:
         sig = inspect.signature(fn)
