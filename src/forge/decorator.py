@@ -111,7 +111,7 @@ def optimize(
                             if not decision.should_search:
                                 compiled[key] = None
                             else:
-                                compiled[key] = _build(
+                                compiled[key] = _build_safe(
                                     fn,
                                     op_type,
                                     tensors,
@@ -124,7 +124,7 @@ def optimize(
                                     progress,
                                 )
                         else:
-                            compiled[key] = _build(
+                            compiled[key] = _build_safe(
                                 fn,
                                 op_type,
                                 tensors,
@@ -201,6 +201,49 @@ def _build(
     _log.info("build complete op=%s best=%s", op_type, result.best_params)
     code = generate(spec, result.best_params)
     return load_kernel_fn(code)
+
+
+def _build_safe(
+    fn: Callable[..., Any],
+    op_type: str,
+    tensors: list[Any],
+    constants: dict[str, Any],
+    budget: int,
+    repo: KernelRepository | None,
+    search: CandidateGenerator | None,
+    min_speedup: float,
+    python_executable: str | None,
+    progress: Callable[[str], None] | None,
+) -> Callable[..., Any] | None:
+    """_build() を呼び、探索系の例外を eager フォールバックの契約(#319)通りに処理する。
+
+    Orchestrator/codegen/worker 由来の例外を捕捉して warning ログに残し None
+    （eager フォールバック）を返す。KeyboardInterrupt/SystemExit は再送出する。
+    """
+    try:
+        return _build(
+            fn,
+            op_type,
+            tensors,
+            constants,
+            budget,
+            repo,
+            search,
+            min_speedup,
+            python_executable,
+            progress,
+        )
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except Exception as exc:  # noqa: BLE001 — 探索系例外は eager フォールバック契約により握りつぶす
+        _log.warning(
+            "build failed op=%s fn=%s: %s — falling back to eager",
+            op_type,
+            fn.__qualname__,
+            exc,
+            exc_info=True,
+        )
+        return None
 
 
 def _time_eager(
