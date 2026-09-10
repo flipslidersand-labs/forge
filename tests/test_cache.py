@@ -100,6 +100,15 @@ class TestKernelRepository:
             created_at=datetime.now(UTC),
         )
 
+    def test_connection_has_busy_timeout(self) -> None:
+        """#322: 複数プロセス同時アクセスでの database is locked を避けるため、
+        デフォルトの5秒より長い busy timeout を明示していることを確認する。"""
+        with tempfile.TemporaryDirectory() as d:
+            repo = KernelRepository(Path(d) / "cache.db")
+            busy_timeout_ms = repo.conn.execute("PRAGMA busy_timeout").fetchone()[0]
+            repo.close()
+            assert busy_timeout_ms >= 30_000
+
     def test_get_miss(self) -> None:
         with tempfile.TemporaryDirectory() as d:
             repo = KernelRepository(Path(d) / "cache.db")
