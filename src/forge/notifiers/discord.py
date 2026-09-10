@@ -5,6 +5,7 @@ import logging
 import os
 import threading
 import time
+from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import UTC, datetime
 from http.client import HTTPResponse
 from typing import Any
@@ -15,6 +16,25 @@ from urllib.request import Request, urlopen
 logger = logging.getLogger(__name__)
 
 _RETRY_AFTER_DEFAULT = 1.0  # seconds to wait after a 429 with no Retry-After header
+
+# #330: 通知のたびに無制限に daemon スレッドを生成していると、短命な
+# Orchestrator インスタンスを高頻度・並行に使う運用でスレッドが積み上がり
+# うる。プロセス全体で共有する固定サイズの ThreadPoolExecutor に一本化し、
+# 同時実行数を明示的に上限管理する。
+_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="discord-notifier")
+_pending_futures: set[Future] = set()
+_pending_lock = threading.Lock()
+
+
+def _track_future(future: Future) -> None:
+    with _pending_lock:
+        _pending_futures.add(future)
+    future.add_done_callback(_untrack_future)
+
+
+def _untrack_future(future: Future) -> None:
+    with _pending_lock:
+        _pending_futures.discard(future)
 
 
 class DiscordNotifier:
@@ -163,20 +183,25 @@ class DiscordNotifier:
             raise ValueError(f"Invalid Discord webhook URL: {url!r}")
 
     def _send_webhook(self, webhook_url: str, payload: dict[str, Any]) -> bool:
-        """Dispatch payload to Discord webhook in a daemon background thread.
+        """Dispatch payload to Discord webhook via the shared background executor.
 
         The HTTP request is performed off the critical path so that DNS delays
         or Discord congestion cannot block ``optimize()`` completion or inflate
         ``total_time_s`` measurements.  A single 429 retry (honouring
         ``Retry-After``) is attempted before giving up.
 
+        Submissions go through a process-wide, fixed-size ``ThreadPoolExecutor``
+        (``_EXECUTOR``) rather than spawning a new ``threading.Thread`` per call
+        (#330), bounding concurrent Discord requests instead of letting them
+        pile up unbounded under high-frequency notification workloads.
+
         Args:
             webhook_url: Discord webhook URL
             payload: JSON payload to send
 
         Returns:
-            True immediately (thread successfully started); False if thread
-            could not be created.
+            True immediately (task successfully submitted); False if the task
+            could not be submitted.
         """
         try:
             self._validate_webhook_url(webhook_url)
@@ -211,11 +236,11 @@ class DiscordNotifier:
                 logger.warning(f"Unexpected error sending Discord notification: {e}", exc_info=True)
 
         try:
-            t = threading.Thread(target=_do_send, daemon=True, name="discord-notifier")
-            t.start()
+            future = _EXECUTOR.submit(_do_send)
+            _track_future(future)
             return True
         except Exception as e:
-            logger.warning(f"Failed to start Discord notifier thread: {e}", exc_info=True)
+            logger.warning(f"Failed to submit Discord notification: {e}", exc_info=True)
             return False
 
 
@@ -253,3 +278,18 @@ def _retry_once(webhook_url: str, data: bytes) -> None:
             _handle_response(response)
     except Exception as e:
         logger.warning("Discord webhook retry failed: %s", e, exc_info=True)
+
+
+def wait_for_pending_notifications(timeout: float = 5.0) -> None:
+    """Block until all currently in-flight webhook submissions complete.
+
+    Intended for tests: with a shared long-lived ``ThreadPoolExecutor`` (#330),
+    worker threads persist between tasks, so joining by thread name is no
+    longer a valid way to detect completion. This waits on the tracked
+    ``Future`` objects instead.
+    """
+    import concurrent.futures
+
+    with _pending_lock:
+        futures = list(_pending_futures)
+    concurrent.futures.wait(futures, timeout=timeout)
