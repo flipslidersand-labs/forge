@@ -61,9 +61,19 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         id: semantic_release
         run: |
+          # #331: git describe --tags --abbrev=0 は semantic-release が今回
+          # 新タグを作ったかに関わらず常に最新タグを返すため、実行前後で
+          # タグを比較して「今回リリースが実際に行われたか」を判定する。
+          # chore(deps) 等の no-release commit だけの push で PyPI 再publish
+          # を試みて（同一バージョンreject で）失敗するのを防ぐ。
+          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo none)
           semantic-release
-          # Get version from latest git tag (semantic-release creates it)
-          VERSION=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo '')
+          NEW_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo none)
+          if [ "$NEW_TAG" != "$PREV_TAG" ]; then
+            VERSION=$(echo "$NEW_TAG" | sed 's/^v//')
+          else
+            VERSION=""
+          fi
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "RELEASED_VERSION=${VERSION}" >> $GITHUB_ENV
 
@@ -76,6 +86,11 @@ jobs:
       - name: Publish to PyPI
         if: steps.semantic_release.outputs.version != ''
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # 多重実行時の安全弁。#331 の主対策（新タグ検出）が効いていれば
+          # 通常は発火しないが、レース等の想定外ケースでも publish ジョブ
+          # 自体を失敗させない。
+          skip-existing: true
 
       - name: Create summary
         if: always()
