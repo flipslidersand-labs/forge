@@ -54,6 +54,13 @@ class TestFnGraphHash:
         assert isinstance(result, str)
         assert len(result) > 0
 
+    def test_builtin_does_not_raise(self) -> None:
+        """#318: inspect.getsource が TypeError を送出する対象（組み込み関数など、
+        C実装でソース取得不能）でも panic せず "nosrc" フォールバックに乗る必要がある。"""
+        result = _fn_graph_hash(len)
+        assert isinstance(result, str)
+        assert "nosrc" in result
+
     def test_two_lambdas_differ_by_qualname_uniqueness(self) -> None:
         """Two closures captured at different points get distinct qualnames."""
 
