@@ -64,8 +64,8 @@ jobs:
           semantic-release
           # Get version from latest git tag (semantic-release creates it)
           VERSION=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo '')
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          echo "RELEASED_VERSION=${VERSION}" >> $GITHUB_ENV
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "RELEASED_VERSION=${VERSION}" >> "$GITHUB_ENV"
 
       - name: Build
         if: steps.semantic_release.outputs.version != ''
@@ -80,10 +80,10 @@ jobs:
       - name: Create summary
         if: always()
         run: |
-          echo "## Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## Release Summary" >> "$GITHUB_STEP_SUMMARY"
           if [ -n "${{ env.RELEASED_VERSION }}" ]; then
-            echo "✅ Released version: ${{ env.RELEASED_VERSION }}" >> $GITHUB_STEP_SUMMARY
+            echo "✅ Released version: ${{ env.RELEASED_VERSION }}" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "ℹ️ No release needed" >> $GITHUB_STEP_SUMMARY
+            echo "ℹ️ No release needed" >> "$GITHUB_STEP_SUMMARY"
           fi
 
