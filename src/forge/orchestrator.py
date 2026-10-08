@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+import threading
 import time
 import warnings
 from collections.abc import Callable
@@ -22,6 +23,7 @@ from forge.runtime.worker import (
     run_in_worker,
 )
 from forge.search.candidate import CandidateGenerator, HistoryEntry
+from forge.search.cost_model import BudgetTracker
 from forge.search.grid import GridSearch
 from forge.search.params import SearchParams
 from forge.validation.test_cases import correctness_cases, primary_input
@@ -164,6 +166,8 @@ class Orchestrator:
         progress: Callable[[ProgressEvent], None] | Callable[[str], None] | None = None,
         measure_extended: bool = False,
         notifier: DiscordNotifier | None = None,
+        max_total_s: float | None = None,
+        cancel_event: threading.Event | None = None,
     ) -> None:
         if repo is None:
             self.repo = KernelRepository()
@@ -179,6 +183,10 @@ class Orchestrator:
         self._event_handler = self._wrap_progress(progress)
         self.measure_extended = measure_extended
         self.notifier = notifier or DiscordNotifier()
+        # #332: 探索ループ全体の時間予算・外部キャンセルへの追従。
+        # max_total_s=None / cancel_event=None なら従来どおり無制限。
+        self._budget = BudgetTracker(max_total_s)
+        self.cancel_event = cancel_event
 
     @staticmethod
     def _wrap_progress(
@@ -219,6 +227,17 @@ class Orchestrator:
     def _emit(self, event: ProgressEvent) -> None:
         """構造化 ProgressEvent を送出する。"""
         self._event_handler(event)
+
+    def _should_stop(self) -> bool:
+        """時間予算超過または外部キャンセル要求により探索を打ち切るべきか (#332)。
+
+        max_total_s / cancel_event を指定していなければ常に False（従来どおり
+        無制限）。ラウンド境界・候補境界の先頭でこれをチェックし、True なら
+        呼び出し元が早期 break する。
+        """
+        if self._budget.budget_exhausted:
+            return True
+        return self.cancel_event is not None and self.cancel_event.is_set()
 
     def close(self) -> None:
         if self._owns_repo:
@@ -465,6 +484,11 @@ class Orchestrator:
         baseline_name: str | None = None
 
         for i, params in enumerate(candidates, 1):
+            if self._should_stop():
+                self._progress(
+                    f"stopping early at [{i}/{len(candidates)}]: budget exhausted or cancelled"
+                )
+                break
             label = f"[{i}/{len(candidates)}] {params.block_size}/{params.num_warps}"
             exp, cand_bench, bl_bench, bl_name = self._eval_one(
                 spec, params, ctx.bench_input, ctx.cases, ctx.tol, label
@@ -546,6 +570,12 @@ class Orchestrator:
         total_benchmark_time_s = 0.0
 
         for round_num in range(1, n_rounds + 1):
+            if self._should_stop():
+                self._progress(
+                    f"stopping early before round {round_num}/{n_rounds}: "
+                    "budget exhausted or cancelled"
+                )
+                break
             self._progress(
                 f"[round {round_num}/{n_rounds}] generating {candidates_per_round} candidates "
                 f"(history={len(history)})"
@@ -564,6 +594,11 @@ class Orchestrator:
             round_best_us: float | None = None
 
             for i, params in enumerate(candidates, 1):
+                if self._should_stop():
+                    self._progress(
+                        f"  stopping early at [r{round_num}.{i}]: budget exhausted or cancelled"
+                    )
+                    break
                 if params in seen_params:
                     self._progress(f"  [r{round_num}.{i}] skip duplicate")
                     continue
@@ -708,6 +743,12 @@ class Orchestrator:
         round_results: list[tuple[SearchParams, BenchmarkResult]] = []
 
         for round_num in range(1, halving_rounds + 1):
+            if self._should_stop():
+                self._progress(
+                    f"  stopping early before SHA round {round_num}/{halving_rounds}: "
+                    "budget exhausted or cancelled"
+                )
+                break
             warmup, repeat = _ROUND_CONFIGS[min(round_num - 1, len(_ROUND_CONFIGS) - 1)]
             self._progress(
                 f"  [SHA round {round_num}/{halving_rounds}] {len(surviving)} candidates "
@@ -716,6 +757,11 @@ class Orchestrator:
 
             round_results = []
             for i, params in enumerate(surviving, 1):
+                if self._should_stop():
+                    self._progress(
+                        f"  stopping early at [sha r{round_num}.{i}]: budget exhausted or cancelled"
+                    )
+                    break
                 label = f"  [sha r{round_num}.{i}] {params.block_size}/{params.num_warps}"
                 exp, cand_bench, bl_bench, bl_name = self._eval_one(
                     spec,
