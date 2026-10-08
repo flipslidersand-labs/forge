@@ -11,6 +11,14 @@ import threading
 from unittest.mock import MagicMock, patch
 
 from forge.notifiers.discord import DiscordNotifier
+from forge.notifiers.discord import wait_for_pending_notifications as _wait_for_notifier_thread
+
+# 重要: _wait_for_notifier_thread() は必ず urlopen をパッチする `with patch(...)`
+# ブロックの内側で呼ぶこと。#330 で共有 ThreadPoolExecutor に切り替えたことで
+# ワーカースレッドの実行タイミングが `with` ブロックの外にずれ込みうるようになり、
+# ブロックの外で呼ぶとパッチが既に解除された後に実行され、モックではなく本物の
+# urlopen が呼ばれてしまう（実際に discord.com への本物のリクエストが飛び 403 に
+# なる形で顕在化した）。
 
 _VALID_COMPLETION = "https://discord.com/api/webhooks/000/completion"
 _VALID_ERRORS = "https://discord.com/api/webhooks/000/errors"
@@ -25,13 +33,6 @@ def _configured() -> DiscordNotifier:
         },
     ):
         return DiscordNotifier()
-
-
-def _wait_for_notifier_thread(timeout: float = 2.0) -> None:
-    """バックグラウンドの discord-notifier スレッドが終了するまで待機する。"""
-    for t in threading.enumerate():
-        if t.name == "discord-notifier":
-            t.join(timeout=timeout)
 
 
 class TestUnconfigured:
@@ -73,21 +74,21 @@ class TestConfiguredSuccess:
         n = _configured()
         with patch("forge.notifiers.discord.urlopen", return_value=self._mock_204()):
             result = n.send_cache_hit("rmsnorm")
-        _wait_for_notifier_thread()
+            _wait_for_notifier_thread()
         assert result is True
 
     def test_optimization_complete_success(self) -> None:
         n = _configured()
         with patch("forge.notifiers.discord.urlopen", return_value=self._mock_204()):
             result = n.send_optimization_complete("softmax", 0.5, 20, 3.0)
-        _wait_for_notifier_thread()
+            _wait_for_notifier_thread()
         assert result is True
 
     def test_optimization_error_success(self) -> None:
         n = _configured()
         with patch("forge.notifiers.discord.urlopen", return_value=self._mock_204()):
             result = n.send_optimization_error("gelu", "boom", "OPT_FAIL")
-        _wait_for_notifier_thread()
+            _wait_for_notifier_thread()
         assert result is True
 
 
@@ -106,7 +107,7 @@ class TestConfiguredFailure:
         ctx.__enter__.return_value = resp
         with patch("forge.notifiers.discord.urlopen", return_value=ctx):
             result = n.send_cache_hit("rmsnorm")
-        _wait_for_notifier_thread()
+            _wait_for_notifier_thread()
         assert result is True
 
     def test_urlopen_raises_does_not_block(self) -> None:
@@ -114,7 +115,7 @@ class TestConfiguredFailure:
         n = _configured()
         with patch("forge.notifiers.discord.urlopen", side_effect=OSError("network down")):
             result = n.send_optimization_complete("rmsnorm", 1.0, 5, 1.0)
-        _wait_for_notifier_thread()
+            _wait_for_notifier_thread()
         assert result is True
 
     def test_non_204_logs_warning(self, caplog) -> None:
@@ -129,7 +130,7 @@ class TestConfiguredFailure:
         with caplog.at_level(logging.WARNING, logger="forge.notifiers.discord"):
             with patch("forge.notifiers.discord.urlopen", return_value=ctx):
                 n.send_cache_hit("rmsnorm")
-            _wait_for_notifier_thread()
+                _wait_for_notifier_thread()
         assert any("500" in r.message for r in caplog.records)
 
     def test_urlopen_raises_logs_warning(self, caplog) -> None:
@@ -140,7 +141,7 @@ class TestConfiguredFailure:
         with caplog.at_level(logging.WARNING, logger="forge.notifiers.discord"):
             with patch("forge.notifiers.discord.urlopen", side_effect=OSError("network down")):
                 n.send_optimization_complete("rmsnorm", 1.0, 5, 1.0)
-            _wait_for_notifier_thread()
+                _wait_for_notifier_thread()
         assert any("network down" in r.message for r in caplog.records)
 
 
@@ -159,7 +160,7 @@ class TestUnexpectedExceptions:
             "forge.notifiers.discord.urlopen", side_effect=RuntimeError("ssl context broken")
         ):
             result = n.send_optimization_complete("rmsnorm", 1.0, 5, 2.0)
-        _wait_for_notifier_thread()
+            _wait_for_notifier_thread()
         assert result is True
 
     def test_send_webhook_attribute_error_does_not_block(self) -> None:
@@ -167,7 +168,7 @@ class TestUnexpectedExceptions:
         n = _configured()
         with patch("forge.notifiers.discord.urlopen", side_effect=AttributeError("mock attr")):
             result = n.send_cache_hit("rmsnorm")
-        _wait_for_notifier_thread()
+            _wait_for_notifier_thread()
         assert result is True
 
     def test_send_webhook_value_error_does_not_block(self) -> None:
@@ -175,7 +176,7 @@ class TestUnexpectedExceptions:
         n = _configured()
         with patch("forge.notifiers.discord.urlopen", side_effect=ValueError("unexpected value")):
             result = n.send_optimization_error("rmsnorm", "msg", "ERR")
-        _wait_for_notifier_thread()
+            _wait_for_notifier_thread()
         assert result is True
 
     def test_embed_construction_error_returns_false(self) -> None:
@@ -216,7 +217,7 @@ class TestOptimizationCompleteNewFields:
 
         with patch("forge.notifiers.discord.urlopen", side_effect=_fake_urlopen):
             n.send_optimization_complete("rmsnorm", 1.0, 10, 2.0, **kwargs)
-        _wait_for_notifier_thread()
+            _wait_for_notifier_thread()
         return captured.get("payload", {})
 
     def test_speedup_field_in_embed(self):
@@ -316,35 +317,60 @@ class TestAsyncBehavior:
         t0 = time.monotonic()
         with patch("forge.notifiers.discord.urlopen", side_effect=_slow_urlopen):
             n.send_cache_hit("rmsnorm")
-        elapsed = time.monotonic() - t0
-        _wait_for_notifier_thread()
-        # send_cache_hit は HTTP 待機前に即座に返るはず（< 10ms が理想だが余裕を持って < 40ms）
-        assert elapsed < 0.040, f"send_cache_hit blocked for {elapsed:.3f}s"
+            elapsed = time.monotonic() - t0
+            # send_cache_hit は HTTP 待機前に即座に返るはず（< 10ms が理想だが余裕を持って < 40ms）
+            assert elapsed < 0.040, f"send_cache_hit blocked for {elapsed:.3f}s"
+            _wait_for_notifier_thread()
         call_times.append(elapsed)
 
-    def test_send_webhook_runs_in_daemon_thread(self) -> None:
-        """_send_webhook が daemon スレッドを起動することを確認する。"""
-        launched: list[threading.Thread] = []
-        original_start = threading.Thread.start
+    def test_send_webhook_runs_on_shared_executor(self) -> None:
+        """#330: _send_webhook は共有 ThreadPoolExecutor 上で実行される
+        （呼び出しごとに新規スレッドを立てない）。"""
+        executed_thread_names: list[str] = []
 
-        def _capture_start(self_thread):
-            launched.append(self_thread)
-            original_start(self_thread)
+        def _capture_urlopen(req, timeout=None):
+            executed_thread_names.append(threading.current_thread().name)
+            resp = MagicMock()
+            resp.status = 204
+            ctx = MagicMock()
+            ctx.__enter__.return_value = resp
+            ctx.__exit__.return_value = False
+            return ctx
 
         n = _configured()
-        resp = MagicMock()
-        resp.status = 204
-        ctx = MagicMock()
-        ctx.__enter__.return_value = resp
+        with patch("forge.notifiers.discord.urlopen", side_effect=_capture_urlopen):
+            result = n.send_cache_hit("rmsnorm")
+            _wait_for_notifier_thread()
 
-        with patch.object(threading.Thread, "start", _capture_start):
-            with patch("forge.notifiers.discord.urlopen", return_value=ctx):
+        assert result is True
+        assert len(executed_thread_names) == 1
+        assert executed_thread_names[0].startswith("discord-notifier")
+
+    def test_shared_executor_bounds_concurrent_threads(self) -> None:
+        """#330: 大量の通知を発行しても、使用される実行スレッド数は
+        ThreadPoolExecutor の max_workers で頭打ちになる（無制限増加しない）。"""
+        thread_names: set[str] = set()
+        lock = threading.Lock()
+
+        def _capture_urlopen(req, timeout=None):
+            with lock:
+                thread_names.add(threading.current_thread().name)
+            resp = MagicMock()
+            resp.status = 204
+            ctx = MagicMock()
+            ctx.__enter__.return_value = resp
+            ctx.__exit__.return_value = False
+            return ctx
+
+        n = _configured()
+        with patch("forge.notifiers.discord.urlopen", side_effect=_capture_urlopen):
+            for _ in range(50):
                 n.send_cache_hit("rmsnorm")
+            _wait_for_notifier_thread()
 
-        _wait_for_notifier_thread()
-        assert len(launched) == 1
-        assert launched[0].daemon is True
-        assert launched[0].name == "discord-notifier"
+        from forge.notifiers.discord import _EXECUTOR
+
+        assert len(thread_names) <= _EXECUTOR._max_workers
 
     def test_retry_on_429(self) -> None:
         """429 レスポンスで Retry-After を読んで 1 回リトライすることを確認する。"""
