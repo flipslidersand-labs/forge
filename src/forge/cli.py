@@ -169,6 +169,8 @@ def _cmd_clear(args: argparse.Namespace) -> int:
 
 
 def _cmd_prune(args: argparse.Namespace) -> int:
+    import sqlite3
+
     from forge.cache.repository import KernelRepository
 
     before_dt: datetime | None = None
@@ -195,8 +197,16 @@ def _cmd_prune(args: argparse.Namespace) -> int:
         if _db_missing(args.db):
             print("キャッシュは空です。(DB 未作成)")
             return 0
-        with KernelRepository(args.db) as repo:
-            n = repo.count()
+        try:
+            with KernelRepository(args.db) as repo:
+                n = repo.count()
+        except (sqlite3.OperationalError, sqlite3.DatabaseError) as e:
+            print(
+                f"エラー: キャッシュ DB の読み取りに失敗しました: {e}\n"
+                f"対処法: rm {args.db}  (次回実行時にキャッシュが再構築されます)",
+                file=sys.stderr,
+            )
+            return 1
         print(
             f"キャッシュ: {n} 件。削除するには --before または --keep-latest を指定してください。"
         )
@@ -206,15 +216,23 @@ def _cmd_prune(args: argparse.Namespace) -> int:
         print("キャッシュは空です。(DB 未作成)")
         return 0
 
-    with KernelRepository(args.db) as repo:
-        target = repo.prune(before=before_dt, keep_latest=keep_latest, dry_run=True)
-        if target == 0:
-            print("削除対象のエントリはありません。")
-            return 0
-        if not args.force and not _confirm(f"{target} 件を削除します。よろしいですか? [y/N] "):
-            print("中止しました。")
-            return 0
-        deleted = repo.prune(before=before_dt, keep_latest=keep_latest)
+    try:
+        with KernelRepository(args.db) as repo:
+            target = repo.prune(before=before_dt, keep_latest=keep_latest, dry_run=True)
+            if target == 0:
+                print("削除対象のエントリはありません。")
+                return 0
+            if not args.force and not _confirm(f"{target} 件を削除します。よろしいですか? [y/N] "):
+                print("中止しました。")
+                return 0
+            deleted = repo.prune(before=before_dt, keep_latest=keep_latest)
+    except (sqlite3.OperationalError, sqlite3.DatabaseError) as e:
+        print(
+            f"エラー: キャッシュ DB の操作に失敗しました: {e}\n"
+            f"対処法: rm {args.db}  (次回実行時にキャッシュが再構築されます)",
+            file=sys.stderr,
+        )
+        return 1
     print(f"{deleted} 件削除しました。")
     return 0
 
@@ -222,7 +240,14 @@ def _cmd_prune(args: argparse.Namespace) -> int:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
-    return int(args.func(args))
+    try:
+        return int(args.func(args))
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except Exception as e:  # noqa: BLE001 — 各コマンド固有の詳細メッセージ(try/except)を
+        # 抜けた想定外の例外のみを捕捉する最終防波堤。生トレースバックの露出を防ぐ。
+        print(f"エラー: {e}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":
