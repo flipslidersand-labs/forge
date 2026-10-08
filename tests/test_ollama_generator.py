@@ -190,4 +190,18 @@ class TestOllamaGeneratorOffline:
                 _valid_candidate_json()
             )
             gen.generate(_spec(), "8.6")
-        mock_client.assert_called_once_with(host="http://192.168.1.10:11434")
+        mock_client.assert_called_once_with(host="http://192.168.1.10:11434", timeout=60.0)
+
+    def test_default_timeout(self) -> None:
+        gen = OllamaGenerator()
+        assert gen.timeout == 60.0
+
+    def test_custom_timeout_passed_to_client(self) -> None:
+        """#323: timeout が ollama.Client に明示的に渡され、無限待機を防ぐ。"""
+        gen = OllamaGenerator(timeout=15.0)
+        with patch("ollama.Client") as mock_client:
+            mock_client.return_value.chat.return_value = _mock_chat_response(
+                _valid_candidate_json()
+            )
+            gen.generate(_spec(), "8.6")
+        mock_client.assert_called_once_with(host="http://localhost:11434", timeout=15.0)

@@ -15,6 +15,7 @@ _log = logging.getLogger("forge.search.ollama_generator")
 
 _DEFAULT_MODEL = "qwen2.5-coder:latest"
 _DEFAULT_HOST = "http://localhost:11434"
+_DEFAULT_TIMEOUT_S = 60.0
 
 _SYSTEM = (
     "You are a GPU kernel autotuning assistant. "
@@ -36,15 +37,19 @@ class OllamaGenerator(_BaseGenerator):
     Args:
         model: ollama モデル名（``ollama list`` で確認）。
         host: ollama サーバーアドレス。デフォルトは ``http://localhost:11434``。
+        timeout: リクエストタイムアウト（秒）。サーバー無応答・ネットワーク詰まり時に
+            無限待機しないようデフォルト60秒を設定（#323）。
     """
 
     def __init__(
         self,
         model: str = _DEFAULT_MODEL,
         host: str = _DEFAULT_HOST,
+        timeout: float = _DEFAULT_TIMEOUT_S,
     ) -> None:
         self.model = model
         self.host = host
+        self.timeout = timeout
 
     def _propose(
         self,
@@ -57,7 +62,7 @@ class OllamaGenerator(_BaseGenerator):
 
         prompt = build_prompt(spec, compute_capability, n, history)
         try:
-            resp = ollama.Client(host=self.host).chat(
+            resp = ollama.Client(host=self.host, timeout=self.timeout).chat(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": _SYSTEM},

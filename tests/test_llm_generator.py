@@ -262,3 +262,51 @@ class TestModelGuard:
     def test_invalid_model_raises_value_error(self) -> None:
         with pytest.raises(ValueError, match="Unknown Anthropic model"):
             LLMGenerator(model="claude-nonexistent-99-99", propose_fn=lambda *a: [])
+
+
+class TestTimeout:
+    """デフォルトクライアントに timeout が明示されることを確認する (#323)。"""
+
+    def test_default_timeout(self) -> None:
+        gen = LLMGenerator(propose_fn=lambda *a: [])
+        assert gen.timeout == 60.0
+
+    def test_timeout_passed_to_default_anthropic_client(self) -> None:
+        from unittest.mock import MagicMock, patch
+
+        gen = LLMGenerator(model=DEFAULT_MODEL, timeout=15.0)
+        spec = KernelSpec(
+            op_type="rmsnorm",
+            input_specs=(TensorSpec(shape=(2048, 4096), dtype=torch.float16, is_contiguous=True),),
+            output_specs=(TensorSpec(shape=(2048, 4096), dtype=torch.float16, is_contiguous=True),),
+            constants={"eps": 1e-6},
+            graph_hash="rmsnorm_v1",
+            constraints=(),
+        )
+        with patch("anthropic.Anthropic") as mock_anthropic:
+            mock_client = MagicMock()
+            mock_client.messages.parse.return_value = MagicMock(parsed_output=None)
+            mock_anthropic.return_value = mock_client
+            gen.generate(spec, "8.6", budget=1)
+        mock_anthropic.assert_called_once_with(timeout=15.0)
+
+    def test_injected_client_timeout_not_overridden(self) -> None:
+        """client を自前で渡した場合は anthropic.Anthropic() が呼ばれない
+        （= 注入クライアントの timeout 設定がそのまま使われる）。"""
+        from unittest.mock import MagicMock, patch
+
+        injected_client = MagicMock()
+        injected_client.messages.parse.return_value = MagicMock(parsed_output=None)
+        gen = LLMGenerator(model=DEFAULT_MODEL, client=injected_client, timeout=15.0)
+        spec = KernelSpec(
+            op_type="rmsnorm",
+            input_specs=(TensorSpec(shape=(2048, 4096), dtype=torch.float16, is_contiguous=True),),
+            output_specs=(TensorSpec(shape=(2048, 4096), dtype=torch.float16, is_contiguous=True),),
+            constants={"eps": 1e-6},
+            graph_hash="rmsnorm_v1",
+            constraints=(),
+        )
+        with patch("anthropic.Anthropic") as mock_anthropic:
+            gen.generate(spec, "8.6", budget=1)
+        mock_anthropic.assert_not_called()
+        injected_client.messages.parse.assert_called_once()
