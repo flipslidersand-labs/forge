@@ -18,9 +18,11 @@ class GpuRunnerTest(unittest.TestCase):
             )
             python.chmod(0o755)
             result = subprocess.run(
-                ["bash", str(script)], cwd=tmp,
+                ["bash", str(script)],
+                cwd=tmp,
                 env={**os.environ, "PATH": tmp + os.pathsep + os.environ["PATH"]},
-                capture_output=True, text=True,
+                capture_output=True,
+                text=True,
             )
             self.assertEqual(result.returncode, 7, result.stdout + result.stderr)
 
