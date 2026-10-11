@@ -1,6 +1,6 @@
 #!/bin/bash
 # GPU kernel テスト実行スクリプト
-# DS1 / YUKI-PRIVATE002 での実行用
+# GPU 搭載の self-hosted runner / ローカル GPU マシンでの実行用
 
 set -euo pipefail
 
