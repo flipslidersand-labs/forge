@@ -292,6 +292,14 @@ class TestWebhookUrlValidation:
         with pytest.raises(ValueError, match="Invalid Discord webhook URL"):
             DiscordNotifier._validate_webhook_url("https://evil.com/discord.com/webhook")
 
+    def test_suffix_without_dot_boundary_raises(self) -> None:
+        """#321: endswith("discord.com") のドット境界漏れによるバイパスを拒否。"""
+        import pytest
+
+        for host in ("evildiscord.com", "notdiscord.com", "attacker-controlled-discord.com"):
+            with pytest.raises(ValueError, match="Invalid Discord webhook URL"):
+                DiscordNotifier._validate_webhook_url(f"https://{host}/webhook")
+
     def test_send_webhook_invalid_url_returns_false(self) -> None:
         """_send_webhook に不正 URL を渡すと False を返し例外を伝播しない。"""
         n = _configured()

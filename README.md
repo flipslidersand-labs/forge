@@ -340,3 +340,8 @@ GitHub Issues を参照:
 - #28 pyright 型エラー解消
 - #29 pytest-cov カバレッジ計測・バッジ追加
 - #30 対応 op 拡張（FlashAttention 系・大 SDPA shape での最適化）
+
+
+## 設計判断 / Architecture decisions
+
+[ADR 一覧](docs/adr/README.md) — 設計判断、根拠資料、未決定事項。
