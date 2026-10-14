@@ -1,3 +1,15 @@
+## [1.20.5](https://github.com/flipslidersand-labs/forge/compare/v1.20.4...v1.20.5) (2026-10-11)
+
+### 🐛 Bug Fixes
+
+* **#320:** optimize() の budget/min_speedup/per_candidate_s に入力バリデーション追加 ([#378](https://github.com/flipslidersand-labs/forge/issues/378)) ([25522ff](https://github.com/flipslidersand-labs/forge/commit/25522ff0c4de23b613e24a79ae2aebe97af894db)), closes [#320](https://github.com/flipslidersand-labs/forge/issues/320) [#320](https://github.com/flipslidersand-labs/forge/issues/320) [#320](https://github.com/flipslidersand-labs/forge/issues/320)
+
+## [1.20.4](https://github.com/flipslidersand-labs/forge/compare/v1.20.3...v1.20.4) (2026-10-03)
+
+### 🐛 Bug Fixes
+
+* **ci:** release.yml の actionlint 指摘を解消 (ekb[#64](https://github.com/flipslidersand-labs/forge/issues/64)) ([#375](https://github.com/flipslidersand-labs/forge/issues/375)) ([d258306](https://github.com/flipslidersand-labs/forge/commit/d2583067a20d4ea4142516e3f433437429dafc74))
+
 ## [1.20.3](https://github.com/flipslidersand-labs/forge/compare/v1.20.2...v1.20.3) (2026-09-09)
 
 ### 🐛 Bug Fixes
