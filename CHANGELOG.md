@@ -1,3 +1,9 @@
+## [1.20.5](https://github.com/flipslidersand-labs/forge/compare/v1.20.4...v1.20.5) (2026-10-11)
+
+### 🐛 Bug Fixes
+
+* **#320:** optimize() の budget/min_speedup/per_candidate_s に入力バリデーション追加 ([#378](https://github.com/flipslidersand-labs/forge/issues/378)) ([25522ff](https://github.com/flipslidersand-labs/forge/commit/25522ff0c4de23b613e24a79ae2aebe97af894db)), closes [#320](https://github.com/flipslidersand-labs/forge/issues/320) [#320](https://github.com/flipslidersand-labs/forge/issues/320) [#320](https://github.com/flipslidersand-labs/forge/issues/320)
+
 ## [1.20.4](https://github.com/flipslidersand-labs/forge/compare/v1.20.3...v1.20.4) (2026-10-03)
 
 ### 🐛 Bug Fixes
