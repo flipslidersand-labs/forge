@@ -5,6 +5,8 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
+import pytest
+
 from forge.benchmark.pareto import (
     _GPU_COST_PER_SECOND,
     _TOKEN_COST_PER_TOKEN,
@@ -380,6 +382,47 @@ class TestBudgetTracker:
         tracker.record(100.0)
         tracker.record(200.0)
         assert not tracker.budget_exhausted
+
+    @staticmethod
+    def _tracker_at(monkeypatch: pytest.MonkeyPatch, max_total_s: float, elapsed_s: float):
+        """経過時間を固定した BudgetTracker を返す（time.monotonic を差し替え）。"""
+        clock = [100.0]
+        monkeypatch.setattr("forge.search.cost_model.time.monotonic", lambda: clock[0])
+        tracker = BudgetTracker(max_total_s=max_total_s)
+        clock[0] += elapsed_s
+        return tracker
+
+    def test_budget_exhausted_true_when_elapsed_exceeds_budget(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        assert self._tracker_at(monkeypatch, 10.0, 11.0).budget_exhausted
+
+    def test_budget_exhausted_true_at_exact_boundary(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # `>=` 判定: 経過 == 予算 で枯渇扱い
+        assert self._tracker_at(monkeypatch, 10.0, 10.0).budget_exhausted
+
+    def test_budget_not_exhausted_just_before_boundary(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        assert not self._tracker_at(monkeypatch, 10.0, 9.9).budget_exhausted
+
+    def test_should_skip_false_when_estimate_fits_remaining(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # 残り 4s、推定 3000ms → スキップしない
+        assert not self._tracker_at(monkeypatch, 10.0, 6.0).should_skip(3000.0)
+
+    def test_should_skip_true_when_estimate_exceeds_remaining(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # 残り 4s、推定 5000ms → スキップ
+        assert self._tracker_at(monkeypatch, 10.0, 6.0).should_skip(5000.0)
+
+    def test_should_skip_false_when_estimate_equals_remaining(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # `>` 判定: 推定 == 残り はスキップしない
+        assert not self._tracker_at(monkeypatch, 10.0, 6.0).should_skip(4000.0)
 
 
 class TestScalarize:

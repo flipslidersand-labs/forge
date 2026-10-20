@@ -119,6 +119,21 @@ class TestSearchSpace:
         params = list(SearchSpace().enumerate(_sdpa_spec(d=65), "8.9"))
         assert params == []
 
+    def test_head_dim_17_yields_nothing(self) -> None:
+        # 16 の倍数の直後（境界）
+        assert list(SearchSpace().enumerate(_sdpa_spec(d=17), "8.9")) == []
+
+    def test_head_dim_16_is_smallest_valid(self) -> None:
+        assert list(SearchSpace().enumerate(_sdpa_spec(d=16), "8.9"))
+
+    def test_head_dim_zero_yields_nothing(self) -> None:
+        # d <= 0 ガード（0 % 16 == 0 でも除外される）
+        assert list(SearchSpace().enumerate(_sdpa_spec(d=0), "8.9")) == []
+
+    def test_head_dim_negative_yields_nothing(self) -> None:
+        # -16 % 16 == 0 だが d <= 0 ガードで除外される
+        assert list(SearchSpace().enumerate(_sdpa_spec(d=-16), "8.9")) == []
+
 
 class TestSearchParams:
     def test_flash_variant_accepted(self) -> None:
