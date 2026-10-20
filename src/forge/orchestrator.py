@@ -69,6 +69,13 @@ class ExperimentResult:
     is_best: bool = False
 
 
+def compute_speedup(baseline: BenchmarkResult | None, best: BenchmarkResult | None) -> float | None:
+    """baseline / best の速度倍率。どちらかが None、または best が 0 以下なら None。"""
+    if baseline and best and best.median_us > 0:
+        return baseline.median_us / best.median_us
+    return None
+
+
 @dataclass
 class SearchResult:
     spec: KernelSpec
@@ -85,9 +92,7 @@ class SearchResult:
 
     @property
     def speedup(self) -> float | None:
-        if self.best_benchmark and self.baseline_benchmark and self.best_benchmark.median_us > 0:
-            return self.baseline_benchmark.median_us / self.best_benchmark.median_us
-        return None
+        return compute_speedup(self.baseline_benchmark, self.best_benchmark)
 
 
 @dataclass
@@ -119,9 +124,7 @@ class MultiRoundResult:
 
     @property
     def speedup(self) -> float | None:
-        if self.best_benchmark and self.baseline_benchmark and self.best_benchmark.median_us > 0:
-            return self.baseline_benchmark.median_us / self.best_benchmark.median_us
-        return None
+        return compute_speedup(self.baseline_benchmark, self.best_benchmark)
 
     @property
     def best_round(self) -> int | None:
@@ -397,9 +400,7 @@ class Orchestrator:
         )
 
         failed_count = sum(1 for e in experiments if not e.success)
-        speedup: float | None = None
-        if best_bench and baseline_bench and best_bench.median_us > 0:
-            speedup = baseline_bench.median_us / best_bench.median_us
+        speedup = compute_speedup(baseline_bench, best_bench)
         self._persist_result(
             ctx,
             best_params,
@@ -648,9 +649,7 @@ class Orchestrator:
         total = sum(len(r.experiments) for r in rounds)
         all_exps_for_rounds = [e for r in rounds for e in r.experiments]
         round_failed_count = sum(1 for e in all_exps_for_rounds if not e.success)
-        round_speedup: float | None = None
-        if overall_best_bench and baseline_bench and overall_best_bench.median_us > 0:
-            round_speedup = baseline_bench.median_us / overall_best_bench.median_us
+        round_speedup = compute_speedup(baseline_bench, overall_best_bench)
         best_round_num: int | None = None
         for r in rounds:
             if r.best_params == overall_best_params and overall_best_params is not None:
@@ -808,9 +807,7 @@ class Orchestrator:
                     break
 
         sha_failed_count = sum(1 for e in all_experiments if not e.success)
-        sha_speedup: float | None = None
-        if best_bench and baseline_bench and best_bench.median_us > 0:
-            sha_speedup = baseline_bench.median_us / best_bench.median_us
+        sha_speedup = compute_speedup(baseline_bench, best_bench)
         self._finalize(
             ctx,
             best_params,
