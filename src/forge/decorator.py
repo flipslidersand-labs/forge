@@ -129,6 +129,17 @@ def optimize(
                 )
                 return fn(*args, **kwargs)
 
+            # #372: 生成カーネルは行優先の連続レイアウトを前提にしており、キャッシュキーも
+            # shape/dtype のみ。非連続 view(.transpose() 等)は誤った結果を静かに返すため、
+            # eager にフォールバックする。
+            if any(not t.is_contiguous() for t in tensors):
+                _log.warning(
+                    "forge.optimize: 非連続テンソルが渡されました fn=%s — "
+                    "eager にフォールバックします(.contiguous() で最適化経路に乗ります)",
+                    fn.__qualname__,
+                )
+                return fn(*args, **kwargs)
+
             key = tuple((tuple(t.shape), str(t.dtype)) for t in tensors)
             # ロック外の高速パス: すでにコンパイル済みならそのまま実行
             if key not in compiled:

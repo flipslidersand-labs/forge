@@ -16,6 +16,7 @@ def _cuda_tensor(device: str = "cuda:0") -> MagicMock:
     t.shape = (4, 4)
     t.dtype = torch.float32
     t.device = torch.device(device)
+    t.is_contiguous.return_value = True
     return t
 
 
@@ -112,3 +113,41 @@ class TestDeviceConsistency:
             wrapped(a, b)
 
         mock_build.assert_called_once()
+
+
+class TestContiguity:
+    """#372: 非連続テンソルは eager にフォールバックする。GPU 不要。"""
+
+    def test_non_contiguous_tensor_falls_back_to_eager(self) -> None:
+        a = _cuda_tensor("cuda:0")
+        b = _cuda_tensor("cuda:0")
+        b.is_contiguous.return_value = False
+
+        def fn(x, y):
+            return "eager-result"
+
+        with (
+            patch("forge.decorator.identify", return_value="rmsnorm"),
+            patch("forge.decorator._build") as mock_build,
+            _bind_two_tensors(a, b),
+        ):
+            wrapped = optimize(budget=1)(fn)
+            result = wrapped(a, b)
+
+        mock_build.assert_not_called()
+        assert result == "eager-result"
+
+    def test_non_contiguous_logs_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        a = _cuda_tensor("cuda:0")
+        a.is_contiguous.return_value = False
+        b = _cuda_tensor("cuda:0")
+
+        with (
+            patch("forge.decorator.identify", return_value="rmsnorm"),
+            patch("forge.decorator._build"),
+            _bind_two_tensors(a, b),
+            caplog.at_level("WARNING", logger="forge.decorator"),
+        ):
+            optimize(budget=1)(lambda x, y: None)(a, b)
+
+        assert any("非連続テンソル" in r.message for r in caplog.records)
