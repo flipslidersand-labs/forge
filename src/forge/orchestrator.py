@@ -16,6 +16,7 @@ from forge.cache.repository import CachedKernel, KernelRepository
 from forge.codegen.triton_codegen import generate
 from forge.ir.kernel_spec import KernelSpec
 from forge.notifiers.discord import DiscordNotifier
+from forge.notifiers.protocol import Notifier
 from forge.runtime.worker import (
     ExtendedBaselineResult,
     WorkerResult,
@@ -168,7 +169,7 @@ class Orchestrator:
         timeout_s: float = 60.0,
         progress: Callable[[ProgressEvent], None] | Callable[[str], None] | None = None,
         measure_extended: bool = False,
-        notifier: DiscordNotifier | None = None,
+        notifier: Notifier | None = None,
         max_total_s: float | None = None,
         cancel_event: threading.Event | None = None,
     ) -> None:
