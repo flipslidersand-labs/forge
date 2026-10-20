@@ -1,5 +1,9 @@
 # CLAUDE.md
 
+<!-- repo-compass-pointer -->
+## 判断軸
+- 作業前に `flipslidersand-labs/repo-compass` の `docs/AGENT_BRIEF.md` を読む(優先規則・ADR 一覧も同ファイル)。読めない環境では無視してよい。
+
 ## テストカバレッジ閾値（現在: 71%）
 
 CI の `coverage-threshold` を下げる変更は必ず PR を通す。理由（一時的な緊急対応か、
