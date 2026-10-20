@@ -70,10 +70,11 @@ class CandidateWithCost:
 
         「速度の維持・向上 OR コストの低減」を両立する候補がなければ Pareto 最適。
         """
+        # 不正解の候補は他と比較するまでもなくパレート最適ではない(#370)
+        if not self.correct:
+            return False
         for other in candidates:
             if other is self or not other.correct:
-                continue
-            if not self.correct:
                 continue
             # other が self より「速度が同等以上＆コストが低い」または「速度が高速＆コスト同等」？
             speed_better_or_equal = other.median_us <= self.median_us
