@@ -45,8 +45,11 @@ jobs:
   gpu-smoke:
     name: GPU Smoke Test (PR)
     runs-on: [self-hosted, gpu]
+    # #361: public リポの fork PR が self-hosted GPU runner 上で任意コードを
+    # 実行できないよう、同一リポジトリ内 PR のみ許可する。
     if: >-
       github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
       vars.GPU_RUNNER_AVAILABLE == 'true'
     timeout-minutes: 10
     steps:
