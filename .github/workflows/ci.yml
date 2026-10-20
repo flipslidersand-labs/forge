@@ -31,7 +31,7 @@ jobs:
     # したため self-hosted に戻す。exit 127 が再発したら ubuntu-latest に戻すこと。
     runs-on: ${{ vars.GATE_RUNNER || 'ubuntu-latest' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
@@ -53,7 +53,7 @@ jobs:
       vars.GPU_RUNNER_AVAILABLE == 'true'
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
@@ -75,7 +75,7 @@ jobs:
       vars.GPU_RUNNER_AVAILABLE == 'true'
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
