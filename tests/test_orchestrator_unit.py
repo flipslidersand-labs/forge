@@ -521,3 +521,35 @@ class TestComputeSpeedup:
 
     def test_none_when_best_is_zero(self) -> None:
         assert compute_speedup(self._b(20.0), self._b(0.0)) is None
+
+
+class TestNotifierProtocol:
+    """Orchestrator は Notifier Protocol を満たす任意の通知先を受け取れる（#353）。"""
+
+    def test_discord_notifier_satisfies_protocol(self) -> None:
+        from forge.notifiers import DiscordNotifier, Notifier
+
+        assert isinstance(DiscordNotifier(), Notifier)
+
+    def test_duck_typed_notifier_is_used(self) -> None:
+        from forge.notifiers import Notifier
+
+        class _Stub:
+            def __init__(self) -> None:
+                self.hits: list[str] = []
+
+            def send_optimization_complete(self, *args: object, **kwargs: object) -> bool:
+                return True
+
+            def send_optimization_error(self, *args: object, **kwargs: object) -> bool:
+                return True
+
+            def send_cache_hit(self, op_name: str) -> bool:
+                self.hits.append(op_name)
+                return True
+
+        stub = _Stub()
+        assert isinstance(stub, Notifier)
+        with tempfile.TemporaryDirectory() as d:
+            orch = Orchestrator(repo=KernelRepository(Path(d) / "k.db"), notifier=stub)
+        assert orch.notifier is stub
