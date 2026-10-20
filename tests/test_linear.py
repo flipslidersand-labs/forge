@@ -121,6 +121,18 @@ class TestSearchSpace:
         keys = [(p.block_size, p.block_k, p.num_warps, p.num_stages, p.acc_dtype) for p in params]
         assert len(keys) == len(set(keys))
 
+    def test_block_k_follows_gemm_k_blocks(self) -> None:
+        """#367: gemm_k_blocks で渡した K タイルだけが列挙される。"""
+        space = SearchSpace(gemm_k_blocks=[32])
+        params = list(space.enumerate(_linear_spec(), "8.9"))
+        assert params
+        assert {p.block_k for p in params} == {32}
+
+    def test_default_block_k_unchanged(self) -> None:
+        """#367: 既定の探索範囲は従来どおり [16, 32, 64]。"""
+        params = list(SearchSpace().enumerate(_linear_spec(), "8.9"))
+        assert {p.block_k for p in params} == {16, 32, 64}
+
     def test_block_sizes_are_gemm_output_blocks(self) -> None:
         space = SearchSpace()
         params = list(space.enumerate(_linear_spec(), "8.9"))
