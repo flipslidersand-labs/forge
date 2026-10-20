@@ -17,6 +17,7 @@ from forge.orchestrator import (
     Orchestrator,
     RoundResult,
     SearchResult,
+    compute_speedup,
 )
 from forge.runtime.worker import ExtendedBaselineResult, WorkerResult
 from forge.search.llm_generator import TokenUsage
@@ -502,3 +503,21 @@ class TestProgressEvent:
         ok_events = [e for e in events if e.kind == "candidate_ok"]
         assert len(ok_events) == 1
         assert ok_events[0].median_us == bench.median_us
+
+
+class TestComputeSpeedup:
+    """speedup 計算の単一定義（#354）。"""
+
+    @staticmethod
+    def _b(median_us: float) -> BenchmarkResult:
+        return BenchmarkResult(median_us=median_us, p20_us=median_us, p80_us=median_us)
+
+    def test_ratio_baseline_over_best(self) -> None:
+        assert compute_speedup(self._b(20.0), self._b(10.0)) == 2.0
+
+    def test_none_when_either_missing(self) -> None:
+        assert compute_speedup(None, self._b(10.0)) is None
+        assert compute_speedup(self._b(20.0), None) is None
+
+    def test_none_when_best_is_zero(self) -> None:
+        assert compute_speedup(self._b(20.0), self._b(0.0)) is None
