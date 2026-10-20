@@ -21,13 +21,14 @@ def _make_cpu_fn():
 
 
 def test_lock_attribute_exists():
-    """wrapper の freevars に _lock が含まれること（コード変数名で確認）。
+    """wrapper の freevars に shape 別ビルドロック取得関数が含まれること
+    （コード変数名で確認、#329でop_type用ロックとビルド用ロックを分離）。
 
     functools.wraps 後 fn 自体が wrapper 関数を指す（__wrapped__ は元の fn）。
     """
     fn = _make_cpu_fn()
     freevars = fn.__code__.co_freevars
-    assert "_lock" in freevars, f"_lock が wrapper freevars に無い: {freevars}"
+    assert "_get_build_lock" in freevars, f"_get_build_lock が wrapper freevars に無い: {freevars}"
 
 
 def test_compiled_dict_built_once_under_concurrent_access():
@@ -86,3 +87,75 @@ def test_compiled_dict_built_once_under_concurrent_access():
 
     assert not errors, f"スレッド実行中に例外: {errors}"
     assert build_count == 1, f"_build が {build_count} 回呼ばれた（期待: 1 回）"
+
+
+def test_different_shapes_build_concurrently():
+    """#329: 無関係な shape のビルドは単一ロックで直列化されず並行に進行できる。
+
+    2つの異なる shape を同時にビルドさせ、両方が「開始」した後でなければ
+    どちらも完了できないバリアを仕込む。単一ロックのままなら一方のビルドが
+    もう一方の開始をブロックし、必ずタイムアウトする。
+    """
+    import time
+
+    import torch
+
+    build_started: dict[tuple[int, ...], bool] = {}
+    release = threading.Event()
+
+    def fake_build(fn, op_type, tensors, *rest):
+        shape = tuple(tensors[0].shape)
+        build_started[shape] = True
+        if not release.wait(timeout=2):
+            raise TimeoutError(f"shape={shape} のビルドが並行開始されなかった（直列化の疑い）")
+        return None
+
+    def _fake_bind(*args, **kwargs):
+        bound = MagicMock()
+        bound.arguments = {"x": args[0]}
+        bound.apply_defaults.return_value = None
+        return bound
+
+    with (
+        patch("forge.decorator.identify", return_value="rmsnorm"),
+        patch("forge.decorator._build", side_effect=fake_build),
+        patch("inspect.Signature.bind", side_effect=_fake_bind),
+    ):
+
+        @optimize(budget=1)
+        def fn(x):
+            return x
+
+        def _make_tensor(shape: tuple[int, ...]) -> MagicMock:
+            t = MagicMock(spec=torch.Tensor)
+            t.is_cuda = True
+            t.shape = shape
+            t.dtype = torch.float32
+            return t
+
+        t_a = _make_tensor((4, 4))
+        t_b = _make_tensor((8, 8))
+
+        errors: list[Exception] = []
+
+        def call_fn(t: MagicMock) -> None:
+            try:
+                fn(t)
+            except Exception as e:
+                errors.append(e)
+
+        th_a = threading.Thread(target=call_fn, args=(t_a,))
+        th_b = threading.Thread(target=call_fn, args=(t_b,))
+        th_a.start()
+        th_b.start()
+
+        deadline = time.monotonic() + 2
+        while len(build_started) < 2 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        release.set()
+
+        th_a.join(timeout=5)
+        th_b.join(timeout=5)
+
+    assert not errors, f"スレッド実行中に例外: {errors}"
+    assert len(build_started) == 2, f"両方の shape が並行ビルドされなかった: {build_started}"

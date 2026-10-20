@@ -71,13 +71,28 @@ def optimize(
         op_type_box: list[
             str | None
         ] = []  # 一度だけ判定（[] 未判定 / [None] 不可 / [str] 判定済み）
-        _lock = threading.Lock()
+        _op_type_lock = threading.Lock()
+        # #329: shape ごとに独立したロックでビルドを保護する。単一ロックだと
+        # 無関係な shape（バッチサイズ/seq_len違い等）のビルドまで直列化されて
+        # しまうため、key ごとに Lock を割り当てて並行ビルドを許容する。
+        # _build_locks_guard は _build_locks 辞書自体への同時書き込みのみを保護
+        # する（ビルド処理そのものは保護しない・保持時間は極短）。
+        _build_locks_guard = threading.Lock()
+        _build_locks: dict[tuple[Any, ...], threading.Lock] = {}
+
+        def _get_build_lock(key: tuple[Any, ...]) -> threading.Lock:
+            with _build_locks_guard:
+                lock = _build_locks.get(key)
+                if lock is None:
+                    lock = threading.Lock()
+                    _build_locks[key] = lock
+                return lock
 
         def _resolve_op_type() -> str | None:
             # ロック外の高速パス: すでに判定済みならそのまま返す
             if op_type_box:
                 return op_type_box[0]
-            with _lock:
+            with _op_type_lock:
                 # ダブルチェック: 他スレッドが先に入れた可能性
                 if not op_type_box:
                     op_type_box.append(identify(fn) if backend == "triton" else None)
@@ -100,10 +115,24 @@ def optimize(
                 _log.debug("eager fallback fn=%s op=%s", fn.__qualname__, op_type)
                 return fn(*args, **kwargs)
 
+            # #328: 引数テンソル間でデバイスが不一致だと Triton/CUDA レベルの
+            # 分かりにくいエラーでクラッシュしうる。早期に検出して eager に
+            # フォールバックし、原因を特定しやすい warning ログを残す。
+            first_device = tensors[0].device
+            if any(t.device != first_device for t in tensors[1:]):
+                devices = [str(t.device) for t in tensors]
+                _log.warning(
+                    "forge.optimize: 引数テンソルのデバイスが一致していません "
+                    "fn=%s devices=%s — eager にフォールバックします",
+                    fn.__qualname__,
+                    devices,
+                )
+                return fn(*args, **kwargs)
+
             key = tuple((tuple(t.shape), str(t.dtype)) for t in tensors)
             # ロック外の高速パス: すでにコンパイル済みならそのまま実行
             if key not in compiled:
-                with _lock:
+                with _get_build_lock(key):
                     # ダブルチェック: 他スレッドが先に _build を完了した可能性
                     if key not in compiled:
                         # economic: eager を 1 回タイムしてから探索判断
