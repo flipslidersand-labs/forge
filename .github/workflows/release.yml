@@ -70,7 +70,7 @@ jobs:
           semantic-release
           NEW_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo none)
           if [ "$NEW_TAG" != "$PREV_TAG" ]; then
-            VERSION=$(echo "$NEW_TAG" | sed 's/^v//')
+            VERSION="${NEW_TAG#v}"
           else
             VERSION=""
           fi
