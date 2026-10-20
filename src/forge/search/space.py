@@ -43,7 +43,7 @@ class SearchSpace:
     # GEMM (linear) 用タイルサイズ。BLOCK_M=BLOCK_N で正方出力タイルを使う。
     gemm_output_blocks: list[int] = field(default_factory=lambda: [64, 128])
     # GEMM の K 次元タイルサイズ（tl.dot 制約上 16 以上の 2 のべき乗）。
-    gemm_k_blocks: list[int] = field(default_factory=lambda: [32, 64])
+    gemm_k_blocks: list[int] = field(default_factory=lambda: [16, 32, 64])
     # attention 用シーケンスブロックサイズ。tl.dot 制約上 16 の倍数かつ ≥ 16 が必須。
     # 小 shape (S=64) では BLOCK_S=16/32 で CTA 数が増え GPU 利用率が上がる。
     attention_seq_blocks: list[int] = field(default_factory=lambda: [16, 32, 64, 128])
@@ -118,10 +118,10 @@ class SearchSpace:
                         )
 
     def _enumerate_gemm(self, stages: list[int]) -> Iterator[SearchParams]:
-        """GEMM (linear) 向け探索空間。BLOCK_M=BLOCK_N=block_size, BLOCK_K in [16,32,64] で探索。"""
+        """GEMM (linear) 向け探索空間。BLOCK_M=BLOCK_N=block_size, BLOCK_K=gemm_k_blocks で探索。"""
         seen: set[tuple] = set()
         for block_mn in self.gemm_output_blocks:
-            for block_k in [16, 32, 64]:
+            for block_k in self.gemm_k_blocks:
                 for warps in self.num_warps:
                     for stage in stages:
                         for acc in self.acc_dtypes:

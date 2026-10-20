@@ -18,6 +18,24 @@ from forge.search.cost_model import BudgetTracker, CostModel, scalarize
 from forge.search.params import SearchParams
 
 
+def _make_cand(*, correct: bool, median_us: float = 50.0) -> CandidateWithCost:
+    params = SearchParams(
+        block_size=256,
+        num_warps=8,
+        num_stages=2,
+        acc_dtype="fp32",
+        variant="single_row",
+        rows_per_program=1,
+    )
+    return CandidateWithCost(
+        params=params,
+        median_us=median_us,
+        tokens_for_proposal=5000,
+        benchmark_time_ms=500.0,
+        correct=correct,
+    )
+
+
 class TestTokensAndTimeCost:
     """token/time コスト換算。"""
 
@@ -221,6 +239,19 @@ class TestParetoOptimal:
         # cand1 は pareto 最適、cand2 は dominated
         assert cand1.is_pareto_optimal(candidates)
         assert not cand2.is_pareto_optimal(candidates)
+
+    def test_incorrect_candidate_is_not_pareto_optimal(self) -> None:
+        """#370: correct=False の候補は支配されていなくてもパレート最適ではない。"""
+        bad = _make_cand(correct=False, median_us=10.0)
+        good = _make_cand(correct=True, median_us=100.0)
+        assert not bad.is_pareto_optimal([bad, good])
+        assert not bad.is_pareto_optimal([bad])
+
+    def test_frontier_excludes_incorrect_and_recommend_none(self) -> None:
+        """#370: 不正解候補のみなら frontier は空で recommend() は None。"""
+        frontier = ParetoFrontier([_make_cand(correct=False), _make_cand(correct=False)])
+        assert frontier.frontier == []
+        assert frontier.recommend() is None
 
 
 class TestParetoFrontier:
