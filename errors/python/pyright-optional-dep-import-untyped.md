@@ -22,11 +22,13 @@ pyright strict モードは `try: import triton` でも `reportMissingImports` �
 
 ## 解決策
 
-import 行に `# type: ignore[import-untyped]` を追加する。
+import 行に Pyright 固有の `# pyright: ignore[reportMissingImports]` を追加する。
+（`# type: ignore[import-untyped]` の `import-untyped` は mypy のコード。Pyright は
+PEP 484 の汎用 `# type: ignore` として扱い、その行の全診断を黙らせてしまう。）
 
 ```python
 try:
-    import triton  # type: ignore[import-untyped]
+    import triton  # pyright: ignore[reportMissingImports]
     triton_ver = triton.__version__
 except ImportError:
     triton_ver = "none"
@@ -34,6 +36,6 @@ except ImportError:
 
 ## 予防
 
-optional extra に移動したモジュールを使う箇所には `type: ignore` を付ける。
+optional extra に移動したモジュールを使う箇所には `# pyright: ignore[reportMissingImports]` を付ける（rule 指定で他の診断を隠さない）。
 または pyproject.toml の `[tool.pyright]` に `ignore = ["path/to/file.py"]` で
 ファイル単位の型チェックを除外できる（ただし他エラーも隠れるため最終手段）。

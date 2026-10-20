@@ -22,7 +22,9 @@ UP037 Remove quotes from type annotation
 ### E402
 
 テストファイルでセクション区切りコメント（`# ── Section ──`）の後に import を書いた。
-ruff はファイル内のどこに書かれた import も「先頭以外 → E402」と判定する。
+ruff は**モジュールレベルの** import が先頭以外にあると E402 と判定する。
+（関数内 import は E402 の対象外。optional extra を遅延 import する意図的な関数内 import は
+ そのままでよい。例: `bayesian_generator.py` の `_propose` 内 `optuna`。）
 
 ```python
 # NG: コメントで区切っても mid-file import はダメ
@@ -49,7 +51,8 @@ def __enter__(self) -> CostModel:
 
 ### E402
 
-全 import を必ずファイル先頭（docstring の直後）にまとめる。
+**モジュールレベルの** import を必ずファイル先頭（docstring の直後）にまとめる。
+関数内の遅延 import は移動しない。
 
 ```python
 """モジュールのdocstring。"""
