@@ -4,6 +4,13 @@ on:
   push:
     branches:
       - master
+  # 既存タグの PyPI 公開だけを手動で行う経路(#314)。release ジョブは走らせない。
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "PyPI に公開する既存の git タグ (例: v1.20.6)"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -12,6 +19,8 @@ permissions:
 
 jobs:
   release:
+    # workflow_dispatch では走らせない(push 時の動作は従来どおり)
+    if: github.event_name == 'push'
     # linux-general ARC ランナーには docker socket が無く、pypa/gh-action-pypi-publish
     # (docker composite action) が "failed to connect to the docker API" で毎回落ちる。
     # PyPI publish を含む release ジョブは ubuntu-latest 固定。
@@ -100,3 +109,74 @@ jobs:
             echo "ℹ️ No release needed" >> "$GITHUB_STEP_SUMMARY"
           fi
 
+
+  # 既存タグを PyPI に公開する専用ジョブ(#314)。
+  # release ジョブは新タグが無いと Build/Publish をスキップして緑のまま終わるため、
+  # PyPI 側の Trusted Publisher を直した後に既存タグを公開する経路として使う。
+  # PyPI の Trusted Publisher は workflow 名 release.yml で登録されているので、
+  # 別ファイルにせずこのファイルに置く。
+  publish-tag:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      TAG: ${{ inputs.tag }}
+    steps:
+      - name: Validate tag input
+        run: |
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::tag '$TAG' は v<major>.<minor>.<patch> (例: v1.20.6) の形式で指定してください"
+            exit 1
+          fi
+          echo "VERSION=${TAG#v}" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Build
+        run: |
+          # バージョンは hatch-vcs がチェックアウトしたタグから導出する(#390, #399)
+          pip install build
+          python -m build
+
+      - name: Check dist version matches tag
+        run: |
+          ls dist
+          test -n "$(ls dist)"
+          for f in dist/*; do
+            case "$(basename "$f")" in
+              kernelsmith-"$VERSION"-*|kernelsmith-"$VERSION".tar.gz) ;;
+              *) echo "::error::$f は kernelsmith $VERSION ではありません(タグと build バージョンの不一致)"; exit 1 ;;
+            esac
+          done
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # 一部だけ上がった状態からの再実行を許す。公開の成否は次の step で判定する。
+          skip-existing: true
+
+      - name: Verify release is on PyPI
+        run: |
+          # 緑なのに公開ゼロ、を防ぐ。CDN 反映遅れを見込んで数回リトライする。
+          for i in 1 2 3 4 5 6; do
+            if curl -fsS https://pypi.org/pypi/kernelsmith/json \
+              | jq -e --arg v "$VERSION" '(.releases[$v] // []) | length > 0' >/dev/null; then
+              echo "kernelsmith $VERSION は PyPI に公開済みです"
+              echo "✅ kernelsmith $VERSION is on PyPI" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "kernelsmith $VERSION はまだ PyPI の releases にありません (試行 $i/6)"
+            sleep 10
+          done
+          echo "::error::kernelsmith $VERSION が PyPI の releases に見つかりません"
+          exit 1
