@@ -33,7 +33,6 @@ def optimize(
     min_speedup: float = 1.03,
     min_invocations: int = 0,
     per_candidate_s: float = 2.0,
-    python_executable: str | None = None,
     progress: Callable[[str], None] | None = None,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """純粋な PyTorch 演算を最速の Triton 実装へ自動置換するデコレータ。
@@ -168,7 +167,6 @@ def optimize(
                                     repo,
                                     search,
                                     min_speedup,
-                                    python_executable,
                                     progress,
                                 )
                         else:
@@ -181,7 +179,6 @@ def optimize(
                                 repo,
                                 search,
                                 min_speedup,
-                                python_executable,
                                 progress,
                             )
             kfn = compiled[key]
@@ -220,7 +217,6 @@ def _build(
     repo: KernelRepository | None,
     search: CandidateGenerator | None,
     min_speedup: float,
-    python_executable: str | None,
     progress: Callable[[str], None] | None,
 ) -> Callable[..., Any] | None:
     """この shape に対して最速カーネルを探索し、in-process 実行関数を返す（無ければ None）。"""
@@ -239,7 +235,6 @@ def _build(
     with Orchestrator(
         repo=repo,
         min_speedup=min_speedup,
-        python_executable=python_executable,
         progress=progress or (lambda _m: None),
     ) as orch:
         result = orch.optimize(spec, budget=budget, search=search)
