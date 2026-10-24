@@ -18,9 +18,53 @@ permissions:
   id-token: write
 
 jobs:
+  # 次のリリースが major か判定する(dry-run。何も公開しない)。major は release-major
+  # environment(Required reviewers)で人の承認を待つ。PyPI 公開は戻せないため、
+  # マージ経路(人/自動)によらずここで止める。minor/patch は従来どおり自動。
+  plan:
+    # workflow_dispatch(既存タグの公開)では release を走らせないので判定も不要
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      major: ${{ steps.p.outputs.major }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install semantic-release
+        run: |
+          npm install -g semantic-release \
+            @semantic-release/commit-analyzer \
+            @semantic-release/release-notes-generator \
+            @semantic-release/changelog \
+            @semantic-release/exec \
+            @semantic-release/git \
+            @semantic-release/github \
+            conventional-changelog-conventionalcommits
+      - name: Detect major bump
+        id: p
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          OUT=$(semantic-release --dry-run --no-ci 2>&1 || true)
+          echo "$OUT" | tail -20
+          NEXT=$(echo "$OUT" | grep -oE 'next release version is [0-9]+\.[0-9]+\.[0-9]+' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | tail -1)
+          CUR=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//')
+          if [ -n "$NEXT" ] && [ "${NEXT%%.*}" != "${CUR%%.*}" ]; then
+            echo "major=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::major release ($CUR -> $NEXT): release-major の承認待ち"
+          else
+            echo "major=false" >> "$GITHUB_OUTPUT"
+          fi
+
   release:
+    needs: plan
     # workflow_dispatch では走らせない(push 時の動作は従来どおり)
     if: github.event_name == 'push'
+    environment: ${{ needs.plan.outputs.major == 'true' && 'release-major' || 'release' }}
     # linux-general ARC ランナーには docker socket が無く、pypa/gh-action-pypi-publish
     # (docker composite action) が "failed to connect to the docker API" で毎回落ちる。
     # PyPI publish を含む release ジョブは ubuntu-latest 固定。
