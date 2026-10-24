@@ -13,12 +13,23 @@ import json
 import logging
 import subprocess
 import sys
+import warnings
 from dataclasses import dataclass, field
 from typing import Any
 
 from forge.benchmark.statistics import BenchmarkResult
 
 _log = logging.getLogger("forge.runtime")
+
+
+def warn_python_executable_deprecated(stacklevel: int = 3) -> None:
+    """python_executable 引数の非推奨警告（次の major リリースで削除予定）。"""
+    warnings.warn(
+        "python_executable は非推奨で、次の major リリースで削除されます。"
+        "ワーカーは現在のインタプリタ（sys.executable）で起動する形に統一する予定です。",
+        DeprecationWarning,
+        stacklevel=stacklevel,
+    )
 
 
 @dataclass
@@ -95,13 +106,15 @@ def run_in_worker(
     repeat: int = 200,
     tolerance: dict[str, Any] | None = None,
     timeout_s: float = 60.0,
+    python_executable: str | None = None,
 ) -> WorkerResult:
     """生成カーネルを使い捨て subprocess で実行する。
 
     benchmark_input はタイミング計測に使う代表入力。correctness_cases を渡すと
     各ケースで正確性を検証する（省略時は benchmark_input で 1 回検証）。
     CUDA エラー・タイムアウト・コンパイル失敗のいずれも WorkerResult(success=False)
-    として返し、親プロセスは生き残る。ワーカーは常に現在のインタプリタ（sys.executable）で起動する。
+    として返し、親プロセスは生き残る。python_executable 省略時は現在のインタプリタ。
+    python_executable は非推奨（次の major で削除）。
     """
     payload = json.dumps(
         {
@@ -116,7 +129,7 @@ def run_in_worker(
             "tolerance": tolerance or {"atol": 2e-3, "rtol": 1e-2, "equal_nan": False},
         }
     )
-    exe = sys.executable
+    exe = python_executable or sys.executable
     try:
         proc = subprocess.run(
             [exe, "-m", "forge.runtime._worker_entry"],
@@ -156,6 +169,7 @@ def run_extended_baseline_in_worker(
     warmup: int = 25,
     repeat: int = 200,
     timeout_s: float = 180.0,
+    python_executable: str | None = None,
 ) -> list[ExtendedBaselineResult]:
     """torch.compile(reference) を subprocess で 1 回だけ計測する。
 
@@ -172,7 +186,7 @@ def run_extended_baseline_in_worker(
             "repeat": repeat,
         }
     )
-    exe = sys.executable
+    exe = python_executable or sys.executable
     try:
         proc = subprocess.run(
             [exe, "-m", "forge.runtime._worker_entry"],

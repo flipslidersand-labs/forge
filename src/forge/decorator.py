@@ -14,6 +14,7 @@ from forge.ir.tensor_spec import TensorSpec
 from forge.lowering import identify
 from forge.orchestrator import Orchestrator
 from forge.runtime.loader import load_kernel_fn
+from forge.runtime.worker import warn_python_executable_deprecated
 from forge.search.adoption import should_run_search
 from forge.search.candidate import CandidateGenerator
 
@@ -33,6 +34,7 @@ def optimize(
     min_speedup: float = 1.03,
     min_invocations: int = 0,
     per_candidate_s: float = 2.0,
+    python_executable: str | None = None,
     progress: Callable[[str], None] | None = None,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """純粋な PyTorch 演算を最速の Triton 実装へ自動置換するデコレータ。
@@ -62,6 +64,9 @@ def optimize(
         raise ValueError(f"min_speedup must be > 0, got {min_speedup!r}.")
     if not (per_candidate_s > 0):
         raise ValueError(f"per_candidate_s must be > 0, got {per_candidate_s!r}.")
+
+    if python_executable is not None:
+        warn_python_executable_deprecated(stacklevel=3)
 
     def deco(fn: Callable[..., Any]) -> Callable[..., Any]:
         sig = inspect.signature(fn)
@@ -167,6 +172,7 @@ def optimize(
                                     repo,
                                     search,
                                     min_speedup,
+                                    python_executable,
                                     progress,
                                 )
                         else:
@@ -179,6 +185,7 @@ def optimize(
                                 repo,
                                 search,
                                 min_speedup,
+                                python_executable,
                                 progress,
                             )
             kfn = compiled[key]
@@ -217,6 +224,7 @@ def _build(
     repo: KernelRepository | None,
     search: CandidateGenerator | None,
     min_speedup: float,
+    python_executable: str | None,
     progress: Callable[[str], None] | None,
 ) -> Callable[..., Any] | None:
     """この shape に対して最速カーネルを探索し、in-process 実行関数を返す（無ければ None）。"""
@@ -237,6 +245,8 @@ def _build(
         min_speedup=min_speedup,
         progress=progress or (lambda _m: None),
     ) as orch:
+        # 非推奨警告は optimize() 側で出済みなので、コンストラクタ経由にせず属性で渡す
+        orch.python_executable = python_executable
         result = orch.optimize(spec, budget=budget, search=search)
     if result.best_params is None:
         _log.info("build no best op=%s — falling back to eager", op_type)
