@@ -13,12 +13,23 @@ import json
 import logging
 import subprocess
 import sys
+import warnings
 from dataclasses import dataclass, field
 from typing import Any
 
 from forge.benchmark.statistics import BenchmarkResult
 
 _log = logging.getLogger("forge.runtime")
+
+
+def warn_python_executable_deprecated(stacklevel: int = 3) -> None:
+    """python_executable 引数の非推奨警告（次の major リリースで削除予定）。"""
+    warnings.warn(
+        "python_executable は非推奨で、次の major リリースで削除されます。"
+        "ワーカーは現在のインタプリタ（sys.executable）で起動する形に統一する予定です。",
+        DeprecationWarning,
+        stacklevel=stacklevel,
+    )
 
 
 @dataclass
@@ -103,6 +114,7 @@ def run_in_worker(
     各ケースで正確性を検証する（省略時は benchmark_input で 1 回検証）。
     CUDA エラー・タイムアウト・コンパイル失敗のいずれも WorkerResult(success=False)
     として返し、親プロセスは生き残る。python_executable 省略時は現在のインタプリタ。
+    python_executable は非推奨（次の major で削除）。
     """
     payload = json.dumps(
         {

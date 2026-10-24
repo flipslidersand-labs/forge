@@ -22,6 +22,7 @@ from forge.runtime.worker import (
     WorkerResult,
     run_extended_baseline_in_worker,
     run_in_worker,
+    warn_python_executable_deprecated,
 )
 from forge.search.candidate import CandidateGenerator, HistoryEntry
 from forge.search.cost_model import BudgetTracker
@@ -179,6 +180,8 @@ class Orchestrator:
         else:
             self.repo = repo
             self._owns_repo = False
+        if python_executable is not None:
+            warn_python_executable_deprecated()
         self.python_executable = python_executable
         self.min_speedup = min_speedup
         self.warmup = warmup
