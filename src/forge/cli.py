@@ -1,0 +1,254 @@
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from collections.abc import Sequence
+from datetime import UTC, datetime
+from pathlib import Path
+
+from forge import __version__
+from forge.cache.repository import DEFAULT_DB_PATH
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="forge",
+        description="Forge — automatic GPU kernel optimizer",
+    )
+    parser.add_argument("--version", action="version", version=f"forge {__version__}")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    cache = sub.add_parser("cache", help="キャッシュ済みカーネルの管理")
+    cache_sub = cache.add_subparsers(dest="cache_command", required=True)
+
+    list_p = cache_sub.add_parser("list", help="キャッシュ済みカーネル一覧")
+    list_p.add_argument("--json", action="store_true", help="JSON で出力")
+    list_p.add_argument("--db", default=DEFAULT_DB_PATH, help="キャッシュ DB のパス")
+    list_p.set_defaults(func=_cmd_list)
+
+    clear_p = cache_sub.add_parser("clear", help="全キャッシュ削除")
+    clear_p.add_argument("--force", action="store_true", help="確認プロンプトなしで削除")
+    clear_p.add_argument("--db", default=DEFAULT_DB_PATH, help="キャッシュ DB のパス")
+    clear_p.set_defaults(func=_cmd_clear)
+
+    prune_p = cache_sub.add_parser("prune", help="条件を指定して古いキャッシュを削除")
+    prune_p.add_argument(
+        "--before",
+        metavar="YYYY-MM-DD",
+        help="この日付より前に作成されたエントリを削除",
+    )
+    prune_p.add_argument(
+        "--keep-latest",
+        metavar="N",
+        type=int,
+        help="最新 N 件を残してそれ以外を削除",
+    )
+    prune_p.add_argument("--force", action="store_true", help="確認プロンプトなしで削除")
+    prune_p.add_argument("--db", default=DEFAULT_DB_PATH, help="キャッシュ DB のパス")
+    prune_p.set_defaults(func=_cmd_prune)
+
+    return parser
+
+
+def _db_missing(db: str) -> bool:
+    """DB ファイルが存在しない場合 True。
+
+    KernelRepository.__init__ は mkdir + 空 DB 作成の副作用を持つため、
+    read 系コマンドは開く前に存在確認する（typo パスへの空 DB 散乱防止）。
+    """
+    return not Path(db).expanduser().exists()
+
+
+def _cmd_list(args: argparse.Namespace) -> int:
+    import sqlite3
+
+    from forge.cache.repository import KernelRepository
+
+    if _db_missing(args.db):
+        print(json.dumps([]) if args.json else "キャッシュは空です。(DB 未作成)")
+        return 0
+
+    try:
+        with KernelRepository(args.db) as repo:
+            summaries = repo.list_summaries()
+    except (sqlite3.OperationalError, sqlite3.DatabaseError) as e:
+        print(
+            f"エラー: キャッシュ DB の読み取りに失敗しました: {e}\n"
+            f"対処法: rm {args.db}  (次回実行時にキャッシュが再構築されます)",
+            file=sys.stderr,
+        )
+        return 1
+
+    if args.json:
+        print(
+            json.dumps(
+                [
+                    {
+                        "cache_key_hash": s.cache_key_hash,
+                        "graph_hash": s.cache_key.graph_hash,
+                        "shapes": [list(sh) for sh in s.cache_key.shapes],
+                        "dtypes": list(s.cache_key.dtypes),
+                        "median_us": s.median_us,
+                        "speedup": s.speedup,
+                        "created_at": s.created_at,
+                    }
+                    for s in summaries
+                ],
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return 0
+
+    if not summaries:
+        print("キャッシュは空です。")
+        return 0
+
+    rows = [
+        (
+            s.cache_key_hash[:12],
+            s.cache_key.graph_hash,
+            ", ".join("x".join(str(d) for d in shape) for shape in s.cache_key.shapes) or "-",
+            ",".join(s.cache_key.dtypes) or "-",
+            f"{s.median_us:.1f}" if s.median_us is not None else "-",
+            f"{s.speedup:.2f}x" if s.speedup is not None else "-",
+            s.created_at[:19],
+        )
+        for s in summaries
+    ]
+    headers = ("hash", "graph_hash", "shapes", "dtypes", "median_us", "speedup", "created_at")
+    widths = [max(len(headers[i]), *(len(r[i]) for r in rows)) for i in range(len(headers))]
+    fmt = "  ".join(f"{{:<{w}}}" for w in widths)
+    print(fmt.format(*headers))
+    for r in rows:
+        print(fmt.format(*r))
+    print(f"\n{len(summaries)} 件")
+    return 0
+
+
+def _confirm(prompt: str) -> bool:
+    """y/N 確認。非対話 (EOF) と Ctrl-C は安全側 = No に倒す。"""
+    try:
+        return input(prompt).strip().lower() in ("y", "yes")
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return False
+
+
+def _cmd_clear(args: argparse.Namespace) -> int:
+    import sqlite3
+
+    from forge.cache.repository import KernelRepository
+
+    if _db_missing(args.db):
+        print("キャッシュは空です。(DB 未作成)")
+        return 0
+
+    try:
+        with KernelRepository(args.db) as repo:
+            n = repo.count()
+            if n == 0:
+                print("キャッシュは空です。")
+                return 0
+            if not args.force and not _confirm(
+                f"{n} 件のキャッシュを削除します。よろしいですか? [y/N] "
+            ):
+                print("中止しました。")
+                return 0
+            deleted = repo.clear()
+    except (sqlite3.OperationalError, sqlite3.DatabaseError) as e:
+        print(
+            f"エラー: キャッシュ DB の操作に失敗しました: {e}\n"
+            f"対処法: rm {args.db}  (次回実行時にキャッシュが再構築されます)",
+            file=sys.stderr,
+        )
+        return 1
+    print(f"{deleted} 件削除しました。")
+    return 0
+
+
+def _cmd_prune(args: argparse.Namespace) -> int:
+    import sqlite3
+
+    from forge.cache.repository import KernelRepository
+
+    before_dt: datetime | None = None
+    if args.before is not None:
+        try:
+            before_dt = datetime.strptime(args.before, "%Y-%m-%d").replace(tzinfo=UTC)
+        except ValueError:
+            print(
+                f"エラー: --before の日付形式が正しくありません: {args.before!r} (YYYY-MM-DD)",
+                file=sys.stderr,
+            )
+            return 1
+
+    keep_latest: int | None = args.keep_latest
+    if keep_latest is not None and keep_latest < 1:
+        print(
+            "エラー: --keep-latest には 1 以上の整数を指定してください。"
+            " 全件削除は `forge cache clear` を使ってください。",
+            file=sys.stderr,
+        )
+        return 1
+
+    if before_dt is None and keep_latest is None:
+        if _db_missing(args.db):
+            print("キャッシュは空です。(DB 未作成)")
+            return 0
+        try:
+            with KernelRepository(args.db) as repo:
+                n = repo.count()
+        except (sqlite3.OperationalError, sqlite3.DatabaseError) as e:
+            print(
+                f"エラー: キャッシュ DB の読み取りに失敗しました: {e}\n"
+                f"対処法: rm {args.db}  (次回実行時にキャッシュが再構築されます)",
+                file=sys.stderr,
+            )
+            return 1
+        print(
+            f"キャッシュ: {n} 件。削除するには --before または --keep-latest を指定してください。"
+        )
+        return 1
+
+    if _db_missing(args.db):
+        print("キャッシュは空です。(DB 未作成)")
+        return 0
+
+    try:
+        with KernelRepository(args.db) as repo:
+            target = repo.prune(before=before_dt, keep_latest=keep_latest, dry_run=True)
+            if target == 0:
+                print("削除対象のエントリはありません。")
+                return 0
+            if not args.force and not _confirm(f"{target} 件を削除します。よろしいですか? [y/N] "):
+                print("中止しました。")
+                return 0
+            deleted = repo.prune(before=before_dt, keep_latest=keep_latest)
+    except (sqlite3.OperationalError, sqlite3.DatabaseError) as e:
+        print(
+            f"エラー: キャッシュ DB の操作に失敗しました: {e}\n"
+            f"対処法: rm {args.db}  (次回実行時にキャッシュが再構築されます)",
+            file=sys.stderr,
+        )
+        return 1
+    print(f"{deleted} 件削除しました。")
+    return 0
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+    try:
+        return int(args.func(args))
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except Exception as e:  # noqa: BLE001 — 各コマンド固有の詳細メッセージ(try/except)を
+        # 抜けた想定外の例外のみを捕捉する最終防波堤。生トレースバックの露出を防ぐ。
+        print(f"エラー: {e}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [master, "feat/**", "fix/**", "ci/**", "test/**", "chore/**", "refactor/**", "docs/**"]
+  pull_request:
+    branches: [master]
+
+jobs:
+  quality:
+    permissions:
+      contents: read
+      pull-requests: write
+    uses: flipslidersand-labs/qa-workflows/.github/workflows/python-test.yml@main
+    with:
+      pre-install: pip install torch --index-url https://download.pytorch.org/whl/cpu
+      install-extras: "dev,llm,ollama,search"
+      pytest-args: '-k "not gpu"'
+      coverage-threshold: 71
+
+  reviewdog:
+    permissions:
+      contents: read
+      pull-requests: write
+      checks: write
+    uses: flipslidersand-labs/qa-workflows/.github/workflows/reviewdog-python.yml@main
+
+  typecheck:
+    name: Type check
+    # linux-general に libatomic1 を追加(flipslidersand-labs/dev-infrastructure#796)
+    # したため self-hosted に戻す。exit 127 が再発したら ubuntu-latest に戻すこと。
+    runs-on: ${{ vars.GATE_RUNNER || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -e ".[dev,llm,ollama,search]"
+      - name: pyright
+        run: pyright src/
+
+  # GPU テスト(gpu-smoke / gpu-test)は gpu ラベルの runner が組織に無いため削除した(#365, #374)。
+  # GPU パスは CI で未検証。runner を登録したら vars.GPU_RUNNER_AVAILABLE と合わせて復活させる(git 履歴参照)。

@@ -1,0 +1,351 @@
+# forge
+
+[![CI](https://github.com/flipslidersand-labs/forge/actions/workflows/ci.yml/badge.svg)](https://github.com/flipslidersand-labs/forge/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/flipslidersand-labs/forge/graph/badge.svg)](https://codecov.io/gh/flipslidersand-labs/forge)
+
+PyTorch 演算に対し、Triton カーネルの実装方式とパラメータを自動探索し、
+正確性・測定ノイズ・環境差を考慮した上で最速実装をキャッシュ再利用する
+GPU カーネル自動最適化エンジン。
+
+```python
+import forge
+import torch
+
+
+@forge.optimize(budget=50)
+def rmsnorm(x, weight, eps=1e-6):
+    return x * torch.rsqrt(torch.mean(x * x, dim=-1, keepdim=True) + eps) * weight
+
+
+x = torch.randn(2048, 4096, dtype=torch.float16, device="cuda")
+w = torch.ones(4096, dtype=torch.float16, device="cuda")
+y = rmsnorm(x, w)  # 初回: 探索してキャッシュ / 2回目以降: 最速カーネルを即実行
+```
+
+## ベンチマーク
+
+### forge vs PyTorch Eager
+
+forge が探索した最速カーネルと PyTorch Eager の比較（実測値）。
+
+> **注意（#413）**: 下の 2 つの表は別々の測定回で、同条件（RMSNorm・(2048, 4096)・fp16）の Eager が
+> 1672.9µs と 815.1µs で食い違っている。どちらのスクリプトも Eager は `F.rms_norm`、warmup=25・repeat=200・中央値で、
+> 計測コード上の差はない。原因は未特定で、同一環境での再計測が必要。再計測までは、RMSNorm の speedup
+> （11.19x / 4.23x）を単一の確定値として引用しないこと。LayerNorm・Softmax・GELU は 2 表でほぼ一致している。
+
+| op          | shape        | dtype | PyTorch Eager (µs) | forge (µs) |    speedup |
+| ----------- | ------------ | ----- | -----------------: | ---------: | ---------: |
+| RMSNorm     | (2048, 4096) | fp16  |             1672.9 |      149.5 | **11.19x** |
+| RMSNorm     | (1024, 8192) | fp16  |             1675.3 |      211.5 |  **7.92x** |
+| Softmax     | (2048, 4096) | fp16  |              791.2 |      193.5 |  **4.09x** |
+| Softmax     | (1024, 8192) | fp16  |              819.2 |      146.4 |  **5.59x** |
+| LayerNorm   | (2048, 4096) | fp16  |              949.0 |      961.5 |      0.99x |
+| GELU        | (2048, 4096) | fp16  |              241.7 |      181.9 |  **1.33x** |
+| SDPA        | (8, 64, 64)  | fp16  |              193.6 |      206.5 |      0.94x |
+| SDPA causal | (8, 64, 64)  | fp16  |              248.9 |      278.9 |      0.89x |
+
+### forge vs torch.compile (eager backend)
+
+torch.compile と PyTorch Eager との比較。中央値計測。
+
+| Op        | Shape        | Eager (µs) | torch.compile (µs) | forge (µs) | forge/eager | forge/compiled |
+| --------- | ------------ | ---------: | -----------------: | ---------: | ----------: | -------------: |
+| RMSNorm   | (2048, 4096) |      815.1 |             1704.4 |      192.9 |   **4.23x** |      **8.84x** |
+| Softmax   | (2048, 4096) |      776.9 |              825.2 |      186.4 |   **4.17x** |      **4.43x** |
+| LayerNorm | (2048, 4096) |      926.5 |              970.2 |      973.1 |       0.95x |          1.00x |
+| GELU      | (2048, 4096) |      245.5 |              278.0 |      181.2 |   **1.35x** |      **1.53x** |
+| RMSNorm   | (1024, 8192) |      714.4 |             1686.5 |      189.5 |   **3.77x** |      **8.90x** |
+| Softmax   | (1024, 8192) |      811.5 |              890.8 |      178.2 |   **4.55x** |      **5.00x** |
+| LayerNorm | (1024, 8192) |      934.8 |              987.6 |      949.2 |       0.98x |          1.04x |
+| GELU      | (1024, 8192) |      243.7 |              283.6 |      181.9 |   **1.34x** |      **1.56x** |
+| SDPA      | (8, 256, 64) |      205.4 |              250.9 |      222.2 |       0.92x |          1.13x |
+| SDPA      | (8, 512, 64) |      551.6 |              596.0 |      560.0 |       0.98x |          1.06x |
+
+**主な発見**:
+
+- **RMSNorm・Softmax**: forge は eager の 3.77-4.55x、torch.compile の 8.84-8.90x （torch.compile が特に遅い）
+- **GELU**: forge は eager の 1.34-1.35x、torch.compile の 1.53-1.56x
+- **LayerNorm・SDPA**: 小さいサイズでは forge が eagerと同等以下（GPU メモリレイアウト最適化の余地あり）
+
+> **測定環境**: GTX 1080 (cc6.1, Triton 公式サポート外), PyTorch 2.13.0+cu126, Triton 3.7.1。  
+> **計測設定**: budget=50, warmup=25, repeat=200 の中央値。baseline は PyTorch eager で動作確認。  
+> torch.compile は backend="eager" を使用（他の backend は GTX 1080 未サポート）。  
+> LayerNorm・SDPA は本 GPU・shape では eager と同等以下（forge はフォールバックせず正直に報告）。  
+> **自環境での計測**（表 1・表 2 を同じ環境で続けて測り、食い違いを確認できる）:
+>
+> ```bash
+> python examples/bench_all.py && python examples/benchmark_torch_compile_autotune.py
+> ```
+>
+> - `examples/bench_all.py` — forge vs eager（表 1）
+> - `examples/benchmark_torch_compile_autotune.py` — forge vs torch.compile (eager backend)（表 2）
+
+## 対応演算
+
+RMSNorm / Softmax / LayerNorm / GELU / Fused Add+RMSNorm / RoPE / SwiGLU / Linear / ScaledDotProductAttention（Flash Attention 2 スタイル・causal マスク対応）
+
+## 仕組み
+
+1. `@forge.optimize` が関数を torch.fx で trace し op を判定（lowering）
+2. 入力テンソルから `KernelSpec` を構築
+3. 探索器（Grid / Random / LLM）が候補を生成
+4. 各候補を **使い捨て subprocess** でコンパイル・正確性検証・ベンチマーク
+   （CUDA エラーで親プロセスが死なない）
+5. 統計的に最速（`p80 < p20/1.03`）かつ正確な実装を SQLite にキャッシュ
+6. 2 回目以降は環境込み `CacheKey`（torch/triton/cuda/compute-capability）で
+   ヒット → 探索ゼロ
+
+## インストール
+
+```bash
+# PyPI からインストール（パッケージ名は kernelsmith、import 名は forge。GPU 実行には [gpu] extra が必要）
+pip install kernelsmith          # コアのみ（import だけなら GPU 不要）
+pip install "kernelsmith[gpu]"   # GPU カーネル実行フル機能（triton 含む）
+```
+
+> GPU なし環境では `import forge` は成功します。GPU 実行（`@forge.optimize` 実行）時のみエラーになります。
+
+## 必要環境
+
+- Python 3.11+
+- GPU 実行: NVIDIA GPU + PyTorch CUDA ビルド + Triton 3.x
+  - Triton 公式サポートは compute capability 7.0+（GTX 1080 / cc6.1 でも動作確認済み）
+
+## 開発環境セットアップ
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev,gpu]"   # コア + GPU + 開発ツール（pytest, ruff, pyright）
+pip install -e ".[llm]"       # LLM 候補生成を使う場合（任意。anthropic + pydantic）
+```
+
+> システム Python が externally-managed の場合は venv 必須。
+> PyTorch は使用 GPU のドライバに合う CUDA ビルドを入れること
+> （例: ドライバが CUDA 12.x なら
+> `pip install torch --index-url https://download.pytorch.org/whl/cu121`）。
+
+## Discord 通知（オプション）
+
+最適化完了時や エラー時に Discord に通知するには、環境変数を設定：
+
+```bash
+export DISCORD_WEBHOOK_COMPLETION="https://discordapp.com/api/webhooks/..."
+export DISCORD_WEBHOOK_ERRORS="https://discordapp.com/api/webhooks/..."
+```
+
+設定しない場合は通知されません（処理に影響なし）。
+
+## 使い方
+
+### デコレータ
+
+```python
+@forge.optimize(budget=50)  # budget = 探索候補数の上限
+def softmax(x):
+    return torch.softmax(x, dim=-1)  # dim は定数で書く（trace 要件）
+```
+
+判定できない・最適化で速くならない場合は、元の eager 関数にフォールバックする。
+
+### 探索 API（直接）
+
+```python
+from forge.ir.kernel_spec import KernelSpec
+from forge.orchestrator import Orchestrator
+
+# KernelSpec を組み立てて orch.optimize(spec, budget=50)
+```
+
+動かせる例は `examples/decorator_demo.py` / `examples/rmsnorm_search.py` を参照。
+
+```bash
+.venv/bin/python examples/decorator_demo.py
+```
+
+### LLM 候補生成 + マルチラウンド探索（任意）
+
+`forge.search.llm_generator.LLMGenerator` は Claude（`claude-opus-4-8`）に
+構造化された候補パラメータを出させる探索器。実 API 利用には `ANTHROPIC_API_KEY`
+が必要（`pip install -e ".[llm]"`）。テストは `propose_fn` 注入でオフライン実行できる。
+
+マルチラウンド探索は `Orchestrator.optimize_rounds()` で実装：
+
+```python
+from forge.orchestrator import Orchestrator, MultiRoundResult
+from forge.search.llm_generator import LLMGenerator
+
+llm = LLMGenerator()  # claude-opus-4-8 を使用
+orch = Orchestrator()
+result: MultiRoundResult = orch.optimize_rounds(
+    spec=spec,
+    llm=llm,
+    n_rounds=3,  # 3 ラウンド
+    candidates_per_round=12,  # 各ラウンドで 12 候補を提案
+)
+# result.best_params で最速カーネルを取得
+# result.token_usage で Anthropic API の総トークン数を確認
+# result.total_benchmark_time_s で GPU ベンチマーク時間を確認
+```
+
+### コスト考慮判定（パレート最適化）
+
+`forge.benchmark.pareto` モジュールは、速度と探索コスト（API トークン数・GPU 時間）
+のトレードオフを可視化：
+
+```python
+from forge.benchmark.pareto import CandidateWithCost, ParetoFrontier
+
+# 複数候補をコスト情報付きで評価
+candidates = [
+    CandidateWithCost(params=p1, median_us=50.0, tokens_for_proposal=5000, ...),
+    CandidateWithCost(params=p2, median_us=80.0, tokens_for_proposal=2000, ...),
+]
+frontier = ParetoFrontier(candidates)
+# frontier.frontier に パレート最適な候補のみ
+recommended = frontier.recommend()  # スコアが最高の候補を推奨
+```
+
+**利用例**:
+
+- 候補 A: `7.8µs`（高速、token cost 高）
+- 候補 B: `8.2µs`（中速、token cost 低）
+  → 両者とも Pareto 最適。用途に応じて選択可能
+
+#### λ（lambda）パラメータによるトレードオフ制御
+
+`scalarize()` で複数目的を線形結合し、単一スコアに変換します：
+
+```python
+from forge.benchmark.pareto import scalarize
+
+# 速度重視（デフォルト）
+score_speed = scalarize(speedup=4.0, cost_us=100.0, lam=0.1)  # λ=0.1
+
+# コスト重視
+score_cost = scalarize(speedup=4.0, cost_us=100.0, lam=1.0)   # λ=1.0
+
+# 速度優先・コスト無視
+score_nopenalty = scalarize(speedup=4.0, cost_us=100.0, lam=0.0)  # λ=0.0
+```
+
+**λ の意味**:
+
+```
+score = speedup - λ × cost_us
+```
+
+- **λ=0.0**: 速度優先（コスト無視）→ 最も高速な候補選択
+- **λ=0.1** (デフォルト): 速度重視・コスト補助 → 実用的なバランス
+- **λ=1.0**: 同等ウェイト → 速度とコストを等価扱い
+- **λ > 1.0**: コスト重視 → 計測時間が限られた環境向け
+
+**推奨値**:
+
+- `local-GPU`: λ=0.0（GPU 時間制限なし） → 最高速求める
+- `cloud-API` (LLM利用): λ=0.1（API 費用を考慮）
+- `embedded`: λ=0.5-1.0（計測時間・メモリ節約）
+
+## 環境変数
+
+| 変数名 | 既定値 | 説明 |
+|---|---|---|
+| `FORGE_DB_PATH` | `~/.forge/cache.db` | キャッシュ DB のパス |
+| `FORGE_DISCORD_WEBHOOK` | ― | Discord 通知用 Webhook URL |
+
+```bash
+# CI/CD やテスト時に一時 DB を使う例
+FORGE_DB_PATH=/tmp/forge_test.db pytest
+
+# 複数プロジェクトでキャッシュを分離する例
+FORGE_DB_PATH=~/projects/myapp/.forge/cache.db python train.py
+```
+
+CLI の `--db` オプションは環境変数より優先されます。
+
+## テスト
+
+```bash
+.venv/bin/python -m pytest tests/ -m "not gpu"   # GPU 不要（CPU のみ）
+.venv/bin/python -m pytest tests/                # GPU を含む全テスト
+.venv/bin/ruff check src/ tests/                 # Lint
+```
+
+## ディレクトリ構成
+
+```
+src/forge/
+  ops/              op メタデータ（OP_REGISTRY: reduction / elementwise / matmul / gemm）
+  ir/               TensorSpec / KernelSpec / hashing
+  lowering/         torch.fx グラフ → op_type 判定
+  codegen/          KernelSpec + params → Triton コード（Jinja2 テンプレート）
+  search/           SearchSpace / GridSearch / RandomSearch / LLMGenerator
+  runtime/          subprocess worker / kernel ローダ / 参照実装
+  validation/       正確性スイート / 許容誤差
+  benchmark/        CUDA Event タイマー / 統計的採用判定
+  cache/            CacheKey / SQLite リポジトリ
+  orchestrator.py   探索 → 検証 → ベンチ → キャッシュの統括
+  decorator.py      @forge.optimize
+docs/               spec / data-model / implementation-guide / adr/
+examples/           実行デモ
+tests/              CPU テスト + GPU テスト（@pytest.mark.gpu）
+```
+
+設計判断は `docs/adr/` を参照（Triton 採用、SQLite、subprocess 隔離、
+統計的ベンチ判定、LLM 構造化生成）。
+
+## 対応演算と制約
+
+forge が最適化を試みる演算の一覧と、各演算固有の制約です。
+未対応・torch.fx トレース不能（動的 dim 等）な場合は元の eager 実装に透過フォールバックします。
+
+| 演算 | op_type | 制約・備考 |
+| --- | --- | --- |
+| RMSNorm | `rmsnorm` | `eps` は定数で記述すること |
+| LayerNorm | `layernorm` | `normalized_shape` は定数 |
+| GELU | `gelu` | exact（erf）のみ。tanh 近似は許容誤差を超えて eager になり得る |
+| Softmax | `softmax` | `dim` は定数で記述すること |
+| Fused Add+RMSNorm | `fused_add_rmsnorm` | `(x + residual)` → RMSNorm の融合 |
+| RoPE | `rope` | `x*cos + rotate_half(x)*sin` パターン |
+| SwiGLU | `swiglu` | — |
+| SDPA | `scaled_dot_product_attention` | **[下記参照](#sdpa-制約)** |
+| Linear | `linear` | bias は任意 |
+
+### SDPA 制約
+
+`torch.nn.functional.scaled_dot_product_attention` に `@forge.optimize` を適用する際は
+以下の条件を満たす必要があります。条件を満たさない場合は eager にフォールバックします。
+
+| 項目 | 要件 |
+| --- | --- |
+| `head_dim` (テンソルの最終次元) | **2 のべき乗 かつ ≥ 16**（例: 16, 32, 64, 128） |
+| `attn_mask` | **非対応**。`None` のみ受け付ける |
+| `dropout_p` | **非対応**（`> 0.0` は eager フォールバック） |
+| `enable_gqa` | **非対応**（GQA / MQA は異なる op パターン） |
+| `is_causal` | `True` / `False` どちらも対応 |
+| `scale` | 任意（`None` = デフォルトスケール） |
+| テンソル形状 | `(batch_heads, seq_len, head_dim)` の 3-D |
+
+```python
+# ✅ 動作する
+@forge.optimize()
+def attention(q, k, v):
+    return F.scaled_dot_product_attention(q, k, v, is_causal=True)
+
+# ❌ head_dim=12 は 2 のべき乗でない → eager フォールバック
+# ❌ attn_mask を渡す → torch.fx トレース不能 → eager フォールバック
+# ❌ dropout_p=0.1 → eager フォールバック
+```
+
+## 既知の制約
+
+- 演算は標準的な式の形のみ認識（torch.fx の call_function 多重集合でマッチ）
+- 開発・検証は GTX 1080（compute capability 6.1、Triton 公式サポート外）で実施
+
+## ロードマップ
+
+進行中・予定の作業は [GitHub Issues](https://github.com/flipslidersand-labs/forge/issues) を参照。
+
+## 設計判断 / Architecture decisions
+
+[ADR 一覧](docs/adr/README.md) — 設計判断、根拠資料、未決定事項。

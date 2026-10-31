@@ -1,0 +1,89 @@
+from __future__ import annotations
+
+import logging
+from typing import TYPE_CHECKING, Any
+
+from pydantic import ValidationError
+
+from forge.ir.kernel_spec import KernelSpec
+from forge.search._base_generator import _BaseGenerator
+from forge.search._proposal_models import Proposal
+from forge.search.llm_generator import build_prompt
+
+if TYPE_CHECKING:
+    from forge.search.candidate import HistoryEntry
+
+_log = logging.getLogger("forge.search.ollama_generator")
+
+_DEFAULT_MODEL = "qwen2.5-coder:latest"
+_DEFAULT_HOST = "http://localhost:11434"
+_DEFAULT_TIMEOUT_S = 60.0
+
+_SYSTEM = (
+    "You are a GPU kernel autotuning assistant. "
+    "Propose Triton kernel configurations as structured JSON. "
+    "Do NOT write code — only structured parameters."
+)
+
+
+class OllamaGenerator(_BaseGenerator):
+    """ローカル ollama サーバーを使った CandidateGenerator。
+
+    ANTHROPIC_API_KEY 不要。`qwen2.5-coder` など JSON 出力を得意とするモデルを推奨。
+    ollama の ``format`` パラメータで Pydantic スキーマを強制するため、
+    JSON パース失敗のリスクが低い。
+
+    ``generate()`` のシグネチャは ``LLMGenerator`` と同一なので、
+    ``Orchestrator.optimize_rounds()`` にそのまま渡せる。
+
+    Args:
+        model: ollama モデル名（``ollama list`` で確認）。
+        host: ollama サーバーアドレス。デフォルトは ``http://localhost:11434``。
+        timeout: リクエストタイムアウト（秒）。サーバー無応答・ネットワーク詰まり時に
+            無限待機しないようデフォルト60秒を設定（#323）。
+    """
+
+    def __init__(
+        self,
+        model: str = _DEFAULT_MODEL,
+        host: str = _DEFAULT_HOST,
+        timeout: float = _DEFAULT_TIMEOUT_S,
+    ) -> None:
+        self.model = model
+        self.host = host
+        self.timeout = timeout
+
+    def _propose(
+        self,
+        spec: KernelSpec,
+        compute_capability: str,
+        n: int,
+        history: list[HistoryEntry],
+    ) -> list[dict[str, Any]]:
+        import ollama  # type: ignore[import]  # ollama は py.typed 未対応
+
+        prompt = build_prompt(spec, compute_capability, n, history)
+        try:
+            resp = ollama.Client(host=self.host, timeout=self.timeout).chat(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": _SYSTEM},
+                    {"role": "user", "content": prompt},
+                ],
+                format=Proposal.model_json_schema(),
+            )
+            content = resp.message.content or ""
+            proposal = Proposal.model_validate_json(content)
+            return [c.model_dump() for c in proposal.candidates]
+        except ValidationError as exc:
+            # モデルが不正な JSON/スキーマを返した: 探索は続行できる
+            _log.warning("OllamaGenerator: invalid model response: %s", exc)
+            return []
+        except Exception as exc:  # noqa: BLE001 — 接続障害等。探索は止めず空リストを返すが error で可視化
+            _log.error(
+                "OllamaGenerator: ollama request failed (host=%s) — server down? %s",
+                self.host,
+                exc,
+                exc_info=True,
+            )
+            return []

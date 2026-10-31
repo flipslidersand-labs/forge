@@ -1,0 +1,112 @@
+from __future__ import annotations
+
+import hashlib
+from functools import lru_cache
+from pathlib import Path
+
+from jinja2 import Environment, FileSystemLoader, StrictUndefined
+
+from forge.ir.kernel_spec import KernelSpec
+from forge.search.params import SearchParams
+
+from .dtypes import acc_dtype_to_tl, torch_dtype_str_to_tl
+
+_TEMPLATE_DIR = Path(__file__).parent / "templates"
+
+
+@lru_cache(maxsize=1)
+def _env() -> Environment:
+    return Environment(
+        loader=FileSystemLoader(str(_TEMPLATE_DIR)),
+        undefined=StrictUndefined,
+        keep_trailing_newline=True,
+    )
+
+
+# (op_type, variant) -> テンプレートファイル名。
+_TEMPLATES = {
+    ("rmsnorm", "single_row"): "rmsnorm.py.jinja",
+    ("rmsnorm", "multi_row"): "rmsnorm_multi_row.py.jinja",
+    ("rmsnorm", "two_pass"): "rmsnorm_two_pass.py.jinja",
+    ("softmax", "single_row"): "softmax.py.jinja",
+    ("softmax", "multi_row"): "softmax_multi_row.py.jinja",
+    ("softmax", "two_pass"): "softmax_two_pass.py.jinja",
+    ("layernorm", "single_row"): "layernorm.py.jinja",
+    ("layernorm", "multi_row"): "layernorm_multi_row.py.jinja",
+    ("layernorm", "two_pass"): "layernorm_two_pass.py.jinja",
+    ("layernorm", "welford"): "layernorm_welford.py.jinja",
+    ("fused_add_rmsnorm", "single_row"): "fused_add_rmsnorm.py.jinja",
+    ("gelu", "elementwise"): "gelu.py.jinja",
+    ("rope", "single_row"): "rope.py.jinja",
+    ("swiglu", "elementwise"): "swiglu.py.jinja",
+    ("scaled_dot_product_attention", "flash"): "sdpa.py.jinja",
+    ("scaled_dot_product_attention", "flash_causal_opt"): "sdpa_causal_opt.py.jinja",
+    ("linear", "gemm"): "linear.py.jinja",
+}
+
+
+def template_hash(op_type: str, template_dir: Path | None = None) -> str:
+    """op_type の全 Triton テンプレート内容から安定した 12 桁 hex ダイジェストを返す。
+
+    CacheKey.template_hash として保持され、テンプレートを修正すると
+    古いキャッシュが自動的に無効化される（Issue #93/#109）。
+
+    テンプレートファイルが見つからない場合は FileNotFoundError を投げる —
+    欠損は package-data 漏れ等の破損インストールであり、ファイル名のみの
+    ハッシュへ静かにフォールバックすると無効化保証が消えるため。
+    各エントリは長さプレフィックス付きでハッシュし framing の曖昧さを避ける。
+    """
+    tdir = template_dir or _TEMPLATE_DIR
+    names = sorted(fname for (op, _variant), fname in _TEMPLATES.items() if op == op_type)
+    h = hashlib.sha256()
+    for name in names:
+        content = (tdir / name).read_bytes()  # 欠損は FileNotFoundError で即顕在化
+        h.update(len(name).to_bytes(4, "big"))
+        h.update(name.encode())
+        h.update(len(content).to_bytes(8, "big"))
+        h.update(content)
+    return h.hexdigest()[:12]
+
+
+def generate(spec: KernelSpec, params: SearchParams) -> str:
+    """KernelSpec + SearchParams から完全な standalone Triton モジュールを生成する。
+
+    生成コードは ``kernel_fn(...)`` を公開し、subprocess worker が
+    一時 .py ファイルとして実行する（@triton.jit はソースをファイルから読むため
+    インライン exec では動かない — Issue #3 参照）。
+    """
+    tkey = (spec.op_type, params.variant)
+    if tkey not in _TEMPLATES:
+        raise ValueError(f"No codegen template for {tkey}")
+
+    out_dtype_str = spec.output_specs[0].dtype_str()
+    template = _env().get_template(_TEMPLATES[tkey])
+
+    render_kwargs: dict[str, object] = dict(
+        variant=params.variant,
+        block_size=params.block_size,
+        num_warps=params.num_warps,
+        num_stages=params.num_stages,
+        acc_dtype=params.acc_dtype,
+        rows_per_program=params.rows_per_program,
+        acc_tl=acc_dtype_to_tl(params.acc_dtype),
+        out_tl=torch_dtype_str_to_tl(out_dtype_str),
+    )
+
+    from forge.ops.registry import OP_REGISTRY
+
+    if spec.op_type in OP_REGISTRY:
+        render_kwargs.update(OP_REGISTRY[spec.op_type].render_extra_kwargs_fn(spec))
+
+    # params.block_k takes precedence over spec.constants["block_k"]
+    if params.variant == "gemm":
+        render_kwargs["block_k"] = params.block_k
+
+    return template.render(**render_kwargs)
+
+
+def generate_rmsnorm(spec: KernelSpec, params: SearchParams) -> str:
+    """rmsnorm 専用のショートカット（テストや examples 用）。"""
+    if spec.op_type != "rmsnorm":
+        raise ValueError(f"Expected rmsnorm spec, got {spec.op_type!r}")
+    return generate(spec, params)
