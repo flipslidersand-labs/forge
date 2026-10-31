@@ -13,3 +13,6 @@ venv/
 .hypothesis/
 
 node_modules/
+
+# AI tool work artifacts (worktrees etc.)
+.claude/
