@@ -3,6 +3,8 @@
 [![CI](https://github.com/flipslidersand-labs/forge/actions/workflows/ci.yml/badge.svg)](https://github.com/flipslidersand-labs/forge/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/flipslidersand-labs/forge/graph/badge.svg)](https://codecov.io/gh/flipslidersand-labs/forge)
 
+Release type: `library`
+
 PyTorch 演算に対し、Triton カーネルの実装方式とパラメータを自動探索し、
 正確性・測定ノイズ・環境差を考慮した上で最速実装をキャッシュ再利用する
 GPU カーネル自動最適化エンジン。
