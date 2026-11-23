@@ -33,7 +33,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
-          node-version: "22"
+          node-version: "26.13"
       - name: Install semantic-release
         run: |
           # バージョンは package.json + package-lock.json で固定(#359)
@@ -73,7 +73,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: "22"
+          node-version: "26.13"
 
       - name: Setup Python
         uses: actions/setup-python@v7
