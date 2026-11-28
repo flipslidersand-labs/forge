@@ -1,6 +1,10 @@
 """パレート最適化による候補比較。
 
 速度とコスト（API トークン、GPU ベンチマーク時間）のトレードオフを可視化。
+
+注意: 現状 Orchestrator の探索ループには未配線（テストと README の例からのみ参照）。
+関連 ADR は ADR-011（コスト考慮探索）だが、ADR-011 が探索ループに組み込むと定めているのは
+CostModel / BudgetTracker で、本モジュールの統合計画は未定。
 """
 
 from __future__ import annotations

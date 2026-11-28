@@ -21,6 +21,33 @@ from forge.benchmark.statistics import BenchmarkResult
 
 _log = logging.getLogger("forge.runtime")
 
+_STDERR_LIMIT = 4096
+
+
+def _tail(text: str, limit: int = _STDERR_LIMIT) -> str:
+    """text が limit 文字を超える場合は末尾 limit 文字だけ残す。
+
+    Python トレースバックや Triton のコンパイルエラーは原因の行が末尾に出るため、
+    先頭ではなく末尾を残す。切り詰めた場合は先頭に印を付ける。
+    """
+    if len(text) <= limit:
+        return text
+    return "...(truncated)\n" + text[-limit:]
+
+
+def _head_tail(text: str, limit: int = _STDERR_LIMIT) -> str:
+    """text が limit 文字を超える場合は先頭と末尾を limit//2 文字ずつ残し、間を省略する。
+
+    JSON 解析失敗時の stdout 用。パース対象は最終行なので、先行ノイズが長いと
+    失敗した最終行は末尾側にあり、最終行自体が長く途中で切れているときは
+    success / error などの先頭側のフィールドが診断に要るため、両端を残す。
+    """
+    if len(text) <= limit:
+        return text
+    half = limit // 2
+    omitted = len(text) - 2 * half
+    return f"{text[:half]}\n...(truncated {omitted} chars)...\n{text[-half:]}"
+
 
 def warn_python_executable_deprecated(stacklevel: int = 3) -> None:
     """python_executable 引数の非推奨警告（次の major リリースで削除予定）。"""
@@ -79,11 +106,18 @@ class WorkerResult:
     baseline: BenchmarkResult | None = None
     baseline_name: str | None = None
     error: str | None = None
+    error_type: str | None = None  # ワーカーが返す例外種別。OOM は "cuda_oom"
+    traceback: str | None = None
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> WorkerResult:
         if not d.get("success"):
-            return cls(success=False, error=d.get("error"))
+            return cls(
+                success=False,
+                error=d.get("error"),
+                error_type=d.get("error_type"),
+                traceback=d.get("traceback"),
+            )
         return cls(
             success=True,
             correct=bool(d.get("correct", False)),
@@ -144,20 +178,23 @@ def run_in_worker(
 
     if proc.returncode != 0:
         stderr = proc.stderr.strip()
-        detail = stderr[:4096] if stderr else f"exit {proc.returncode}"
+        detail = _tail(stderr) if stderr else f"exit {proc.returncode}"
         _log.warning("worker crashed op=%s rc=%d", op_type, proc.returncode)
         return WorkerResult(success=False, error=f"worker crashed: {detail}")
 
     stdout = proc.stdout.strip()
     if not stdout:
         stderr = proc.stderr.strip()
-        detail = stderr[:4096] if stderr else "empty stdout"
+        detail = _tail(stderr) if stderr else "empty stdout"
         _log.warning("bad worker output op=%s: empty stdout", op_type)
         return WorkerResult(success=False, error=f"bad worker output: {detail}")
     try:
-        return WorkerResult.from_dict(json.loads(stdout.splitlines()[-1]))
-    except (json.JSONDecodeError, IndexError, KeyError) as exc:
-        snippet = stdout[:4096]
+        parsed = json.loads(stdout.splitlines()[-1])
+        if not isinstance(parsed, dict):
+            raise TypeError(f"expected JSON object, got {type(parsed).__name__}")
+        return WorkerResult.from_dict(parsed)
+    except (json.JSONDecodeError, IndexError, KeyError, TypeError) as exc:
+        snippet = _head_tail(stdout)
         _log.warning("bad worker output op=%s: %r", op_type, exc)
         return WorkerResult(success=False, error=f"bad worker output: {exc!r} stdout={snippet!r}")
 
@@ -201,7 +238,7 @@ def run_extended_baseline_in_worker(
 
     if proc.returncode != 0:
         stderr = proc.stderr.strip()
-        detail = stderr[:4096] if stderr else f"exit {proc.returncode}"
+        detail = _tail(stderr) if stderr else f"exit {proc.returncode}"
         _log.warning(
             "extended_baseline worker crashed op=%s rc=%d: %s", op_type, proc.returncode, detail
         )
@@ -209,13 +246,15 @@ def run_extended_baseline_in_worker(
 
     try:
         result = json.loads(proc.stdout.strip().splitlines()[-1])
+        if not isinstance(result, dict):
+            raise TypeError(f"expected JSON object, got {type(result).__name__}")
         if not result.get("success"):
             err = result.get("error", "unknown error")
             _log.warning("extended_baseline worker reported failure op=%s: %s", op_type, err)
             return []
         return [ExtendedBaselineResult.from_dict(b) for b in result.get("baselines", [])]
-    except (json.JSONDecodeError, IndexError, KeyError) as exc:
-        snippet = proc.stdout.strip()[:4096]
+    except (json.JSONDecodeError, IndexError, KeyError, TypeError) as exc:
+        snippet = _head_tail(proc.stdout.strip())
         _log.warning(
             "extended_baseline bad worker output op=%s: %r stdout=%r", op_type, exc, snippet
         )

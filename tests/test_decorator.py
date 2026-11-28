@@ -143,7 +143,9 @@ def test_decorated_gelu_matches_eager() -> None:
     with tempfile.TemporaryDirectory() as d:
         repo = KernelRepository(Path(d) / "cache.db")
 
-        @forge.optimize(budget=6, repo=repo)
+        # この shape の GELU(fp16) は eager と同等(約 1.0x)で、既定の min_speedup では
+        # eager に戻る (#475)。ここは「選ばれる variant」の確認なので採用基準を下げる。
+        @forge.optimize(budget=6, repo=repo, min_speedup=0.5)
         def gelu(x):
             return F.gelu(x)
 

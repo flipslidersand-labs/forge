@@ -94,6 +94,51 @@ class TestMultiRoundResult:
         )
         assert r.best_round == 2
 
+    def test_best_round_none_when_best_params_none(self) -> None:
+        """有効候補なし（best_params=None）で、最初のラウンド(None)に誤一致しない。"""
+        r = MultiRoundResult(
+            spec=_spec(),
+            rounds=[
+                RoundResult(1, [], None, None),
+                RoundResult(2, [], None, None),
+            ],
+            best_params=None,
+            best_benchmark=None,
+            baseline_benchmark=None,
+            baseline_name=None,
+            token_usage=TokenUsage(),
+        )
+        assert r.best_round is None
+
+    def test_best_round_none_when_no_rounds(self) -> None:
+        r = MultiRoundResult(
+            spec=_spec(),
+            rounds=[],
+            best_params=_make_params(),
+            best_benchmark=None,
+            baseline_benchmark=None,
+            baseline_name=None,
+            token_usage=TokenUsage(),
+        )
+        assert r.best_round is None
+
+    def test_best_round_returns_first_when_params_repeated(self) -> None:
+        p1 = _make_params(num_warps=4)
+        r = MultiRoundResult(
+            spec=_spec(),
+            rounds=[
+                RoundResult(1, [], _make_params(num_warps=8), 60.0),
+                RoundResult(2, [], p1, 50.0),
+                RoundResult(3, [], _make_params(num_warps=4), 50.0),
+            ],
+            best_params=p1,
+            best_benchmark=None,
+            baseline_benchmark=None,
+            baseline_name=None,
+            token_usage=TokenUsage(),
+        )
+        assert r.best_round == 2
+
     def test_extended_baselines_defaults_empty(self) -> None:
         r = MultiRoundResult(
             spec=_spec(),

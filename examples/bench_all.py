@@ -66,8 +66,9 @@ def _sdpa(q, k, v):
 
 
 @forge.optimize(budget=BUDGET, progress=None)
-def _sdpa_causal(q, k, v):
-    return F.scaled_dot_product_attention(q, k, v, is_causal=True)
+def _sdpa_causal(q, k, v, is_causal=True):
+    # is_causal は本体にリテラルで書くと eager にフォールバックするため、引数で受ける
+    return F.scaled_dot_product_attention(q, k, v, is_causal=is_causal)
 
 
 # ── ベンチケース定義 ────────────────────────────────────────────────────────────

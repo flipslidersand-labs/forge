@@ -1,0 +1,3524 @@
+{
+  "fused_add_rmsnorm/float16": {
+    "correctness_cases": [
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              2048,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 1,
+            "shape": [
+              2048,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "ones",
+            "scale": 1.0,
+            "seed": 2,
+            "shape": [
+              48
+            ]
+          }
+        ],
+        "name": "basic"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              1,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 1,
+            "shape": [
+              1,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "ones",
+            "scale": 1.0,
+            "seed": 2,
+            "shape": [
+              48
+            ]
+          }
+        ],
+        "name": "single_row"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 3,
+            "shape": [
+              7,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 4,
+            "shape": [
+              7,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "ones",
+            "scale": 1.0,
+            "seed": 5,
+            "shape": [
+              48
+            ]
+          }
+        ],
+        "name": "odd_rows"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 100.0,
+            "seed": 7,
+            "shape": [
+              64,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 8,
+            "shape": [
+              64,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "ones",
+            "scale": 1.0,
+            "seed": 9,
+            "shape": [
+              48
+            ]
+          }
+        ],
+        "name": "large_values"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 5,
+            "shape": [
+              64,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 6,
+            "shape": [
+              64,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 7,
+            "shape": [
+              48
+            ]
+          }
+        ],
+        "name": "weight_randn"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "zeros",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              8,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 1,
+            "shape": [
+              8,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "ones",
+            "scale": 1.0,
+            "seed": 2,
+            "shape": [
+              48
+            ]
+          }
+        ],
+        "name": "zeros_x"
+      }
+    ],
+    "primary_input": [
+      {
+        "dtype": "float16",
+        "init": "randn",
+        "scale": 1.0,
+        "seed": 0,
+        "shape": [
+          5,
+          48
+        ]
+      },
+      {
+        "dtype": "float16",
+        "init": "randn",
+        "scale": 1.0,
+        "seed": 1,
+        "shape": [
+          5,
+          48
+        ]
+      },
+      {
+        "dtype": "float16",
+        "init": "ones",
+        "scale": 1.0,
+        "seed": 2,
+        "shape": [
+          48
+        ]
+      }
+    ],
+    "spec": {
+      "dtype": "float16",
+      "input_shapes": [
+        [
+          5,
+          48
+        ],
+        [
+          5,
+          48
+        ],
+        [
+          48
+        ]
+      ]
+    }
+  },
+  "fused_add_rmsnorm/float32": {
+    "correctness_cases": [
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              2048,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 1,
+            "shape": [
+              2048,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "ones",
+            "scale": 1.0,
+            "seed": 2,
+            "shape": [
+              48
+            ]
+          }
+        ],
+        "name": "basic"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              1,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 1,
+            "shape": [
+              1,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "ones",
+            "scale": 1.0,
+            "seed": 2,
+            "shape": [
+              48
+            ]
+          }
+        ],
+        "name": "single_row"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 3,
+            "shape": [
+              7,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 4,
+            "shape": [
+              7,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "ones",
+            "scale": 1.0,
+            "seed": 5,
+            "shape": [
+              48
+            ]
+          }
+        ],
+        "name": "odd_rows"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 100.0,
+            "seed": 7,
+            "shape": [
+              64,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 8,
+            "shape": [
+              64,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "ones",
+            "scale": 1.0,
+            "seed": 9,
+            "shape": [
+              48
+            ]
+          }
+        ],
+        "name": "large_values"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 5,
+            "shape": [
+              64,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 6,
+            "shape": [
+              64,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 7,
+            "shape": [
+              48
+            ]
+          }
+        ],
+        "name": "weight_randn"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "zeros",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              8,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 1,
+            "shape": [
+              8,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "ones",
+            "scale": 1.0,
+            "seed": 2,
+            "shape": [
+              48
+            ]
+          }
+        ],
+        "name": "zeros_x"
+      }
+    ],
+    "primary_input": [
+      {
+        "dtype": "float32",
+        "init": "randn",
+        "scale": 1.0,
+        "seed": 0,
+        "shape": [
+          5,
+          48
+        ]
+      },
+      {
+        "dtype": "float32",
+        "init": "randn",
+        "scale": 1.0,
+        "seed": 1,
+        "shape": [
+          5,
+          48
+        ]
+      },
+      {
+        "dtype": "float32",
+        "init": "ones",
+        "scale": 1.0,
+        "seed": 2,
+        "shape": [
+          48
+        ]
+      }
+    ],
+    "spec": {
+      "dtype": "float32",
+      "input_shapes": [
+        [
+          5,
+          48
+        ],
+        [
+          5,
+          48
+        ],
+        [
+          48
+        ]
+      ]
+    }
+  },
+  "gelu/float16": {
+    "correctness_cases": [
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              2048,
+              48
+            ]
+          }
+        ],
+        "name": "basic"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              1,
+              48
+            ]
+          }
+        ],
+        "name": "single_row"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 3,
+            "shape": [
+              7,
+              48
+            ]
+          }
+        ],
+        "name": "odd_rows"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 10.0,
+            "seed": 7,
+            "shape": [
+              64,
+              48
+            ]
+          }
+        ],
+        "name": "large_values"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": -5.0,
+            "seed": 9,
+            "shape": [
+              64,
+              48
+            ]
+          }
+        ],
+        "name": "negative"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "zeros",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              8,
+              48
+            ]
+          }
+        ],
+        "name": "zeros"
+      }
+    ],
+    "primary_input": [
+      {
+        "dtype": "float16",
+        "init": "randn",
+        "scale": 1.0,
+        "seed": 0,
+        "shape": [
+          5,
+          48
+        ]
+      }
+    ],
+    "spec": {
+      "dtype": "float16",
+      "input_shapes": [
+        [
+          5,
+          48
+        ]
+      ]
+    }
+  },
+  "gelu/float32": {
+    "correctness_cases": [
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              2048,
+              48
+            ]
+          }
+        ],
+        "name": "basic"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              1,
+              48
+            ]
+          }
+        ],
+        "name": "single_row"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 3,
+            "shape": [
+              7,
+              48
+            ]
+          }
+        ],
+        "name": "odd_rows"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 10.0,
+            "seed": 7,
+            "shape": [
+              64,
+              48
+            ]
+          }
+        ],
+        "name": "large_values"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": -5.0,
+            "seed": 9,
+            "shape": [
+              64,
+              48
+            ]
+          }
+        ],
+        "name": "negative"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "zeros",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              8,
+              48
+            ]
+          }
+        ],
+        "name": "zeros"
+      }
+    ],
+    "primary_input": [
+      {
+        "dtype": "float32",
+        "init": "randn",
+        "scale": 1.0,
+        "seed": 0,
+        "shape": [
+          5,
+          48
+        ]
+      }
+    ],
+    "spec": {
+      "dtype": "float32",
+      "input_shapes": [
+        [
+          5,
+          48
+        ]
+      ]
+    }
+  },
+  "layernorm/float16": {
+    "correctness_cases": [
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              2048,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "ones",
+            "scale": 1.0,
+            "seed": 1,
+            "shape": [
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "zeros",
+            "scale": 1.0,
+            "seed": 2,
+            "shape": [
+              48
+            ]
+          }
+        ],
+        "name": "basic"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              1,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "ones",
+            "scale": 1.0,
+            "seed": 1,
+            "shape": [
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "zeros",
+            "scale": 1.0,
+            "seed": 2,
+            "shape": [
+              48
+            ]
+          }
+        ],
+        "name": "single_row"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 3,
+            "shape": [
+              7,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "ones",
+            "scale": 1.0,
+            "seed": 4,
+            "shape": [
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "zeros",
+            "scale": 1.0,
+            "seed": 5,
+            "shape": [
+              48
+            ]
+          }
+        ],
+        "name": "odd_rows"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 5,
+            "shape": [
+              64,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 6,
+            "shape": [
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 7,
+            "shape": [
+              48
+            ]
+          }
+        ],
+        "name": "wb_randn"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 100.0,
+            "seed": 7,
+            "shape": [
+              64,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "ones",
+            "scale": 1.0,
+            "seed": 8,
+            "shape": [
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "zeros",
+            "scale": 1.0,
+            "seed": 9,
+            "shape": [
+              48
+            ]
+          }
+        ],
+        "name": "large_values"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "zeros",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              8,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "ones",
+            "scale": 1.0,
+            "seed": 1,
+            "shape": [
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "zeros",
+            "scale": 1.0,
+            "seed": 2,
+            "shape": [
+              48
+            ]
+          }
+        ],
+        "name": "zeros"
+      }
+    ],
+    "primary_input": [
+      {
+        "dtype": "float16",
+        "init": "randn",
+        "scale": 1.0,
+        "seed": 0,
+        "shape": [
+          5,
+          48
+        ]
+      },
+      {
+        "dtype": "float16",
+        "init": "ones",
+        "scale": 1.0,
+        "seed": 1,
+        "shape": [
+          48
+        ]
+      },
+      {
+        "dtype": "float16",
+        "init": "zeros",
+        "scale": 1.0,
+        "seed": 2,
+        "shape": [
+          48
+        ]
+      }
+    ],
+    "spec": {
+      "dtype": "float16",
+      "input_shapes": [
+        [
+          5,
+          48
+        ],
+        [
+          48
+        ],
+        [
+          48
+        ]
+      ]
+    }
+  },
+  "layernorm/float32": {
+    "correctness_cases": [
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              2048,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "ones",
+            "scale": 1.0,
+            "seed": 1,
+            "shape": [
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "zeros",
+            "scale": 1.0,
+            "seed": 2,
+            "shape": [
+              48
+            ]
+          }
+        ],
+        "name": "basic"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              1,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "ones",
+            "scale": 1.0,
+            "seed": 1,
+            "shape": [
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "zeros",
+            "scale": 1.0,
+            "seed": 2,
+            "shape": [
+              48
+            ]
+          }
+        ],
+        "name": "single_row"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 3,
+            "shape": [
+              7,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "ones",
+            "scale": 1.0,
+            "seed": 4,
+            "shape": [
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "zeros",
+            "scale": 1.0,
+            "seed": 5,
+            "shape": [
+              48
+            ]
+          }
+        ],
+        "name": "odd_rows"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 5,
+            "shape": [
+              64,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 6,
+            "shape": [
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 7,
+            "shape": [
+              48
+            ]
+          }
+        ],
+        "name": "wb_randn"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 100.0,
+            "seed": 7,
+            "shape": [
+              64,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "ones",
+            "scale": 1.0,
+            "seed": 8,
+            "shape": [
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "zeros",
+            "scale": 1.0,
+            "seed": 9,
+            "shape": [
+              48
+            ]
+          }
+        ],
+        "name": "large_values"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "zeros",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              8,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "ones",
+            "scale": 1.0,
+            "seed": 1,
+            "shape": [
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "zeros",
+            "scale": 1.0,
+            "seed": 2,
+            "shape": [
+              48
+            ]
+          }
+        ],
+        "name": "zeros"
+      }
+    ],
+    "primary_input": [
+      {
+        "dtype": "float32",
+        "init": "randn",
+        "scale": 1.0,
+        "seed": 0,
+        "shape": [
+          5,
+          48
+        ]
+      },
+      {
+        "dtype": "float32",
+        "init": "ones",
+        "scale": 1.0,
+        "seed": 1,
+        "shape": [
+          48
+        ]
+      },
+      {
+        "dtype": "float32",
+        "init": "zeros",
+        "scale": 1.0,
+        "seed": 2,
+        "shape": [
+          48
+        ]
+      }
+    ],
+    "spec": {
+      "dtype": "float32",
+      "input_shapes": [
+        [
+          5,
+          48
+        ],
+        [
+          48
+        ],
+        [
+          48
+        ]
+      ]
+    }
+  },
+  "linear/float16": {
+    "correctness_cases": [
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 0.1,
+            "seed": 0,
+            "shape": [
+              5,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 0.1,
+            "seed": 1,
+            "shape": [
+              24,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "zeros",
+            "scale": 0.0,
+            "seed": 2,
+            "shape": [
+              24
+            ]
+          }
+        ],
+        "name": "basic"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 0.1,
+            "seed": 0,
+            "shape": [
+              1,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 0.1,
+            "seed": 1,
+            "shape": [
+              24,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "zeros",
+            "scale": 0.0,
+            "seed": 2,
+            "shape": [
+              24
+            ]
+          }
+        ],
+        "name": "single_row"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 0.1,
+            "seed": 3,
+            "shape": [
+              7,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 0.1,
+            "seed": 4,
+            "shape": [
+              24,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "zeros",
+            "scale": 0.0,
+            "seed": 5,
+            "shape": [
+              24
+            ]
+          }
+        ],
+        "name": "odd_rows"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 10.0,
+            "seed": 7,
+            "shape": [
+              64,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 0.1,
+            "seed": 8,
+            "shape": [
+              24,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "zeros",
+            "scale": 0.0,
+            "seed": 9,
+            "shape": [
+              24
+            ]
+          }
+        ],
+        "name": "large_values"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 0.1,
+            "seed": 9,
+            "shape": [
+              64,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 0.1,
+            "seed": 10,
+            "shape": [
+              24,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "zeros",
+            "scale": 0.0,
+            "seed": 11,
+            "shape": [
+              24
+            ]
+          }
+        ],
+        "name": "zeros_bias"
+      }
+    ],
+    "primary_input": [
+      {
+        "dtype": "float16",
+        "init": "randn",
+        "scale": 0.1,
+        "seed": 0,
+        "shape": [
+          5,
+          48
+        ]
+      },
+      {
+        "dtype": "float16",
+        "init": "randn",
+        "scale": 0.1,
+        "seed": 1,
+        "shape": [
+          24,
+          48
+        ]
+      },
+      {
+        "dtype": "float16",
+        "init": "zeros",
+        "scale": 0.0,
+        "seed": 2,
+        "shape": [
+          24
+        ]
+      }
+    ],
+    "spec": {
+      "dtype": "float16",
+      "input_shapes": [
+        [
+          5,
+          48
+        ],
+        [
+          24,
+          48
+        ],
+        [
+          24
+        ]
+      ]
+    }
+  },
+  "linear/float32": {
+    "correctness_cases": [
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 0.1,
+            "seed": 0,
+            "shape": [
+              5,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 0.1,
+            "seed": 1,
+            "shape": [
+              24,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "zeros",
+            "scale": 0.0,
+            "seed": 2,
+            "shape": [
+              24
+            ]
+          }
+        ],
+        "name": "basic"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 0.1,
+            "seed": 0,
+            "shape": [
+              1,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 0.1,
+            "seed": 1,
+            "shape": [
+              24,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "zeros",
+            "scale": 0.0,
+            "seed": 2,
+            "shape": [
+              24
+            ]
+          }
+        ],
+        "name": "single_row"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 0.1,
+            "seed": 3,
+            "shape": [
+              7,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 0.1,
+            "seed": 4,
+            "shape": [
+              24,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "zeros",
+            "scale": 0.0,
+            "seed": 5,
+            "shape": [
+              24
+            ]
+          }
+        ],
+        "name": "odd_rows"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 10.0,
+            "seed": 7,
+            "shape": [
+              64,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 0.1,
+            "seed": 8,
+            "shape": [
+              24,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "zeros",
+            "scale": 0.0,
+            "seed": 9,
+            "shape": [
+              24
+            ]
+          }
+        ],
+        "name": "large_values"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 0.1,
+            "seed": 9,
+            "shape": [
+              64,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 0.1,
+            "seed": 10,
+            "shape": [
+              24,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "zeros",
+            "scale": 0.0,
+            "seed": 11,
+            "shape": [
+              24
+            ]
+          }
+        ],
+        "name": "zeros_bias"
+      }
+    ],
+    "primary_input": [
+      {
+        "dtype": "float32",
+        "init": "randn",
+        "scale": 0.1,
+        "seed": 0,
+        "shape": [
+          5,
+          48
+        ]
+      },
+      {
+        "dtype": "float32",
+        "init": "randn",
+        "scale": 0.1,
+        "seed": 1,
+        "shape": [
+          24,
+          48
+        ]
+      },
+      {
+        "dtype": "float32",
+        "init": "zeros",
+        "scale": 0.0,
+        "seed": 2,
+        "shape": [
+          24
+        ]
+      }
+    ],
+    "spec": {
+      "dtype": "float32",
+      "input_shapes": [
+        [
+          5,
+          48
+        ],
+        [
+          24,
+          48
+        ],
+        [
+          24
+        ]
+      ]
+    }
+  },
+  "rmsnorm/float16": {
+    "correctness_cases": [
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              2048,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "ones",
+            "scale": 1.0,
+            "seed": 1,
+            "shape": [
+              48
+            ]
+          }
+        ],
+        "name": "basic"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              1,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "ones",
+            "scale": 1.0,
+            "seed": 1,
+            "shape": [
+              48
+            ]
+          }
+        ],
+        "name": "single_row"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 3,
+            "shape": [
+              7,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "ones",
+            "scale": 1.0,
+            "seed": 4,
+            "shape": [
+              48
+            ]
+          }
+        ],
+        "name": "odd_rows"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 5,
+            "shape": [
+              64,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 6,
+            "shape": [
+              48
+            ]
+          }
+        ],
+        "name": "weight_randn"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 100.0,
+            "seed": 7,
+            "shape": [
+              64,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "ones",
+            "scale": 1.0,
+            "seed": 8,
+            "shape": [
+              48
+            ]
+          }
+        ],
+        "name": "large_values"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 0.001,
+            "seed": 9,
+            "shape": [
+              64,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "ones",
+            "scale": 1.0,
+            "seed": 10,
+            "shape": [
+              48
+            ]
+          }
+        ],
+        "name": "small_values"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "zeros",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              8,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "ones",
+            "scale": 1.0,
+            "seed": 1,
+            "shape": [
+              48
+            ]
+          }
+        ],
+        "name": "zeros"
+      }
+    ],
+    "primary_input": [
+      {
+        "dtype": "float16",
+        "init": "randn",
+        "scale": 1.0,
+        "seed": 0,
+        "shape": [
+          5,
+          48
+        ]
+      },
+      {
+        "dtype": "float16",
+        "init": "ones",
+        "scale": 1.0,
+        "seed": 1,
+        "shape": [
+          48
+        ]
+      }
+    ],
+    "spec": {
+      "dtype": "float16",
+      "input_shapes": [
+        [
+          5,
+          48
+        ],
+        [
+          48
+        ]
+      ]
+    }
+  },
+  "rmsnorm/float32": {
+    "correctness_cases": [
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              2048,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "ones",
+            "scale": 1.0,
+            "seed": 1,
+            "shape": [
+              48
+            ]
+          }
+        ],
+        "name": "basic"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              1,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "ones",
+            "scale": 1.0,
+            "seed": 1,
+            "shape": [
+              48
+            ]
+          }
+        ],
+        "name": "single_row"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 3,
+            "shape": [
+              7,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "ones",
+            "scale": 1.0,
+            "seed": 4,
+            "shape": [
+              48
+            ]
+          }
+        ],
+        "name": "odd_rows"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 5,
+            "shape": [
+              64,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 6,
+            "shape": [
+              48
+            ]
+          }
+        ],
+        "name": "weight_randn"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 100.0,
+            "seed": 7,
+            "shape": [
+              64,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "ones",
+            "scale": 1.0,
+            "seed": 8,
+            "shape": [
+              48
+            ]
+          }
+        ],
+        "name": "large_values"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 0.001,
+            "seed": 9,
+            "shape": [
+              64,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "ones",
+            "scale": 1.0,
+            "seed": 10,
+            "shape": [
+              48
+            ]
+          }
+        ],
+        "name": "small_values"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "zeros",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              8,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "ones",
+            "scale": 1.0,
+            "seed": 1,
+            "shape": [
+              48
+            ]
+          }
+        ],
+        "name": "zeros"
+      }
+    ],
+    "primary_input": [
+      {
+        "dtype": "float32",
+        "init": "randn",
+        "scale": 1.0,
+        "seed": 0,
+        "shape": [
+          5,
+          48
+        ]
+      },
+      {
+        "dtype": "float32",
+        "init": "ones",
+        "scale": 1.0,
+        "seed": 1,
+        "shape": [
+          48
+        ]
+      }
+    ],
+    "spec": {
+      "dtype": "float32",
+      "input_shapes": [
+        [
+          5,
+          48
+        ],
+        [
+          48
+        ]
+      ]
+    }
+  },
+  "rope/float16": {
+    "correctness_cases": [
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              2048,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 1,
+            "shape": [
+              2048,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 2,
+            "shape": [
+              2048,
+              48
+            ]
+          }
+        ],
+        "name": "basic"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              1,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 1,
+            "shape": [
+              1,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 2,
+            "shape": [
+              1,
+              48
+            ]
+          }
+        ],
+        "name": "single_row"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 3,
+            "shape": [
+              7,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 4,
+            "shape": [
+              7,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 5,
+            "shape": [
+              7,
+              48
+            ]
+          }
+        ],
+        "name": "odd_rows"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 7,
+            "shape": [
+              64,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 8,
+            "shape": [
+              64,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 9,
+            "shape": [
+              64,
+              48
+            ]
+          }
+        ],
+        "name": "large_values"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "zeros",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              8,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 1,
+            "shape": [
+              8,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 2,
+            "shape": [
+              8,
+              48
+            ]
+          }
+        ],
+        "name": "zeros"
+      }
+    ],
+    "primary_input": [
+      {
+        "dtype": "float16",
+        "init": "randn",
+        "scale": 1.0,
+        "seed": 0,
+        "shape": [
+          5,
+          48
+        ]
+      },
+      {
+        "dtype": "float16",
+        "init": "randn",
+        "scale": 1.0,
+        "seed": 1,
+        "shape": [
+          5,
+          48
+        ]
+      },
+      {
+        "dtype": "float16",
+        "init": "randn",
+        "scale": 1.0,
+        "seed": 2,
+        "shape": [
+          5,
+          48
+        ]
+      }
+    ],
+    "spec": {
+      "dtype": "float16",
+      "input_shapes": [
+        [
+          5,
+          48
+        ],
+        [
+          5,
+          48
+        ],
+        [
+          5,
+          48
+        ]
+      ]
+    }
+  },
+  "rope/float32": {
+    "correctness_cases": [
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              2048,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 1,
+            "shape": [
+              2048,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 2,
+            "shape": [
+              2048,
+              48
+            ]
+          }
+        ],
+        "name": "basic"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              1,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 1,
+            "shape": [
+              1,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 2,
+            "shape": [
+              1,
+              48
+            ]
+          }
+        ],
+        "name": "single_row"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 3,
+            "shape": [
+              7,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 4,
+            "shape": [
+              7,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 5,
+            "shape": [
+              7,
+              48
+            ]
+          }
+        ],
+        "name": "odd_rows"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 7,
+            "shape": [
+              64,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 8,
+            "shape": [
+              64,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 9,
+            "shape": [
+              64,
+              48
+            ]
+          }
+        ],
+        "name": "large_values"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "zeros",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              8,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 1,
+            "shape": [
+              8,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 2,
+            "shape": [
+              8,
+              48
+            ]
+          }
+        ],
+        "name": "zeros"
+      }
+    ],
+    "primary_input": [
+      {
+        "dtype": "float32",
+        "init": "randn",
+        "scale": 1.0,
+        "seed": 0,
+        "shape": [
+          5,
+          48
+        ]
+      },
+      {
+        "dtype": "float32",
+        "init": "randn",
+        "scale": 1.0,
+        "seed": 1,
+        "shape": [
+          5,
+          48
+        ]
+      },
+      {
+        "dtype": "float32",
+        "init": "randn",
+        "scale": 1.0,
+        "seed": 2,
+        "shape": [
+          5,
+          48
+        ]
+      }
+    ],
+    "spec": {
+      "dtype": "float32",
+      "input_shapes": [
+        [
+          5,
+          48
+        ],
+        [
+          5,
+          48
+        ],
+        [
+          5,
+          48
+        ]
+      ]
+    }
+  },
+  "scaled_dot_product_attention/float16": {
+    "correctness_cases": [
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              3,
+              32,
+              16
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 1,
+            "shape": [
+              3,
+              32,
+              16
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 2,
+            "shape": [
+              3,
+              32,
+              16
+            ]
+          }
+        ],
+        "name": "basic"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 3,
+            "shape": [
+              1,
+              32,
+              16
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 4,
+            "shape": [
+              1,
+              32,
+              16
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 5,
+            "shape": [
+              1,
+              32,
+              16
+            ]
+          }
+        ],
+        "name": "single_batch"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 5,
+            "shape": [
+              4,
+              32,
+              16
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 6,
+            "shape": [
+              4,
+              32,
+              16
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 7,
+            "shape": [
+              4,
+              32,
+              16
+            ]
+          }
+        ],
+        "name": "multi_batch"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 10.0,
+            "seed": 7,
+            "shape": [
+              3,
+              32,
+              16
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 10.0,
+            "seed": 8,
+            "shape": [
+              3,
+              32,
+              16
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 10.0,
+            "seed": 9,
+            "shape": [
+              3,
+              32,
+              16
+            ]
+          }
+        ],
+        "name": "large_values"
+      }
+    ],
+    "primary_input": [
+      {
+        "dtype": "float16",
+        "init": "randn",
+        "scale": 1.0,
+        "seed": 0,
+        "shape": [
+          3,
+          32,
+          16
+        ]
+      },
+      {
+        "dtype": "float16",
+        "init": "randn",
+        "scale": 1.0,
+        "seed": 1,
+        "shape": [
+          3,
+          32,
+          16
+        ]
+      },
+      {
+        "dtype": "float16",
+        "init": "randn",
+        "scale": 1.0,
+        "seed": 2,
+        "shape": [
+          3,
+          32,
+          16
+        ]
+      }
+    ],
+    "spec": {
+      "dtype": "float16",
+      "input_shapes": [
+        [
+          3,
+          32,
+          16
+        ],
+        [
+          3,
+          32,
+          16
+        ],
+        [
+          3,
+          32,
+          16
+        ]
+      ]
+    }
+  },
+  "scaled_dot_product_attention/float32": {
+    "correctness_cases": [
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              3,
+              32,
+              16
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 1,
+            "shape": [
+              3,
+              32,
+              16
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 2,
+            "shape": [
+              3,
+              32,
+              16
+            ]
+          }
+        ],
+        "name": "basic"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 3,
+            "shape": [
+              1,
+              32,
+              16
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 4,
+            "shape": [
+              1,
+              32,
+              16
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 5,
+            "shape": [
+              1,
+              32,
+              16
+            ]
+          }
+        ],
+        "name": "single_batch"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 5,
+            "shape": [
+              4,
+              32,
+              16
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 6,
+            "shape": [
+              4,
+              32,
+              16
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 7,
+            "shape": [
+              4,
+              32,
+              16
+            ]
+          }
+        ],
+        "name": "multi_batch"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 10.0,
+            "seed": 7,
+            "shape": [
+              3,
+              32,
+              16
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 10.0,
+            "seed": 8,
+            "shape": [
+              3,
+              32,
+              16
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 10.0,
+            "seed": 9,
+            "shape": [
+              3,
+              32,
+              16
+            ]
+          }
+        ],
+        "name": "large_values"
+      }
+    ],
+    "primary_input": [
+      {
+        "dtype": "float32",
+        "init": "randn",
+        "scale": 1.0,
+        "seed": 0,
+        "shape": [
+          3,
+          32,
+          16
+        ]
+      },
+      {
+        "dtype": "float32",
+        "init": "randn",
+        "scale": 1.0,
+        "seed": 1,
+        "shape": [
+          3,
+          32,
+          16
+        ]
+      },
+      {
+        "dtype": "float32",
+        "init": "randn",
+        "scale": 1.0,
+        "seed": 2,
+        "shape": [
+          3,
+          32,
+          16
+        ]
+      }
+    ],
+    "spec": {
+      "dtype": "float32",
+      "input_shapes": [
+        [
+          3,
+          32,
+          16
+        ],
+        [
+          3,
+          32,
+          16
+        ],
+        [
+          3,
+          32,
+          16
+        ]
+      ]
+    }
+  },
+  "softmax/float16": {
+    "correctness_cases": [
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              2048,
+              48
+            ]
+          }
+        ],
+        "name": "basic"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              1,
+              48
+            ]
+          }
+        ],
+        "name": "single_row"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 3,
+            "shape": [
+              7,
+              48
+            ]
+          }
+        ],
+        "name": "odd_rows"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 50.0,
+            "seed": 7,
+            "shape": [
+              64,
+              48
+            ]
+          }
+        ],
+        "name": "large_values"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 0.001,
+            "seed": 9,
+            "shape": [
+              64,
+              48
+            ]
+          }
+        ],
+        "name": "small_values"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "zeros",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              8,
+              48
+            ]
+          }
+        ],
+        "name": "zeros"
+      }
+    ],
+    "primary_input": [
+      {
+        "dtype": "float16",
+        "init": "randn",
+        "scale": 1.0,
+        "seed": 0,
+        "shape": [
+          5,
+          48
+        ]
+      }
+    ],
+    "spec": {
+      "dtype": "float16",
+      "input_shapes": [
+        [
+          5,
+          48
+        ]
+      ]
+    }
+  },
+  "softmax/float32": {
+    "correctness_cases": [
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              2048,
+              48
+            ]
+          }
+        ],
+        "name": "basic"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              1,
+              48
+            ]
+          }
+        ],
+        "name": "single_row"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 3,
+            "shape": [
+              7,
+              48
+            ]
+          }
+        ],
+        "name": "odd_rows"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 50.0,
+            "seed": 7,
+            "shape": [
+              64,
+              48
+            ]
+          }
+        ],
+        "name": "large_values"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 0.001,
+            "seed": 9,
+            "shape": [
+              64,
+              48
+            ]
+          }
+        ],
+        "name": "small_values"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "zeros",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              8,
+              48
+            ]
+          }
+        ],
+        "name": "zeros"
+      }
+    ],
+    "primary_input": [
+      {
+        "dtype": "float32",
+        "init": "randn",
+        "scale": 1.0,
+        "seed": 0,
+        "shape": [
+          5,
+          48
+        ]
+      }
+    ],
+    "spec": {
+      "dtype": "float32",
+      "input_shapes": [
+        [
+          5,
+          48
+        ]
+      ]
+    }
+  },
+  "swiglu/float16": {
+    "correctness_cases": [
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              2048,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 1,
+            "shape": [
+              2048,
+              48
+            ]
+          }
+        ],
+        "name": "basic"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              1,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 1,
+            "shape": [
+              1,
+              48
+            ]
+          }
+        ],
+        "name": "single_row"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 3,
+            "shape": [
+              7,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 4,
+            "shape": [
+              7,
+              48
+            ]
+          }
+        ],
+        "name": "odd_rows"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 10.0,
+            "seed": 7,
+            "shape": [
+              64,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 8,
+            "shape": [
+              64,
+              48
+            ]
+          }
+        ],
+        "name": "large_values"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float16",
+            "init": "zeros",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              8,
+              48
+            ]
+          },
+          {
+            "dtype": "float16",
+            "init": "zeros",
+            "scale": 1.0,
+            "seed": 1,
+            "shape": [
+              8,
+              48
+            ]
+          }
+        ],
+        "name": "zeros"
+      }
+    ],
+    "primary_input": [
+      {
+        "dtype": "float16",
+        "init": "randn",
+        "scale": 1.0,
+        "seed": 0,
+        "shape": [
+          5,
+          48
+        ]
+      },
+      {
+        "dtype": "float16",
+        "init": "randn",
+        "scale": 1.0,
+        "seed": 1,
+        "shape": [
+          5,
+          48
+        ]
+      }
+    ],
+    "spec": {
+      "dtype": "float16",
+      "input_shapes": [
+        [
+          5,
+          48
+        ],
+        [
+          5,
+          48
+        ]
+      ]
+    }
+  },
+  "swiglu/float32": {
+    "correctness_cases": [
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              2048,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 1,
+            "shape": [
+              2048,
+              48
+            ]
+          }
+        ],
+        "name": "basic"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              1,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 1,
+            "shape": [
+              1,
+              48
+            ]
+          }
+        ],
+        "name": "single_row"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 3,
+            "shape": [
+              7,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 4,
+            "shape": [
+              7,
+              48
+            ]
+          }
+        ],
+        "name": "odd_rows"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 10.0,
+            "seed": 7,
+            "shape": [
+              64,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "randn",
+            "scale": 1.0,
+            "seed": 8,
+            "shape": [
+              64,
+              48
+            ]
+          }
+        ],
+        "name": "large_values"
+      },
+      {
+        "input_specs": [
+          {
+            "dtype": "float32",
+            "init": "zeros",
+            "scale": 1.0,
+            "seed": 0,
+            "shape": [
+              8,
+              48
+            ]
+          },
+          {
+            "dtype": "float32",
+            "init": "zeros",
+            "scale": 1.0,
+            "seed": 1,
+            "shape": [
+              8,
+              48
+            ]
+          }
+        ],
+        "name": "zeros"
+      }
+    ],
+    "primary_input": [
+      {
+        "dtype": "float32",
+        "init": "randn",
+        "scale": 1.0,
+        "seed": 0,
+        "shape": [
+          5,
+          48
+        ]
+      },
+      {
+        "dtype": "float32",
+        "init": "randn",
+        "scale": 1.0,
+        "seed": 1,
+        "shape": [
+          5,
+          48
+        ]
+      }
+    ],
+    "spec": {
+      "dtype": "float32",
+      "input_shapes": [
+        [
+          5,
+          48
+        ],
+        [
+          5,
+          48
+        ]
+      ]
+    }
+  }
+}

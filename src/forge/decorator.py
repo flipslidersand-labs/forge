@@ -3,25 +3,43 @@ from __future__ import annotations
 import functools
 import inspect
 import logging
+import re
 import threading
+import typing
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any, Literal
 
 from forge.cache.repository import KernelRepository
 from forge.codegen.triton_codegen import generate
+from forge.ir.hashing import hash_constants
 from forge.ir.kernel_spec import KernelSpec
 from forge.ir.tensor_spec import TensorSpec
 from forge.lowering import identify
-from forge.orchestrator import Orchestrator
+from forge.ops.registry import OP_REGISTRY, accepts_call
+from forge.orchestrator import Orchestrator, ProgressEvent
 from forge.runtime.loader import load_kernel_fn
 from forge.runtime.worker import warn_python_executable_deprecated
 from forge.search.adoption import should_run_search
 from forge.search.candidate import CandidateGenerator
+from forge.validation.tolerance import Tolerance
 
 _log = logging.getLogger("forge.decorator")
 
 SUPPORTED_BACKENDS: tuple[str, ...] = ("triton",)
 SUPPORTED_OBJECTIVES: tuple[str, ...] = ("latency", "economic")
+
+
+@dataclass(frozen=True)
+class _BuildConfig:
+    """optimize() のオプションのうち _build / Orchestrator に渡すもの（private）。"""
+
+    budget: int
+    repo: KernelRepository | None
+    search: CandidateGenerator | None
+    min_speedup: float
+    python_executable: str | None
+    progress: Callable[[ProgressEvent], None]
 
 
 def optimize(
@@ -44,11 +62,16 @@ def optimize(
     2 回目以降（同 shape）: in-process キャッシュから直接実行。新しい shape は
     再探索するが SQLite キャッシュにヒットすれば即座に返る。
 
-    判定不能・最適化で速くならない場合は元の eager 関数にフォールバックする。
+    判定不能の場合、および最良カーネルが eager に min_speedup 倍で勝てない（速くならない）
+    場合は、元の eager 関数にフォールバックする（そのカーネルはキャッシュにも書かない）。
 
     objective="economic" かつ min_invocations > 0 のとき、探索コストが回収できない
     と判断した場合は探索をスキップして eager にフォールバックする。
     per_candidate_s は 1 候補あたりの探索コスト見積もり（秒）。GPU の速度に応じて調整する。
+
+    progress は進捗の人間可読ラベル（str）を 1 件ずつ受け取る。注釈なしの関数・lambda・
+    print はラベル文字列を受け取る。第 1 引数に ProgressEvent 注釈を付けた関数だけは
+    構造化イベント（ProgressEvent）をそのまま受け取る。
     """
     if backend not in SUPPORTED_BACKENDS:
         raise ValueError(f"Unsupported backend: {backend!r}. Choose from {SUPPORTED_BACKENDS}.")
@@ -68,9 +91,20 @@ def optimize(
     if python_executable is not None:
         warn_python_executable_deprecated(stacklevel=3)
 
+    _emit_progress = _progress_to_event_handler(progress)
+
+    build_config = _BuildConfig(
+        budget=budget,
+        repo=repo,
+        search=search,
+        min_speedup=min_speedup,
+        python_executable=python_executable,
+        progress=_emit_progress,
+    )
+
     def deco(fn: Callable[..., Any]) -> Callable[..., Any]:
         sig = inspect.signature(fn)
-        # shape シグネチャ -> in-process カーネル (or None=eager)
+        # (shape/dtype シグネチャ, constants ハッシュ) -> in-process カーネル (or None=eager)
         compiled: dict[tuple[Any, ...], Callable[..., Any] | None] = {}
         op_type_box: list[
             str | None
@@ -119,6 +153,19 @@ def optimize(
                 _log.debug("eager fallback fn=%s op=%s", fn.__qualname__, op_type)
                 return fn(*args, **kwargs)
 
+            # #507: 実テンソル数 / constants が op の kernel_fn に対応づけられない形
+            # (linear の b=None 等)は、候補生成で全候補が TypeError になる前に eager。
+            if not accepts_call(op_type, len(tensors), constants):
+                _log.warning(
+                    "forge.optimize: 未対応の呼び出し形です fn=%s op=%s tensors=%d constants=%s"
+                    " — eager にフォールバックします",
+                    fn.__qualname__,
+                    op_type,
+                    len(tensors),
+                    sorted(constants),
+                )
+                return fn(*args, **kwargs)
+
             # #328: 引数テンソル間でデバイスが不一致だと Triton/CUDA レベルの
             # 分かりにくいエラーでクラッシュしうる。早期に検出して eager に
             # フォールバックし、原因を特定しやすい warning ログを残す。
@@ -144,7 +191,12 @@ def optimize(
                 )
                 return fn(*args, **kwargs)
 
-            key = tuple((tuple(t.shape), str(t.dtype)) for t in tensors)
+            # #470: constants(is_causal 等)はレンダリング時にカーネルへ焼き込まれるため、
+            # SQLite 側 CacheKey と同様に constants_hash もキーに含める。
+            key = (
+                tuple((tuple(t.shape), str(t.dtype)) for t in tensors),
+                hash_constants(constants),
+            )
             # ロック外の高速パス: すでにコンパイル済みならそのまま実行
             if key not in compiled:
                 with _get_build_lock(key):
@@ -157,36 +209,19 @@ def optimize(
                             decision = should_run_search(
                                 min_invocations, search_cost_s, baseline_us
                             )
-                            _progress_fn = progress or (lambda _m: None)
-                            _progress_fn(f"adoption: {decision.reason}")
+                            _emit_progress(
+                                ProgressEvent(kind="info", label=f"adoption: {decision.reason}")
+                            )
                             _log.info("adoption fn=%s: %s", fn.__qualname__, decision.reason)
                             if not decision.should_search:
                                 compiled[key] = None
                             else:
                                 compiled[key] = _build_or_eager(
-                                    fn,
-                                    op_type,
-                                    tensors,
-                                    constants,
-                                    budget,
-                                    repo,
-                                    search,
-                                    min_speedup,
-                                    python_executable,
-                                    progress,
+                                    fn, op_type, tensors, constants, build_config, (args, kwargs)
                                 )
                         else:
                             compiled[key] = _build_or_eager(
-                                fn,
-                                op_type,
-                                tensors,
-                                constants,
-                                budget,
-                                repo,
-                                search,
-                                min_speedup,
-                                python_executable,
-                                progress,
+                                fn, op_type, tensors, constants, build_config, (args, kwargs)
                             )
             kfn = compiled[key]
             if kfn is None:
@@ -232,14 +267,16 @@ def _build(
     op_type: str,
     tensors: list[Any],
     constants: dict[str, Any],
-    budget: int,
-    repo: KernelRepository | None,
-    search: CandidateGenerator | None,
-    min_speedup: float,
-    python_executable: str | None,
-    progress: Callable[[str], None] | None,
+    config: _BuildConfig,
+    user_call: tuple[tuple[Any, ...], dict[str, Any]] | None = None,
 ) -> Callable[..., Any] | None:
-    """この shape に対して最速カーネルを探索し、in-process 実行関数を返す（無ければ None）。"""
+    """この shape に対して最速カーネルを探索し、in-process 実行関数を返す（無ければ None）。
+
+    user_call=(args, kwargs) を渡すと、採用前にユーザー関数 fn 自体とカーネルの出力を
+    その実入力 1 回で照合し、不一致なら None（eager）を返す（#472）。キャッシュから読んだ
+    カーネルも同じ経路を通るので、キャッシュ済みの誤カーネルも採用されない。decorator は
+    必ず渡す。None は _build を単体で呼ぶ内部テスト用で、照合しない。
+    """
     input_specs = tuple(TensorSpec.from_tensor(t) for t in tensors)
     out = TensorSpec.from_tensor(tensors[0])
     spec = KernelSpec(
@@ -253,19 +290,157 @@ def _build(
 
     _log.info("build start op=%s", op_type)
     with Orchestrator(
-        repo=repo,
-        min_speedup=min_speedup,
-        progress=progress or (lambda _m: None),
+        repo=config.repo,
+        min_speedup=config.min_speedup,
+        progress=config.progress,
     ) as orch:
         # 非推奨警告は optimize() 側で出済みなので、コンストラクタ経由にせず属性で渡す
-        orch.python_executable = python_executable
-        result = orch.optimize(spec, budget=budget, search=search)
+        orch.python_executable = config.python_executable
+        result = orch.optimize(spec, budget=config.budget, search=config.search)
     if result.best_params is None:
         _log.info("build no best op=%s — falling back to eager", op_type)
         return None
+    if not result.adopted:
+        # 最良候補が eager に min_speedup 倍で勝たなかった (#475)。キャッシュにも書かれていない
+        _log.info(
+            "build not adopted op=%s speedup=%s min_speedup=%s — falling back to eager",
+            op_type,
+            result.speedup,
+            config.min_speedup,
+        )
+        return None
     _log.info("build complete op=%s best=%s", op_type, result.best_params)
     code = generate(spec, result.best_params)
-    return load_kernel_fn(code)
+    kfn = load_kernel_fn(code)
+    if user_call is not None and not _kernel_matches_user_fn(
+        fn, op_type, kfn, tensors, constants, user_call
+    ):
+        return None
+    return kfn
+
+
+def _kernel_matches_user_fn(
+    fn: Callable[..., Any],
+    op_type: str,
+    kfn: Callable[..., Any],
+    tensors: list[Any],
+    constants: dict[str, Any],
+    user_call: tuple[tuple[Any, ...], dict[str, Any]],
+) -> bool:
+    """ユーザー関数 fn の出力と、採用候補カーネルの出力が一致するか（実入力 1 回）。
+
+    op の同定は fx ノードの関数名しか見ず、ワーカー検証も registry の reference との比較
+    なので、fn と reference が食い違っても通りうる。ここで fn そのものと比べて塞ぐ。
+    shape・dtype が違う、テンソルでない、カーネルが例外を投げる場合も不一致。許容誤差は
+    ワーカー検証と同じ OP_REGISTRY の値。
+    """
+    import torch
+
+    args, kwargs = user_call
+    defn = OP_REGISTRY.get(op_type)
+    tol = defn.tolerance if defn is not None else Tolerance(atol=2e-3, rtol=1e-2)
+    from torch.utils._pytree import tree_map
+
+    def _clone(v: Any) -> Any:
+        return v.clone() if isinstance(v, torch.Tensor) else v
+
+    with torch.no_grad():
+        # fn もカーネルも入力をその場で書き換えうる。ユーザーの実テンソルには触れず、
+        # それぞれ別の clone で呼ぶ（実テンソルはこの後の eager / 採用カーネルが使う）。
+        c_args, c_kwargs = tree_map(_clone, (args, kwargs))
+        expected = fn(*c_args, **c_kwargs)  # fn 自身の例外は _build_or_eager が握って eager に倒す
+        try:
+            actual = kfn(*[t.clone() for t in tensors], **constants)
+            if isinstance(actual, torch.Tensor) and actual.is_cuda:
+                torch.cuda.synchronize()  # 非同期のカーネル例外をここで拾う
+        except Exception as exc:  # noqa: BLE001 — 動かないカーネルは採用しない
+            _log.warning(
+                "forge.optimize: カーネルの照合実行に失敗しました fn=%s op=%s: %s %s"
+                " — eager にフォールバックします",
+                fn.__qualname__,
+                op_type,
+                type(exc).__name__,
+                exc,
+                exc_info=True,
+            )
+            return False
+        if not (isinstance(expected, torch.Tensor) and isinstance(actual, torch.Tensor)):
+            reason = "出力がテンソルではありません"
+        elif actual.shape != expected.shape or actual.dtype != expected.dtype:
+            # allclose はブロードキャストするので shape を先に厳密に比べる。dtype が違うと
+            # 採用後の戻り値の型が変わってしまう。
+            reason = (
+                f"出力の shape/dtype が違います kernel={tuple(actual.shape)}/{actual.dtype}"
+                f" fn={tuple(expected.shape)}/{expected.dtype}"
+            )
+        elif torch.allclose(
+            actual.float(),
+            expected.float(),
+            atol=tol.atol,
+            rtol=tol.rtol,
+            equal_nan=tol.equal_nan,
+        ):
+            return True
+        else:
+            diff = (actual.float() - expected.float()).abs().max().item()
+            reason = f"出力が一致しません max_abs_diff={diff:.3g}"
+    _log.warning(
+        "forge.optimize: 採用候補のカーネルがユーザー関数と一致しません fn=%s op=%s: %s"
+        " — eager にフォールバックします",
+        fn.__qualname__,
+        op_type,
+        reason,
+    )
+    return False
+
+
+def _mentions_progress_event(ann: Any) -> bool:
+    """注釈（文字列 / 型 / Optional・Union の中身）に ProgressEvent が含まれるか。"""
+    if isinstance(ann, typing.ForwardRef):
+        ann = ann.__forward_arg__
+    if isinstance(ann, str):
+        # "fo.ProgressEvent" / "ProgressEvent | None" / "Optional[ProgressEvent]" を末尾名で判定
+        return any(tok.rsplit(".", 1)[-1] == "ProgressEvent" for tok in re.split(r"[^\w.]+", ann))
+    if ann is ProgressEvent:
+        return True
+    return any(_mentions_progress_event(a) for a in typing.get_args(ann))
+
+
+def _accepts_progress_event(progress: Callable[..., Any]) -> bool:
+    """第 1 引数の注釈が ProgressEvent（修飾名・Optional・別名を含む）なら True。"""
+    try:
+        params = list(inspect.signature(progress).parameters.values())
+    except (ValueError, TypeError):
+        return False
+    if not params or params[0].annotation is inspect.Parameter.empty:
+        return False
+    ann = params[0].annotation
+    try:
+        # 文字列注釈（from __future__ import annotations）や別名 import を解決できれば使う
+        ann = typing.get_type_hints(progress).get(params[0].name, ann)
+    except Exception:
+        pass
+    return _mentions_progress_event(ann)
+
+
+def _progress_to_event_handler(
+    progress: Callable[[str], None] | Callable[[ProgressEvent], None] | None,
+) -> Callable[[ProgressEvent], None]:
+    """利用者の progress を ProgressEvent ハンドラへ揃える（Orchestrator と adoption 通知で共通）。
+
+    宣言型は Callable[[str], None] なので、第 1 引数の注釈が ProgressEvent を含む関数
+    （"fo.ProgressEvent"・"ProgressEvent | None"・Optional[ProgressEvent] 等。別名 import は
+    typing.get_type_hints で解決できる場合のみ）はイベントをそのまま受ける。それ以外
+    （注釈なし・print・lambda・str 注釈・signature 取得不可）や、解決できない別名のように
+    判定が曖昧なときは event.label（str）を渡す。
+    返す lambda は注釈を持たないため Orchestrator はそのまま素通しする。
+    """
+    if progress is None:
+        return lambda _e: None
+    if _accepts_progress_event(progress):
+        return progress  # type: ignore[return-value]
+    str_fn: Callable[[str], None] = progress  # type: ignore[assignment]
+    return lambda e: str_fn(e.label)
 
 
 def _time_eager(

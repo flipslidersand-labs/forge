@@ -48,6 +48,27 @@ score = speedup - λ × cost
 ## 影響
 
 - `src/forge/search/cost_model.py` を新規追加（既存モジュールへの影響なし）
-- 探索ループ側は `CostModel.predict_cost()` → `BudgetTracker.should_skip()` の順に
-  呼び出してガードを設ける（既存 API を破壊しない）
+- 探索ループ（`Orchestrator`）が使うのは `BudgetTracker.budget_exhausted`（壁時計による
+  打ち切り）だけ。`CostModel.predict_cost()` → `BudgetTracker.should_skip()` による
+  候補ごとのガードは、探索ループに配線しない（2026-11-28 改訂。下の改訂履歴を参照）
+- `CostModel`・`BudgetTracker.should_skip()`・`scalarize()` は、呼び出し側が単体で使う部品
+  として残す。使い方は `examples/cost_aware_optimization.py`
+- `forge.benchmark.pareto`（`ParetoFrontier`・`CandidateWithCost`）も探索ループには統合しない。
+  計測結果を呼び出し側で比較するための、単体で使う部品とする
 - テストは `tempfile.TemporaryDirectory` を使い DB を分離（副作用なし）
+
+## 改訂履歴
+
+### 2026-11-28: 候補ごとのコストガードを探索ループに配線しない
+
+当初の「影響」は、探索ループが `predict_cost()` → `should_skip()` の順に呼んでガードすると
+書いていたが、実装では配線されていなかった。配線せず、記述を実装に合わせる。
+
+- 理由 1: 予測のもとになる実測値を保存する処理（`CostModel.record()`）を呼ぶ箇所が `src` に無い。
+  配線しても予測は常に簡易ヒューリスティックの値になり、実測に基づくガードにならない
+- 理由 2: `src` には `CostModel` を生成する箇所が無い(利用例は `examples/`、ほかはテストだけ)。必要とする利用の実績が無い
+- 理由 3: 探索全体の上限（`max_total_s`）は `budget_exhausted` ですでに効いている
+- 却下した案: 探索ループに配線し、`record()` で実測値を保存する（探索結果と予算の挙動が変わる。
+  利用の要望が出てから行う）
+- 戻し方: 利用の要望が出た時点で、配線を新しい Issue として起こす
+- 方針の記録: [ADR-012](ADR-012-development-direction.md) の決定 5

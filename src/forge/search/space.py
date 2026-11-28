@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from forge.ir.kernel_spec import KernelSpec
 from forge.ops import is_elementwise, is_gemm, is_matmul
 
+from ._base_generator import _MIN_DOT_TILE
 from .params import SearchParams
 
 # Volta (cc 7.0) 未満では num_stages による非同期パイプラインが効かない。
@@ -57,8 +58,9 @@ class SearchSpace:
 
     def _blocks_for_variant(self, variant: str, n: int) -> list[int]:
         if variant == "two_pass":
-            tiles = sorted({b for b in self.block_sizes if b <= n})
-            return tiles or [min(self.block_sizes)]
+            # タイルは n 以下（block_ok と同じ）。n が最小タイル未満なら two_pass は出さない:
+            # tile > n では N ループが 1 周で single_row と同じカーネルになり、budget を食うだけ。
+            return sorted({b for b in self.block_sizes if b <= n})
         # single_row / multi_row: 行全体を 1 タイルに収める
         blocks = sorted({b for b in self.block_sizes if b >= n})
         return blocks or [_next_pow2(n)]
@@ -78,7 +80,9 @@ class SearchSpace:
         s = spec.input_specs[0].shape[-2]
         valid = sorted({b for b in self.attention_seq_blocks if b <= s})
         if not valid:
-            valid = [min(64, _next_pow2(s))]
+            # S < 16 でも tl.dot の最小タイル（block_ok と同じ _MIN_DOT_TILE）を割らない。
+            # block > S は q_mask/k_mask で範囲外を除外するテンプレート側で扱う。
+            valid = [max(_MIN_DOT_TILE, min(64, _next_pow2(s)))]
 
         seen: set[tuple] = set()
         for variant in ("flash", "flash_causal_opt"):

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+import math
 import threading
 import time
 import warnings
@@ -34,7 +35,7 @@ from forge.validation.tolerance import get_tolerance
 _log = logging.getLogger("forge.orchestrator")
 
 if TYPE_CHECKING:
-    from forge.search.llm_generator import LLMGenerator, TokenUsage
+    from forge.search.llm_generator import TokenUsage
 
 
 @dataclass
@@ -69,6 +70,30 @@ class ExperimentResult:
     median_us: float | None
     error: str | None
     is_best: bool = False
+    # True: generate() が候補を拒否した（SKIP。未実行）。success=False のままなので
+    # failed_count の集計は変わらない。ワーカー失敗（実行して落ちた）は False。
+    skipped: bool = False
+
+
+def _history_outcome(exp: ExperimentResult) -> str:
+    """評価できなかった/正解でなかった実験の HistoryEntry.outcome。"""
+    if exp.skipped:
+        return "skipped"
+    return "incorrect" if exp.success else "error"
+
+
+def _finite_positive(value: object) -> float | None:
+    """有限の正の数なら float で返す。それ以外（None・nan・inf・0 以下・数値に直せない値）は None。
+
+    キャッシュの REAL 列には nan/inf や数値に直せない文字列も入りうる (#526)。
+    """
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        x = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+    return x if math.isfinite(x) and x > 0 else None
 
 
 def compute_speedup(baseline: BenchmarkResult | None, best: BenchmarkResult | None) -> float | None:
@@ -91,6 +116,9 @@ class SearchResult:
     total_time_s: float = field(default=0.0)
     failed_count: int = field(default=0)
     incorrect_count: int = field(default=0)
+    # False: 最良候補が eager に min_speedup 倍で勝たず、キャッシュに書かなかった (#475)。
+    # best_params / best_benchmark は報告用に残る。cache hit は採用済みなので True。
+    adopted: bool = True
 
     @property
     def speedup(self) -> float | None:
@@ -123,6 +151,9 @@ class MultiRoundResult:
     total_benchmark_time_s: float = field(default=0.0)  # コスト計測用
     failed_count: int = field(default=0)
     incorrect_count: int = field(default=0)
+    # False: 最良候補が eager に min_speedup 倍で勝たず、キャッシュに書かなかった (#475)。
+    # best_params / best_benchmark は報告用に残る。cache hit は採用済みなので True。
+    adopted: bool = True
 
     @property
     def speedup(self) -> float | None:
@@ -130,7 +161,9 @@ class MultiRoundResult:
 
     @property
     def best_round(self) -> int | None:
-        """best_params が見つかったラウンド番号（1 始まり）。"""
+        """best_params が見つかったラウンド番号（1 始まり）。best_params=None なら None。"""
+        if self.best_params is None:
+            return None
         for r in self.rounds:
             if r.best_params == self.best_params:
                 return r.round_num
@@ -158,6 +191,9 @@ class Orchestrator:
     """KernelSpec を受け取り、探索 → 検証 → ベンチマーク → キャッシュの一連を回す。
 
     再現可能なパイプラインが中心で、探索器 (GridSearch) は差し替え可能な一要素。
+
+    max_total_s（探索ループ全体の時間予算）は 1 回の optimize*() 呼び出し単位で、
+    各呼び出しの開始時に計測し直す。コンストラクタ時刻や過去の呼び出しは数えない。
     """
 
     def __init__(
@@ -192,6 +228,8 @@ class Orchestrator:
         self.notifier = notifier or DiscordNotifier()
         # #332: 探索ループ全体の時間予算・外部キャンセルへの追従。
         # max_total_s=None / cancel_event=None なら従来どおり無制限。
+        # 予算は 1 回の optimize*() 呼び出し単位。_prepare() で作り直す。
+        self._max_total_s = max_total_s
         self._budget = BudgetTracker(max_total_s)
         self.cancel_event = cancel_event
 
@@ -258,6 +296,35 @@ class Orchestrator:
 
     # --- optimize()/optimize_rounds() 共通の前処理・後処理 ---
 
+    def _cached_is_adoptable(self, cached: CachedKernel, spec: KernelSpec) -> bool:
+        """cache hit したエントリを採用してよいか (#526)。
+
+        保存済みの速度比 baseline_us / median_us が min_speedup 未満なら採用しない。
+        #475 より前は eager より遅いカーネルも保存されていたため、hit 時にも判定し直す。
+        baseline_us / median_us が有限の正の数でない（無い・nan/inf・負値・数値に直せない文字列）
+        エントリは比べられないので採用しない。例外にもしない。
+        採用しなかったエントリは消さない。再探索で採用された結果が put で上書きする。
+        """
+        baseline = _finite_positive(cached.baseline_us)
+        median = _finite_positive(cached.benchmark_json.get("median_us"))
+        speedup: float | None = None
+        if baseline is not None and median is not None:
+            speedup = baseline / median
+        if speedup is not None and speedup >= self.min_speedup:
+            return True
+        shown = "n/a (baseline or median missing)" if speedup is None else f"{speedup:.2f}x"
+        _log.warning(
+            "cache entry ignored op=%s speedup=%s < min_speedup=%s: re-searching",
+            spec.op_type,
+            shown,
+            self.min_speedup,
+        )
+        self._progress(
+            f"cache entry ignored: stored speedup {shown} vs eager "
+            f"(< min_speedup {self.min_speedup}) — re-searching"
+        )
+        return False
+
     def _prepare(
         self, spec: KernelSpec, use_cache: bool
     ) -> tuple[_SearchContext, CachedKernel | None]:
@@ -266,11 +333,15 @@ class Orchestrator:
         キャッシュヒット時は入力生成・extended 計測をスキップし、
         (最小限の ctx, CachedKernel) を返す。ミス時は (完全な ctx, None)。
         """
+        self._budget = BudgetTracker(self._max_total_s)  # 1 呼び出し = 1 予算
         spec.validate()
         key = CacheKey.from_spec_and_env(spec)
         start_time = time.time()
 
-        if use_cache and (cached := self.repo.get(key)) is not None:
+        cached = self.repo.get(key) if use_cache else None
+        if cached is not None and not self._cached_is_adoptable(cached, spec):
+            cached = None  # 採用しない: cache miss と同じく再探索へ (#526)
+        if cached is not None:
             self._progress(f"cache HIT: {cached.params}")
             _log.info("cache HIT op=%s", spec.op_type)
             ctx = _SearchContext(
@@ -339,9 +410,27 @@ class Orchestrator:
         speedup: float | None = None,
         best_round: int | None = None,
         failed_count: int = 0,
-    ) -> None:
-        """ベスト候補のキャッシュ書き込みと Discord 通知を行う。"""
+    ) -> bool:
+        """ベスト候補のキャッシュ書き込みと Discord 通知を行う。
+
+        最良候補が eager(baseline) に min_speedup 倍で勝たない場合（speedup が None で
+        比べられない場合を含む）は採用せず、キャッシュにも書かない (#475)。
+        戻り値は「採用してキャッシュに書いたか」。
+        """
         if best_params is not None and best_bench is not None:
+            if speedup is None or speedup < self.min_speedup:
+                shown = "n/a" if speedup is None else f"{speedup:.2f}x"
+                self._progress(
+                    f"not adopted: best {best_bench.median_us:.1f}us is {shown} vs eager "
+                    f"(< min_speedup {self.min_speedup}) — not cached, eager is used"
+                )
+                _log.warning(
+                    "best not adopted op=%s speedup=%s min_speedup=%s",
+                    ctx.spec.op_type,
+                    speedup,
+                    self.min_speedup,
+                )
+                return False
             code = generate(ctx.spec, best_params)
             self.repo.put(
                 ctx.key,
@@ -373,7 +462,8 @@ class Orchestrator:
                     best_round=best_round,
                     failed_rate=failed_rate,
                 )
-        elif notify:
+            return True
+        if notify:
             if num_candidates > 0:
                 error_msg = (
                     f"No successful candidates found after exploring {num_candidates} options"
@@ -386,6 +476,7 @@ class Orchestrator:
                 error_message=error_msg,
                 error_type="OPTIMIZATION_FAILED",
             )
+        return False
 
     def optimize(
         self,
@@ -405,7 +496,7 @@ class Orchestrator:
 
         failed_count = sum(1 for e in experiments if not e.success)
         speedup = compute_speedup(baseline_bench, best_bench)
-        self._persist_result(
+        adopted = self._persist_result(
             ctx,
             best_params,
             best_bench,
@@ -427,6 +518,7 @@ class Orchestrator:
             total_time_s=time.time() - ctx.start_time,
             failed_count=sum(1 for e in experiments if not e.success),
             incorrect_count=sum(1 for e in experiments if e.success and not e.correct),
+            adopted=adopted,
         )
 
     def _check_cache(
@@ -524,9 +616,9 @@ class Orchestrator:
         baseline_bench: BenchmarkResult | None,
         failed_count: int = 0,
         speedup: float | None = None,
-    ) -> None:
-        """最良候補をキャッシュに永続化。"""
-        self._finalize(
+    ) -> bool:
+        """最良候補をキャッシュに永続化。採用してキャッシュに書いたら True。"""
+        return self._finalize(
             ctx,
             best_params,
             best_bench,
@@ -540,14 +632,16 @@ class Orchestrator:
     def optimize_rounds(
         self,
         spec: KernelSpec,
-        llm: LLMGenerator,
+        llm: CandidateGenerator,
         n_rounds: int = 3,
         candidates_per_round: int = 12,
         use_cache: bool = True,
     ) -> MultiRoundResult:
         """LLM を使った反復探索。各ラウンドの結果を history として次ラウンドへ渡す。
 
-        ANTHROPIC_API_KEY が必要（llm に propose_fn を注入することでテスト可能）。
+        llm は CandidateGenerator であればよい（Ollama / Bayesian 生成器も渡せる）。
+        token_usage を持つ生成器のときだけ MultiRoundResult.token_usage に載せ、持たなければ None。
+        LLMGenerator は ANTHROPIC_API_KEY が必要（propose_fn を注入することでテスト可能）。
         GPU 必須（ベンチマーク・検証を実行するため）。
         """
         ctx, cached = self._prepare(spec, use_cache)
@@ -560,7 +654,7 @@ class Orchestrator:
                 best_benchmark=bench,
                 baseline_benchmark=None,
                 baseline_name=None,
-                token_usage=llm.token_usage,
+                token_usage=getattr(llm, "token_usage", None),
                 total_benchmark_time_s=0.0,
             )
 
@@ -630,7 +724,15 @@ class Orchestrator:
                         round_best_params = params
                         round_best_us = cand_bench.median_us
                 else:
-                    history.append(HistoryEntry(params=params, correct=exp.correct, median_us=None))
+                    history.append(
+                        HistoryEntry(
+                            params=params,
+                            correct=exp.correct,
+                            median_us=None,
+                            outcome=_history_outcome(exp),
+                            error=exp.error if not exp.success else None,
+                        )
+                    )
 
                 round_experiments.append(exp)
 
@@ -659,7 +761,7 @@ class Orchestrator:
             if r.best_params == overall_best_params and overall_best_params is not None:
                 best_round_num = r.round_num
                 break
-        self._finalize(
+        adopted = self._finalize(
             ctx,
             overall_best_params,
             overall_best_bench,
@@ -678,12 +780,13 @@ class Orchestrator:
             best_benchmark=overall_best_bench,
             baseline_benchmark=baseline_bench,
             baseline_name=baseline_name,
-            token_usage=llm.token_usage,
+            token_usage=getattr(llm, "token_usage", None),
             total_candidates_evaluated=total,
             extended_baselines=ctx.extended,
             total_benchmark_time_s=total_benchmark_time_s,
             failed_count=sum(1 for e in all_exps if not e.success),
             incorrect_count=sum(1 for e in all_exps if e.success and not e.correct),
+            adopted=adopted,
         )
 
     def optimize_sha(
@@ -743,7 +846,14 @@ class Orchestrator:
         baseline_bench: BenchmarkResult | None = None
         baseline_name: str | None = None
         surviving: list[SearchParams] = list(candidates)
-        round_results: list[tuple[SearchParams, BenchmarkResult]] = []
+        # 有効結果を得た直近ラウンドのソート済み結果と、そのラウンドの
+        # all_experiments 上の範囲 [start, end)。後続ラウンドが 0 件で終わっても保持する。
+        best_round_results: list[tuple[SearchParams, BenchmarkResult]] = []
+        best_round_num = 0
+        best_round_span: tuple[int, int] = (0, 0)
+        # best_round_results を得たラウンドで最後に測った baseline。ラウンドごとに
+        # warmup/repeat が違うので、best と同じ忠実度の baseline で speedup を出す。
+        best_round_baseline: tuple[BenchmarkResult | None, str | None] = (None, None)
 
         for round_num in range(1, halving_rounds + 1):
             if self._should_stop():
@@ -758,12 +868,16 @@ class Orchestrator:
                 f"warmup={warmup} repeat={repeat}"
             )
 
-            round_results = []
+            round_start = len(all_experiments)
+            round_results: list[tuple[SearchParams, BenchmarkResult]] = []
+            round_baseline: tuple[BenchmarkResult | None, str | None] = (None, None)
+            round_partial = False
             for i, params in enumerate(surviving, 1):
                 if self._should_stop():
                     self._progress(
                         f"  stopping early at [sha r{round_num}.{i}]: budget exhausted or cancelled"
                     )
+                    round_partial = True
                     break
                 label = f"  [sha r{round_num}.{i}] {params.block_size}/{params.num_warps}"
                 exp, cand_bench, bl_bench, bl_name = self._eval_one(
@@ -778,6 +892,7 @@ class Orchestrator:
                 )
                 if bl_bench is not None:
                     baseline_bench, baseline_name = bl_bench, bl_name
+                    round_baseline = (bl_bench, bl_name)
                 all_experiments.append(exp)
 
                 if exp.correct and cand_bench is not None:
@@ -785,10 +900,36 @@ class Orchestrator:
 
             if not round_results:
                 self._progress(f"  [SHA round {round_num}] no valid candidates — stopping")
+                if best_round_results:
+                    self._progress(
+                        f"  [SHA] falling back to round {best_round_num} result "
+                        f"(lower fidelity than round {round_num})"
+                    )
+                break
+
+            if round_partial and best_round_results:
+                # 打ち切りで一部しか評価されなかったラウンド (#503)。warmup/repeat が前ラウンドと
+                # 違い測定値を直接比べられず、候補数も足りないので、完全に評価された前ラウンドの
+                # 結果を残す。追加の計測はしない。
+                self._progress(
+                    f"  [SHA round {round_num}] partial ({len(round_results)} valid of "
+                    f"{len(surviving)} candidates) — keeping round {best_round_num} result "
+                    f"(complete, lower fidelity)"
+                )
+                _log.warning(
+                    "sha partial round %d ignored op=%s; keeping round %d",
+                    round_num,
+                    spec.op_type,
+                    best_round_num,
+                )
                 break
 
             # 上位 50% に絞る（最終ラウンドは絞らない）
             round_results.sort(key=lambda t: t[1].median_us)
+            best_round_results = round_results
+            best_round_baseline = round_baseline
+            best_round_num = round_num
+            best_round_span = (round_start, len(all_experiments))
             if round_num < halving_rounds:
                 keep = max(1, len(round_results) // 2)
                 surviving = [p for p, _ in round_results[:keep]]
@@ -801,18 +942,23 @@ class Orchestrator:
 
         best_params: SearchParams | None = None
         best_bench: BenchmarkResult | None = None
-        # 最終ラウンドの round_results（ソート済み）の先頭が最良。
-        # round_results が空（全ラウンド break）の場合は None のまま _finalize に委ねる。
-        if round_results:
-            best_params, best_bench = round_results[0]
-            for exp in all_experiments:
+        # 有効結果を得た最後のラウンド（ソート済み）の先頭が最良。
+        # 有効結果を得たラウンドが 1 つもない場合は None のまま _finalize に委ねる。
+        if best_round_results:
+            best_params, best_bench = best_round_results[0]
+            if best_round_baseline[0] is not None:
+                baseline_bench, baseline_name = best_round_baseline
+            start, end = best_round_span
+            # best を得たラウンドの実験にだけ is_best を付ける（ラウンド 1 の低忠実度の
+            # 実験ではなく）。
+            for exp in reversed(all_experiments[start:end]):
                 if exp.params == best_params:
                     exp.is_best = True
                     break
 
         sha_failed_count = sum(1 for e in all_experiments if not e.success)
         sha_speedup = compute_speedup(baseline_bench, best_bench)
-        self._finalize(
+        adopted = self._finalize(
             ctx,
             best_params,
             best_bench,
@@ -835,6 +981,7 @@ class Orchestrator:
             total_time_s=time.time() - ctx.start_time,
             failed_count=sum(1 for e in all_experiments if not e.success),
             incorrect_count=sum(1 for e in all_experiments if e.success and not e.correct),
+            adopted=adopted,
         )
 
     def _eval_one(
@@ -854,7 +1001,12 @@ class Orchestrator:
         except ValueError as e:
             self._progress(f"{label} SKIP: {e}")
             _log.debug("SKIP %s: %s", label, e)
-            return ExperimentResult(params, False, False, None, str(e)), None, None, None
+            return (
+                ExperimentResult(params, False, False, None, str(e), skipped=True),
+                None,
+                None,
+                None,
+            )
 
         wr: WorkerResult = run_in_worker(
             code,

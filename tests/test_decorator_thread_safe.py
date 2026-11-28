@@ -47,9 +47,9 @@ def test_compiled_dict_built_once_under_concurrent_access():
             build_count += 1
         return None  # eager fallback を返す
 
-    # identify が "rmsnorm" を返し、_build が fake_build に差し替えられる状態を作る
+    # identify が "softmax" を返し、_build が fake_build に差し替えられる状態を作る
     with (
-        patch("forge.decorator.identify", return_value="rmsnorm"),
+        patch("forge.decorator.identify", return_value="softmax"),
         patch("forge.decorator._build", side_effect=fake_build),
     ):
 
@@ -117,7 +117,7 @@ def test_different_shapes_build_concurrently():
         return bound
 
     with (
-        patch("forge.decorator.identify", return_value="rmsnorm"),
+        patch("forge.decorator.identify", return_value="softmax"),
         patch("forge.decorator._build", side_effect=fake_build),
         patch("inspect.Signature.bind", side_effect=_fake_bind),
     ):

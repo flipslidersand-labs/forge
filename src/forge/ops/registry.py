@@ -35,6 +35,9 @@ class OpDefinition:
     render_extra_kwargs_fn: Callable[[KernelSpec], dict[str, Any]] = field(
         default_factory=lambda: lambda _spec: {}
     )
+    # 実際の呼び出し(テンソル数, constants)をカーネルへ正しく対応づけられるか。None なら
+    # 「テンソル数 == n_tensor_inputs」のみを見る。False の呼び出しは候補生成せず eager に倒す。
+    accepts_call_fn: Callable[[int, dict[str, Any]], bool] | None = None
 
 
 # --- reference / baseline 関数 ---
@@ -314,9 +317,12 @@ def _sdpa_inputs(bh: int, s: int, d: int, dtype: str, **kw: Any) -> list[dict[st
     ]
 
 
-def _linear_inputs(m: int, k: int, n: int, dtype: str, **kw: Any) -> list[dict[str, Any]]:
+def _linear_inputs(
+    m: int, k: int, n: int, dtype: str, with_bias: bool = True, **kw: Any
+) -> list[dict[str, Any]]:
+    """linear の検証入力。with_bias=False(bias=None 形)なら x, weight の 2 テンソルのみ。"""
     seed = kw.get("seed", 0)
-    return [
+    specs = [
         {
             "shape": [m, k],
             "dtype": dtype,
@@ -339,6 +345,7 @@ def _linear_inputs(m: int, k: int, n: int, dtype: str, **kw: Any) -> list[dict[s
             "seed": seed + 2,
         },
     ]
+    return specs if with_bias else specs[:2]
 
 
 # --- primary_input_fn per op ---
@@ -396,7 +403,7 @@ def _linear_primary(spec: KernelSpec) -> list[dict[str, Any]]:
     x = spec.input_specs[0]
     m, k = x.shape
     n = spec.input_specs[1].shape[0]
-    return _linear_inputs(m, k, n, x.dtype_str())
+    return _linear_inputs(m, k, n, x.dtype_str(), with_bias=len(spec.input_specs) >= 3)
 
 
 # --- correctness_cases_fn per op ---
@@ -528,19 +535,25 @@ def _linear_cases(spec: KernelSpec) -> list[dict[str, Any]]:
     m, k = x.shape
     n_out = spec.input_specs[1].shape[0]
     dt = x.dtype_str()
-    return [
-        {"name": "basic", "input_specs": _linear_inputs(m, k, n_out, dt)},
-        {"name": "single_row", "input_specs": _linear_inputs(1, k, n_out, dt)},
-        {"name": "odd_rows", "input_specs": _linear_inputs(7, k, n_out, dt, seed=3)},
+    # bias=None 形(input_specs が 2 テンソル)では bias を生成しない。
+    wb = len(spec.input_specs) >= 3
+    cases = [
+        {"name": "basic", "input_specs": _linear_inputs(m, k, n_out, dt, wb)},
+        {"name": "single_row", "input_specs": _linear_inputs(1, k, n_out, dt, wb)},
+        {"name": "odd_rows", "input_specs": _linear_inputs(7, k, n_out, dt, wb, seed=3)},
         {
             "name": "large_values",
-            "input_specs": _linear_inputs(64, k, n_out, dt, x_scale=10.0, seed=7),
-        },
-        {
-            "name": "zeros_bias",
-            "input_specs": _linear_inputs(64, k, n_out, dt, b_init="zeros", seed=9),
+            "input_specs": _linear_inputs(64, k, n_out, dt, wb, x_scale=10.0, seed=7),
         },
     ]
+    if wb:
+        cases.append(
+            {
+                "name": "zeros_bias",
+                "input_specs": _linear_inputs(64, k, n_out, dt, True, b_init="zeros", seed=9),
+            }
+        )
+    return cases
 
 
 # --- render_extra_kwargs_fn per op ---
@@ -564,6 +577,40 @@ def _rmsnorm_baseline_name() -> str:
     if hasattr(torch.nn.functional, "rms_norm"):
         return "F.rms_norm"
     return "fp32_reference"
+
+
+def _linear_accepts_call(n_tensors: int, constants: dict[str, Any]) -> bool:
+    """linear の kernel_fn(x, weight, bias=None) に対応づけられる形だけ受け付ける。
+
+    - テンソル 3 つ: x, weight, bias。constants は空であること。
+    - テンソル 2 つ: x, weight。constants は無いか `bias=None` だけ(引数名は `bias` に限る。
+      `b=None` 等は bias と確かめられず、未知キーワードとしてカーネル呼び出しが落ちるため eager)。
+    """
+    if n_tensors == 3:
+        return not constants
+    if n_tensors == 2:
+        return all(k == "bias" and v is None for k, v in constants.items())
+    return False
+
+
+def _sdpa_accepts_call(n_tensors: int, constants: dict[str, Any]) -> bool:
+    """sdpa の kernel_fn(q, k, v, scale=None, is_causal=False) に対応づけられる形だけ受け付ける。
+
+    constants のキーはユーザー関数の引数名がそのまま kernel_fn へ渡るので、`scale` と `is_causal`
+    以外(dropout_p / enable_gqa / 別名の引数など)は TypeError になる。探索して全候補が落ちる
+    前に eager へ倒す。
+    """
+    return n_tensors == 3 and set(constants) <= {"scale", "is_causal"}
+
+
+def accepts_call(op_type: str, n_tensors: int, constants: dict[str, Any]) -> bool:
+    """op の kernel_fn に対応づけられる呼び出し形か(未登録 op は True)。"""
+    defn = OP_REGISTRY.get(op_type)
+    if defn is None:
+        return True
+    if defn.accepts_call_fn is not None:
+        return defn.accepts_call_fn(n_tensors, constants)
+    return n_tensors == defn.n_tensor_inputs
 
 
 # --- OP_REGISTRY ---
@@ -661,6 +708,7 @@ OP_REGISTRY: dict[str, OpDefinition] = {
         primary_input_fn=_sdpa_primary,
         correctness_cases_fn=_sdpa_cases,
         render_extra_kwargs_fn=_sdpa_render_kwargs,
+        accepts_call_fn=_sdpa_accepts_call,
     ),
     "linear": OpDefinition(
         op_type="linear",
@@ -673,5 +721,6 @@ OP_REGISTRY: dict[str, OpDefinition] = {
         primary_input_fn=_linear_primary,
         correctness_cases_fn=_linear_cases,
         render_extra_kwargs_fn=_linear_render_kwargs,
+        accepts_call_fn=_linear_accepts_call,
     ),
 }

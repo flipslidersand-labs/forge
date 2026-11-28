@@ -39,7 +39,7 @@ pytest tests/test_ir.py tests/test_cache.py -v
 3. `src/forge/benchmark/timer.py` — `measure(fn, *args) -> BenchmarkResult`
 4. `src/forge/benchmark/statistics.py` — `is_improvement(candidate, baseline)`
 5. `src/forge/runtime/worker.py` — subprocess ワーカー（コンパイル・実行）
-6. `src/forge/runtime/launcher.py` — ワーカー管理・タイムアウト
+6. `src/forge/runtime/worker.py` の `run_in_worker()` — ワーカー管理・タイムアウト（当初案の `launcher.py` は git 履歴に存在しない。実体は `worker.py`）
 7. `tests/test_codegen.py` — 生成コードが構文エラーなしで import できること
 8. `tests/test_benchmark.py` — measure() が BenchmarkResult を返すこと
 
@@ -82,10 +82,10 @@ print(code[:200])
 1. `src/forge/search/space.py` — `SearchSpace` + `filter_by_gpu()`
 2. `src/forge/search/grid.py` — `GridSearch.generate(space) -> list[SearchParams]`
 3. `src/forge/validation/test_cases.py` — エッジケース生成（NaN / Inf / 非連続 / 端数 shape）
-4. `src/forge/validation/correctness.py` — `validate(candidate_fn, reference_fn, test_cases)`
+4. 正解性検証 — 当初案の `validation/correctness.py` は git 履歴に存在しない。実体はワーカー内（`src/forge/runtime/_worker_entry.py`）で registry の reference と `torch.allclose` 比較する。許容誤差は `src/forge/validation/tolerance.py`
 5. `src/forge/orchestrator.py` — パイプライン統括
 6. `examples/rmsnorm_search.py` — 動作デモ
-7. `tests/test_correctness.py`
+7. `tests/test_validation.py`（当初案の `test_correctness.py` は git 履歴に存在しない）
 
 ### 完成確認コマンド
 

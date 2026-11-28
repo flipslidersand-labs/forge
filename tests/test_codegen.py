@@ -1,3 +1,5 @@
+import ast
+
 import torch
 
 from forge.codegen.triton_codegen import generate, generate_rmsnorm
@@ -115,6 +117,21 @@ class TestLayerNormGeluCodegen:
         assert "tl.erf" in code
         assert "x.numel()" in code
         assert "def kernel_fn(x)" in code
+
+    def test_gelu_erf_argument_is_fp32_for_fp16_acc(self) -> None:
+        # tl.erf は fp32/fp64 しか受けない。acc=fp16 でも erf の引数は fp32 に上げ、
+        # 結果を acc の型へ戻す (#459)。
+        for acc in ("fp16", "fp32"):
+            code = generate(gelu_spec(), default_params(variant="elementwise", acc_dtype=acc))
+            ast.parse(code)
+            erf_lines = [ln for ln in code.splitlines() if "tl.erf(" in ln]
+            assert len(erf_lines) == 1, acc
+            line = erf_lines[0]
+            assert "tl.erf(x.to(tl.float32) *" in line, f"acc={acc}: {line}"
+            tl_acc = "float16" if acc == "fp16" else "float32"
+            assert f"tl.erf(x.to(tl.float32) * 0.7071067811865476).to(tl.{tl_acc})" in line, (
+                f"acc={acc}: {line}"
+            )
 
 
 def make_spec(out_dtype: torch.dtype = torch.float16) -> KernelSpec:
@@ -262,6 +279,50 @@ class TestSdpaCodegen:
 
         with pytest.raises(ValueError, match="No codegen template"):
             generate(sdpa_spec(), default_params(variant="single_row"))
+
+    def test_store_casts_use_tl_namespace(self) -> None:
+        """全 SDPA テンプレート × 出力 dtype で、`.to()` の引数が `tl.<dtype>` であること。
+
+        `compile()` では裸名 (`float16`) は通ってしまい、Triton の JIT 時に
+        NameError になる (#460)。
+        """
+        import ast
+
+        for variant in ("flash", "flash_causal_opt"):
+            for dtype in (torch.float16, torch.bfloat16, torch.float32):
+                spec = sdpa_spec(is_causal=True)
+                spec = KernelSpec(
+                    op_type=spec.op_type,
+                    input_specs=spec.input_specs,
+                    output_specs=(TensorSpec(shape=(8, 64, 64), dtype=dtype, is_contiguous=True),),
+                    constants=spec.constants,
+                    graph_hash=spec.graph_hash,
+                    constraints=spec.constraints,
+                )
+                params = SearchParams(
+                    block_size=64,
+                    num_warps=4,
+                    num_stages=1,
+                    acc_dtype="fp32",
+                    variant=variant,
+                )
+                tree = ast.parse(generate(spec, params))
+                casts = [
+                    n
+                    for n in ast.walk(tree)
+                    if isinstance(n, ast.Call)
+                    and isinstance(n.func, ast.Attribute)
+                    and n.func.attr == "to"
+                    and n.args
+                ]
+                assert casts, (variant, dtype)
+                for call in casts:
+                    arg = call.args[0]
+                    assert (
+                        isinstance(arg, ast.Attribute)
+                        and isinstance(arg.value, ast.Name)
+                        and arg.value.id == "tl"
+                    ), (variant, dtype, ast.unparse(call))
 
     def test_flash_variant_accepted_by_search_params(self) -> None:
         p = flash_params()

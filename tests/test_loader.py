@@ -122,3 +122,78 @@ def test_verify_raises_on_wrong_tag():
     cross = f"{tag_a}{_SEP}{code_b}"
     with pytest.raises(ValueError, match="HMAC 検証に失敗"):
         verify_kernel_code(cross)
+
+
+# --- HMAC 鍵の永続化（#327） ---
+
+
+def _reset_key(monkeypatch, key_path: Path) -> None:
+    from forge.runtime import loader
+
+    monkeypatch.setenv("FORGE_HMAC_KEY_PATH", str(key_path))
+    monkeypatch.setattr(loader, "_HMAC_KEY", None, raising=False)
+
+
+def test_hmac_key_shared_across_processes(tmp_path, monkeypatch):
+    """別プロセスで署名したコードを、同じ鍵ファイルを使う親プロセスで検証できる。"""
+    import os
+    import subprocess
+    import sys
+
+    from forge.runtime import loader
+
+    key_path = tmp_path / "sub" / "hmac.key"
+    env = {**os.environ, "FORGE_HMAC_KEY_PATH": str(key_path)}
+    out = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from forge.runtime.loader import sign_kernel_code;"
+            "print(sign_kernel_code('def k(): pass'), end='')",
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    _reset_key(monkeypatch, key_path)
+    assert loader.verify_kernel_code(out) == "def k(): pass"
+
+
+def test_hmac_key_file_mode_is_0600(tmp_path, monkeypatch):
+    """鍵ファイルは 0600、親ディレクトリは 0700 で作られる。"""
+    import stat
+
+    from forge.runtime import loader
+
+    key_path = tmp_path / "newdir" / "hmac.key"
+    _reset_key(monkeypatch, key_path)
+    loader.sign_kernel_code("x")
+    assert stat.S_IMODE(key_path.stat().st_mode) == 0o600
+    assert stat.S_IMODE(key_path.parent.stat().st_mode) == 0o700
+    assert len(key_path.read_bytes()) == 32
+
+
+def test_hmac_key_invalid_file_falls_back(tmp_path, monkeypatch, caplog):
+    """長さ不正の鍵ファイルでもクラッシュせず、メモリ上の鍵で動作し、ファイルは上書きしない。"""
+    from forge.runtime import loader
+
+    key_path = tmp_path / "hmac.key"
+    key_path.write_bytes(b"short")
+    _reset_key(monkeypatch, key_path)
+    with caplog.at_level("WARNING"):
+        signed = loader.sign_kernel_code("code")
+        assert loader.verify_kernel_code(signed) == "code"
+    assert key_path.read_bytes() == b"short"
+    assert sum("hmac" in r.getMessage().lower() for r in caplog.records) == 1
+
+
+def test_hmac_key_reused_within_process(tmp_path, monkeypatch):
+    """同一プロセス内で署名→検証が通り、再読み込みしても同じ鍵になる。"""
+    from forge.runtime import loader
+
+    key_path = tmp_path / "hmac.key"
+    _reset_key(monkeypatch, key_path)
+    signed = loader.sign_kernel_code("code")
+    monkeypatch.setattr(loader, "_HMAC_KEY", None, raising=False)  # 再読み込み
+    assert loader.verify_kernel_code(signed) == "code"

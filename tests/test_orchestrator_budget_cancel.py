@@ -9,8 +9,10 @@ from __future__ import annotations
 import tempfile
 import threading
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
 import torch
 
 from forge.benchmark.statistics import BenchmarkResult
@@ -231,4 +233,186 @@ class TestOptimizeRoundsBudgetCancel:
                 result = orch.optimize_rounds(_spec(), llm=llm, n_rounds=3, candidates_per_round=1)
 
             assert len(result.rounds) == 3
+            repo.close()
+
+
+class _FakeClock:
+    """BudgetTracker が参照する time.monotonic の差し替え用。"""
+
+    def __init__(self) -> None:
+        self.now = 1000.0
+
+    def monotonic(self) -> float:
+        return self.now
+
+
+def _patch_clock(clock: _FakeClock):
+    return patch("forge.search.cost_model.time", SimpleNamespace(monotonic=clock.monotonic))
+
+
+def _propose_one(spec, cc, n, history):
+    return [
+        {
+            "base_variant": "single_row",
+            "block_size": 64,
+            "num_warps": 4,
+            "num_stages": 1,
+            "acc_dtype": "fp32",
+            "rows_per_program": 1,
+            "hypothesis": f"h{len(history)}",
+        }
+    ]
+
+
+class TestBudgetIsPerOptimizeCall:
+    """max_total_s は 1 回の optimize*() 呼び出し単位であり、構築時刻から数えない。"""
+
+    def test_time_elapsed_since_construction_does_not_exhaust_budget(self) -> None:
+        clock = _FakeClock()
+        with tempfile.TemporaryDirectory() as d, _patch_clock(clock):
+            repo = KernelRepository(Path(d) / "c.db")
+            orch = Orchestrator(repo=repo, max_total_s=60.0)
+            clock.now += 90.0  # 構築後に予算(60s)を超える時間が経過
+
+            with patch("forge.orchestrator.run_in_worker", return_value=_ok_result()) as mock_run:
+                result = orch.optimize(_spec(), budget=3, search=_grid(3))
+
+            assert mock_run.call_count == 3
+            assert result.best_params is not None
+            repo.close()
+
+    def test_second_optimize_gets_fresh_budget(self) -> None:
+        clock = _FakeClock()
+
+        def _slow_run(*args, **kwargs):
+            clock.now += 10.0
+            return _ok_result()
+
+        with tempfile.TemporaryDirectory() as d, _patch_clock(clock):
+            repo = KernelRepository(Path(d) / "c.db")
+            orch = Orchestrator(repo=repo, max_total_s=60.0)
+
+            with patch("forge.orchestrator.run_in_worker", side_effect=_slow_run) as mock_run:
+                orch.optimize(_spec(), budget=3, search=_grid(3), use_cache=False)
+                assert mock_run.call_count == 3
+                clock.now += 1000.0  # 1 回目の後に長時間経過
+                orch.optimize(_spec(), budget=3, search=_grid(3), use_cache=False)
+                assert mock_run.call_count == 6
+            repo.close()
+
+    def test_within_budget_is_not_cut(self) -> None:
+        clock = _FakeClock()
+
+        def _slow_run(*args, **kwargs):
+            clock.now += 10.0  # 3 候補で 30s < 60s
+            return _ok_result()
+
+        with tempfile.TemporaryDirectory() as d, _patch_clock(clock):
+            repo = KernelRepository(Path(d) / "c.db")
+            orch = Orchestrator(repo=repo, max_total_s=60.0)
+
+            with patch("forge.orchestrator.run_in_worker", side_effect=_slow_run) as mock_run:
+                orch.optimize(_spec(), budget=3, search=_grid(3))
+
+            assert mock_run.call_count == 3
+            repo.close()
+
+    def test_stops_when_elapsed_equals_max_total_s(self) -> None:
+        """境界: elapsed == max_total_s で次の候補は走らない (>= 判定)。"""
+        clock = _FakeClock()
+
+        def _slow_run(*args, **kwargs):
+            clock.now += 30.0  # 2 件で elapsed == 60.0
+            return _ok_result()
+
+        with tempfile.TemporaryDirectory() as d, _patch_clock(clock):
+            repo = KernelRepository(Path(d) / "c.db")
+            orch = Orchestrator(repo=repo, max_total_s=60.0)
+
+            with patch("forge.orchestrator.run_in_worker", side_effect=_slow_run) as mock_run:
+                orch.optimize(_spec(), budget=3, search=_grid(3))
+
+            assert mock_run.call_count == 2
+            repo.close()
+
+    def test_optimize_sha_ignores_time_since_construction(self) -> None:
+        clock = _FakeClock()
+        with tempfile.TemporaryDirectory() as d, _patch_clock(clock):
+            repo = KernelRepository(Path(d) / "c.db")
+            orch = Orchestrator(repo=repo, max_total_s=60.0)
+            clock.now += 90.0
+
+            with patch("forge.orchestrator.run_in_worker", return_value=_ok_result()) as mock_run:
+                orch.optimize_sha(_spec(), initial_budget=4, halving_rounds=2, search=_grid(3))
+
+            assert mock_run.call_count > 0
+            repo.close()
+
+    def test_optimize_rounds_ignores_time_since_construction(self) -> None:
+        clock = _FakeClock()
+        with tempfile.TemporaryDirectory() as d, _patch_clock(clock):
+            repo = KernelRepository(Path(d) / "c.db")
+            orch = Orchestrator(repo=repo, max_total_s=60.0)
+            clock.now += 90.0
+            llm = LLMGenerator(propose_fn=_propose_one)
+
+            with patch("forge.orchestrator.run_in_worker", return_value=_ok_result()):
+                result = orch.optimize_rounds(_spec(), llm=llm, n_rounds=2, candidates_per_round=1)
+
+            assert len(result.rounds) == 2
+
+
+_PROPOSAL = {
+    "base_variant": "single_row",
+    "block_size": 64,
+    "num_warps": 4,
+    "num_stages": 1,
+    "acc_dtype": "fp32",
+    "rows_per_program": 1,
+    "hypothesis": "h",
+}
+
+
+class TestOptimizeRoundsWithoutTokenUsage:
+    """token_usage を持たない生成器 (Ollama / Bayesian) でも optimize_rounds が完走する (#469)。"""
+
+    def _run_twice(self, gen) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            repo = KernelRepository(Path(d) / "c.db")
+            orch = Orchestrator(repo=repo)
+            with patch("forge.orchestrator.run_in_worker", return_value=_ok_result()):
+                result = orch.optimize_rounds(_spec(), llm=gen, n_rounds=2, candidates_per_round=1)
+                assert result.total_candidates_evaluated == 1  # 2 ラウンド目は重複でスキップ
+                assert result.best_params is not None
+                assert result.token_usage is None
+                # 2 回目はキャッシュヒット経路 (早期 return) も token_usage=None で返る
+                cached = orch.optimize_rounds(_spec(), llm=gen, n_rounds=2, candidates_per_round=1)
+                assert cached.rounds == []
+                assert cached.best_params == result.best_params
+                assert cached.token_usage is None
+            repo.close()
+
+    def test_ollama_generator(self) -> None:
+        from forge.search.ollama_generator import OllamaGenerator
+
+        gen = OllamaGenerator()
+        with patch.object(OllamaGenerator, "_propose", return_value=[_PROPOSAL]):
+            self._run_twice(gen)
+
+    def test_bayesian_generator(self) -> None:
+        pytest.importorskip("optuna")
+        from forge.search.bayesian_generator import BayesianGenerator
+
+        gen = BayesianGenerator(seed=0)
+        with patch.object(BayesianGenerator, "_propose", return_value=[_PROPOSAL]):
+            self._run_twice(gen)
+
+    def test_llm_generator_still_reports_token_usage(self) -> None:
+        gen = LLMGenerator(propose_fn=lambda spec, cc, n, history: [_PROPOSAL])
+        with tempfile.TemporaryDirectory() as d:
+            repo = KernelRepository(Path(d) / "c.db")
+            orch = Orchestrator(repo=repo)
+            with patch("forge.orchestrator.run_in_worker", return_value=_ok_result()):
+                result = orch.optimize_rounds(_spec(), llm=gen, n_rounds=1, candidates_per_round=1)
+            assert result.token_usage is gen.token_usage
             repo.close()

@@ -1,35 +1,22 @@
 from __future__ import annotations
 
+import importlib
+import pkgutil
 from collections.abc import Callable
 
-from . import (
-    attention as _attention,  # noqa: F401 — パターン登録の副作用  # pyright: ignore[reportUnusedImport]
-)
-from . import (
-    fused_add_rmsnorm as _fused_add_rmsnorm,  # noqa: F401 — パターン登録の副作用  # pyright: ignore[reportUnusedImport]
-)
-from . import (
-    gelu as _gelu,  # noqa: F401 — パターン登録の副作用  # pyright: ignore[reportUnusedImport]
-)
-from . import (
-    layernorm as _layernorm,  # noqa: F401 — パターン登録の副作用  # pyright: ignore[reportUnusedImport]
-)
-from . import (
-    linear as _linear,  # noqa: F401 — パターン登録の副作用  # pyright: ignore[reportUnusedImport]
-)
-from . import (
-    rmsnorm as _rmsnorm,  # noqa: F401 — パターン登録の副作用  # pyright: ignore[reportUnusedImport]
-)
-from . import (
-    rope as _rope,  # noqa: F401 — パターン登録の副作用  # pyright: ignore[reportUnusedImport]
-)
-from . import (
-    softmax as _softmax,  # noqa: F401 — パターン登録の副作用  # pyright: ignore[reportUnusedImport]
-)
-from . import (
-    swiglu as _swiglu,  # noqa: F401 — パターン登録の副作用  # pyright: ignore[reportUnusedImport]
-)
 from .registry import graph_op_counts, match_counts
+
+
+# パターン登録は各モジュールの import 副作用。import 漏れで identify() が永久に None を
+# 返す事故（Issue #373）を防ぐため、パッケージ内のモジュールを自動で import する。
+# 登録順（= match_counts の走査順）が決定的になるよう名前順に読み込む。
+def _import_pattern_modules() -> None:
+    for name in sorted(m.name for m in pkgutil.iter_modules(__path__)):
+        if name != "registry":
+            importlib.import_module(f"{__name__}.{name}")
+
+
+_import_pattern_modules()
 
 
 def identify(fn: Callable[..., object]) -> str | None:

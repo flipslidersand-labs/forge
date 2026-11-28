@@ -230,3 +230,44 @@ class TestOllamaErrorVisibility:
         with caplog.at_level("WARNING", logger="forge.search.ollama_generator"):
             assert self._propose(content="not json") == []
         assert [r.levelname for r in caplog.records] == ["WARNING"]
+
+
+class TestOllamaCoerceByOpType:
+    """非 reduction op でも block_size < N の候補が Ollama 経路で残る。"""
+
+    @pytest.mark.parametrize(
+        ("op", "variant", "block"),
+        [
+            ("gelu", "elementwise", 1024),
+            ("linear", "gemm", 64),
+            ("scaled_dot_product_attention", "flash", 32),
+            ("scaled_dot_product_attention", "flash_causal_opt", 16),
+        ],
+    )
+    def test_non_reduction_candidate_kept(self, op: str, variant: str, block: int) -> None:
+        f16 = lambda shape: TensorSpec(shape, torch.float16, True)  # noqa: E731
+        specs = {
+            "gelu": ((f16((64, 4096)),), (f16((64, 4096)),)),
+            "linear": ((f16((128, 1024)), f16((512, 1024)), f16((512,))), (f16((128, 512)),)),
+            "scaled_dot_product_attention": ((f16((8, 64, 64)),) * 3, (f16((8, 64, 64)),)),
+        }
+        ins, outs = specs[op]
+        spec = KernelSpec(op, ins, outs, {}, f"{op}_v1", ())
+        content = Proposal(
+            candidates=[  # type: ignore[arg-type]
+                {
+                    "base_variant": variant,
+                    "block_size": block,
+                    "num_warps": 4,
+                    "num_stages": 1,
+                    "acc_dtype": "fp32",
+                    "rows_per_program": 1,
+                    "hypothesis": "tile smaller than hidden",
+                }
+            ]
+        ).model_dump_json()
+        with patch("ollama.Client") as mock_client:
+            mock_client.return_value.chat.return_value = _mock_chat_response(content)
+            result = OllamaGenerator(model="qwen2.5-coder:latest").generate(spec, "8.6", budget=1)
+
+        assert [(p.variant, p.block_size) for p in result] == [(variant, block)]

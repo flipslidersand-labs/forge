@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from forge.ir.kernel_spec import KernelSpec
+from forge.ops import OP_REGISTRY, is_gemm
 
 from ._base_generator import _BaseGenerator
 from .candidate import HistoryEntry
@@ -144,6 +145,8 @@ def build_prompt(
     history: list[HistoryEntry],
 ) -> str:
     x = spec.input_specs[0]
+    # 未登録 op でもプロンプトは作れる（従来どおり）。block_k は gemm のときだけ扱う。
+    gemm = spec.op_type in OP_REGISTRY and is_gemm(spec.op_type)
     op_name = spec.op_type.replace("_", " ").title()
     input_shape_desc = ", ".join(str(s.shape) for s in spec.input_specs)
     lines = [
@@ -165,6 +168,13 @@ def build_prompt(
         f"- acc_dtype: one of {list(SUPPORTED_ACC_DTYPES)}. Note: fp16 accumulation "
         "in the reduction is usually NOT numerically correct for single_row/multi_row.",
         "- rows_per_program: >1 only for multi_row, else 1",
+    ]
+    if gemm:
+        lines.append(
+            "- block_k: K-tile for the gemm variant; power of 2, >= 16 (e.g. 16, 32, 64). "
+            "Ignored by other variants"
+        )
+    lines += [
         "- hypothesis: one line explaining why this config may be fast",
     ]
     if history:
