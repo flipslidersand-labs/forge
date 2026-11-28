@@ -124,7 +124,10 @@ pip install "kernelsmith[gpu]"   # GPU カーネル実行フル機能（triton �
 
 - Python 3.11+
 - GPU 実行: NVIDIA GPU + PyTorch CUDA ビルド + Triton 3.x
-  - Triton 公式サポートは compute capability 7.0+（GTX 1080 / cc6.1 でも動作確認済み）
+  - Triton の公式な対象は compute capability 8.0+（Triton の README による）。cc8.0 未満は FMA へのフォールバックで、メンテナは「best effort・テスト対象外」としている
+  - GTX 1080（cc6.1）では Triton 3.7.1 のカーネルが動作する（動作確認済み）。公式の保証ではないため、Triton の版を上げると動かなくなる可能性がある
+  - `torch.compile` の既定 backend（inductor）は、PyTorch が cc7.0 未満を拒否する（`GPUTooOldForTriton`）。cc6.1 の GPU では `backend="eager"` だけが使える
+  - PyTorch 2.15 以降は cu126 ホイールが公開されず、Pascal（sm_60）が対象から外れる。Pascal で使うときは PyTorch 2.14（cu126）に固定する
 
 ## 開発環境セットアップ
 

@@ -110,10 +110,13 @@ cd /path/to/forge
 python3 -m pytest tests/ -v --tb=short
 ```
 
-### Dev PC (Linux, GTX1080 - CPU mode only)
+### Dev PC (Linux, GTX1080, cc6.1)
+
+GTX1080 では Triton のカーネルが動く(`@forge.optimize` の GPU 実行も可能)。
+以下は GPU を使わない軽いテストだけを回す例。
 
 ```bash
-# CPU mode でのみテスト可能
+# GPU を使わずに回す場合
 export CUDA_VISIBLE_DEVICES=""
 python3 -m pytest tests/test_adoption.py tests/test_benchmark.py tests/test_cache.py tests/test_ir.py -v
 ```

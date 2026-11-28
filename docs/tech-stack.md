@@ -31,7 +31,7 @@ pyproject.toml (hatchling)
   └─ examples/        # 実行デモ
 
 仮想環境: venv または uv venv
-GPU 環境: NVIDIA GPU (compute capability 7.0+)
+GPU 環境: NVIDIA GPU (Triton の公式な対象は compute capability 8.0+。GTX 1080 / cc6.1 でも動作確認済みだが保証外。詳細は README の「必要環境」)
 ```
 
 ## 開発ツール
