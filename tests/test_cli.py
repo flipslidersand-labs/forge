@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -379,3 +380,88 @@ def test_cache_prune_does_not_create_db(tmp_path, capsys) -> None:
     rc = main(["cache", "prune", "--keep-latest", "1", "--force", "--db", str(db)])
     assert rc == 0
     assert not db.exists()
+
+
+def _seed_broken(db: Path, *, corrupt: bool = True) -> None:
+    """健全 1 件 + template_hash を持たない旧スキーマ行 (+ 壊れた JSON 行) を作る（#487）。"""
+    _seed(db, n=1)
+    repo = KernelRepository(db)
+    old = {k: list(v) if isinstance(v, tuple) else v for k, v in _key("old").__dict__.items()}
+    del old["template_hash"]
+    rows = [("old", json.dumps(old))]
+    if corrupt:
+        rows.append(("corrupt", "{not json"))
+    for name, key_json in rows:
+        repo.conn.execute(
+            "INSERT INTO kernels (cache_key_hash, cache_key_json, params_json, kernel_code, "
+            "benchmark_json, baseline_us, created_at) VALUES (?, ?, '{}', 'x', '{}', NULL, ?)",
+            (name, key_json, datetime.now(UTC).isoformat()),
+        )
+    repo.conn.commit()
+    repo.close()
+
+
+def _cache_warnings(caplog) -> list[str]:
+    return [r.getMessage() for r in caplog.records if r.name == "forge.cache"]
+
+
+def test_cache_list_skips_old_schema_row_with_warning(tmp_path, capsys, caplog) -> None:
+    """旧スキーマ行はスキップされ、健全な行だけが rc=0 で表示され、警告が 1 行出る。"""
+    db = tmp_path / "cache.db"
+    _seed_broken(db, corrupt=False)
+    with caplog.at_level(logging.WARNING, logger="forge.cache"):
+        rc = main(["cache", "list", "--db", str(db)])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "rmsnorm_v0" in out
+    (warning,) = _cache_warnings(caplog)
+    assert "old" in warning
+    assert "template_hash" in warning
+
+
+def test_cache_list_skips_corrupt_json_row_with_warning(tmp_path, capsys, caplog) -> None:
+    db = tmp_path / "cache.db"
+    _seed_broken(db)
+    with caplog.at_level(logging.WARNING, logger="forge.cache"):
+        rc = main(["cache", "list", "--db", str(db)])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "rmsnorm_v0" in out
+    assert len(_cache_warnings(caplog)) == 2  # old + corrupt
+
+
+def test_cache_list_json_skips_broken_rows(tmp_path, capsys, caplog) -> None:
+    """--json の stdout は壊れた行があっても有効な JSON のまま（警告はログ側）。"""
+    db = tmp_path / "cache.db"
+    _seed_broken(db)
+    with caplog.at_level(logging.WARNING, logger="forge.cache"):
+        rc = main(["cache", "list", "--json", "--db", str(db)])
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert [p["graph_hash"] for p in payload] == ["rmsnorm_v0"]
+    assert len(_cache_warnings(caplog)) == 2
+
+
+def test_cache_clear_force_cleans_broken_rows(tmp_path, capsys) -> None:
+    """壊れた行は `forge cache clear` で掃除でき、その後 list は空になる。"""
+    db = tmp_path / "cache.db"
+    _seed_broken(db)
+    assert main(["cache", "list", "--db", str(db)]) == 0
+    capsys.readouterr()
+    rc = main(["cache", "clear", "--force", "--db", str(db)])
+    assert rc == 0
+    assert "3 件削除" in capsys.readouterr().out
+    rc = main(["cache", "list", "--db", str(db)])
+    assert rc == 0
+    assert "空" in capsys.readouterr().out
+
+
+def test_cache_prune_keep_latest_works_with_broken_rows(tmp_path, capsys) -> None:
+    db = tmp_path / "cache.db"
+    _seed_broken(db)
+    rc = main(["cache", "prune", "--keep-latest", "1", "--force", "--db", str(db)])
+    assert rc == 0
+    assert "2 件削除" in capsys.readouterr().out
+    repo = KernelRepository(db)
+    assert repo.count() == 1
+    repo.close()

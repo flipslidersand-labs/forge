@@ -24,7 +24,7 @@ updates:
     open-pull-requests-limit: 2
     ignore:
       # 10 系は conventional-changelog-writer 9 が要るが、release-notes-generator の安定版(14.x)は
-      # writer 8 に固定。上げると release が generateNotes で失敗する(#17)。
+      # writer 8 に固定。上げると release が generateNotes で失敗する(#433・#449)。
       # release-notes-generator 15 の安定版に上げるときに、この ignore を外す。
       - dependency-name: conventional-changelog-conventionalcommits
         update-types: ["version-update:semver-major"]

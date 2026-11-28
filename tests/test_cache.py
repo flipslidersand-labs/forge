@@ -1,10 +1,12 @@
 import importlib
 import json
+import logging
 import tempfile
 import threading
 from datetime import UTC, datetime, timezone
 from pathlib import Path
 
+import pytest
 import torch
 
 from forge.cache.key import CacheKey
@@ -693,7 +695,7 @@ class TestForgeDbPathEnvVar:
 
 
 def test_get_treats_hmac_mismatch_as_miss(monkeypatch) -> None:
-    """別プロセス（別 HMAC 鍵）書き込みのエントリは例外でなくキャッシュミス（#327）。"""
+    """別 HMAC 鍵で書かれたエントリは例外でなくキャッシュミス（#327）。"""
     from datetime import datetime
 
     import forge.runtime.loader as loader
@@ -721,7 +723,7 @@ def test_get_treats_hmac_mismatch_as_miss(monkeypatch) -> None:
         repo = KernelRepository(Path(d) / "c.db")
         repo.put(key, kernel)
         assert repo.get(key) is not None
-        monkeypatch.setattr(loader, "_HMAC_KEY", b"x" * 32)  # 別プロセス相当
+        monkeypatch.setattr(loader, "_HMAC_KEY", b"x" * 32)  # 鍵ファイル削除・別マシン相当
         assert repo.get(key) is None
 
 
@@ -740,3 +742,116 @@ def test_connect_uses_explicit_busy_timeout(monkeypatch) -> None:
     with tempfile.TemporaryDirectory() as d:
         KernelRepository(Path(d) / "c.db")
     assert seen["timeout"] == 30.0
+
+
+def _insert_raw_row(
+    repo: KernelRepository,
+    name: str,
+    key_json: str,
+    bench_json: str = '{"median_us": 1.0}',
+    baseline_us: object = None,
+) -> None:
+    """cache_key_json / benchmark_json を検証なしで直接 INSERT する（旧スキーマ・破損行の再現用）。"""
+    repo.conn.execute(
+        "INSERT INTO kernels (cache_key_hash, cache_key_json, params_json, kernel_code, "
+        "benchmark_json, baseline_us, created_at) VALUES (?, ?, '{}', 'x', ?, ?, ?)",
+        (name, key_json, bench_json, baseline_us, datetime.now(UTC).isoformat()),
+    )
+    repo.conn.commit()
+
+
+def _valid_key_json() -> str:
+    key = CacheKey(
+        graph_hash="ok",
+        shapes=((8,),),
+        dtypes=("float16",),
+        constants_hash="c",
+        compute_capability="8.9",
+        torch_version="2.3.0",
+        triton_version="3.0.0",
+        cuda_version="12.1",
+        library_version="0.1.0",
+        template_hash="feedfacecafe",
+    )
+    return json.dumps({k: list(v) if isinstance(v, tuple) else v for k, v in key.__dict__.items()})
+
+
+class TestListSummariesBrokenRows:
+    """list_summaries は壊れた行をスキップして警告を 1 行出し、残りを返す（#487）。
+
+    契約を専用例外に変える場合はこのクラスを更新する。
+    """
+
+    @staticmethod
+    def _old_schema_json() -> str:
+        old = json.loads(_valid_key_json())
+        del old["template_hash"]  # template_hash 導入前の旧スキーマ行
+        return json.dumps(old)
+
+    @pytest.mark.parametrize(
+        ("key_json", "bench_json"),
+        [
+            pytest.param("OLD", '{"median_us": 1.0}', id="old_schema_missing_field"),
+            pytest.param("{not json", '{"median_us": 1.0}', id="corrupt_key_json"),
+            pytest.param("VALID", "{not json", id="corrupt_benchmark_json"),
+            pytest.param("null", '{"median_us": 1.0}', id="key_json_null"),
+            pytest.param("[]", '{"median_us": 1.0}', id="key_json_list"),
+            pytest.param("VALID", "null", id="benchmark_json_null"),
+            pytest.param("VALID", "[]", id="benchmark_json_list"),
+            pytest.param("VALID", '{"median_us": "abc"}', id="median_not_number"),
+        ],
+    )
+    def test_broken_row_is_skipped_with_one_warning(
+        self, tmp_path, caplog, key_json: str, bench_json: str
+    ) -> None:
+        repo = KernelRepository(tmp_path / "c.db")
+        key_json = {"OLD": self._old_schema_json(), "VALID": _valid_key_json()}.get(
+            key_json, key_json
+        )
+        _insert_raw_row(repo, "bad", key_json, bench_json=bench_json)
+        with caplog.at_level(logging.WARNING, logger="forge.cache"):
+            assert repo.list_summaries() == []
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert len(warnings) == 1
+        assert "bad" in warnings[0].getMessage()
+        repo.close()
+
+    def test_non_numeric_baseline_is_skipped_with_one_warning(self, tmp_path, caplog) -> None:
+        """baseline_us（REAL 列）に数値でない文字列が入った行もスキップする。"""
+        repo = KernelRepository(tmp_path / "c.db")
+        _insert_raw_row(repo, "bad", _valid_key_json(), baseline_us="abc")
+        _insert_raw_row(repo, "good", _valid_key_json(), baseline_us=2.0)
+        with caplog.at_level(logging.WARNING, logger="forge.cache"):
+            summaries = repo.list_summaries()
+        assert [s.cache_key_hash for s in summaries] == ["good"]
+        assert summaries[0].speedup == 2.0
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert len(warnings) == 1
+        assert "bad" in warnings[0].getMessage()
+        repo.close()
+
+    def test_healthy_rows_survive_broken_rows(self, tmp_path, caplog) -> None:
+        """壊れた行が混ざっても健全な行は返り、警告は壊れた行の数だけ出る。"""
+        repo = KernelRepository(tmp_path / "c.db")
+        _insert_raw_row(repo, "good", _valid_key_json())
+        _insert_raw_row(repo, "bad-old", '{"graph_hash": "x"}')
+        _insert_raw_row(repo, "bad-null", "null")
+        with caplog.at_level(logging.WARNING, logger="forge.cache"):
+            summaries = repo.list_summaries()
+        assert [s.cache_key_hash for s in summaries] == ["good"]
+        assert summaries[0].median_us == 1.0
+        assert len([r for r in caplog.records if r.levelno == logging.WARNING]) == 2
+        repo.close()
+
+    def test_prune_and_clear_do_not_parse_json(self, tmp_path) -> None:
+        """prune/clear は JSON を解釈しないので、壊れた行があっても掃除できる。"""
+        repo = KernelRepository(tmp_path / "c.db")
+        _insert_raw_row(repo, "bad1", "{not json")
+        _insert_raw_row(repo, "bad2", '{"graph_hash": "x"}')
+        _insert_raw_row(repo, "bad3", "{}", bench_json="{not json")
+        assert repo.count() == 3
+        assert repo.prune(keep_latest=1) == 2
+        assert repo.clear() == 1
+        assert repo.count() == 0
+        assert repo.list_summaries() == []
+        repo.close()

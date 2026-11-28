@@ -17,6 +17,8 @@ class Candidate(BaseModel):
     num_stages: int
     acc_dtype: str
     rows_per_program: int
+    # gemm (linear) の K タイル。他 variant では無視される。省略可（既存の出力を読めるように）。
+    block_k: int = 32
     hypothesis: str
 
 

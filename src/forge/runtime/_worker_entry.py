@@ -62,13 +62,15 @@ def _measure_extended_baselines(payload: dict, torch, measure, get_reference) ->
                 "compile_time_s": compile_time_s,
             }
         )
-    except (RuntimeError, OSError, ValueError) as e:
+    except Exception as e:
+        # 拡張ベースラインは補助計測。想定外の例外（TypeError 等）でも全体を失敗にせず、
+        # error 付きの 0 計測 baseline（親が読む既存の警告形）として success=True で返す。
         baselines.append(
             {
                 "name": "torch.compile(reference)",
                 "benchmark": {"median_us": 0.0, "p20_us": 0.0, "p80_us": 0.0, "p95_us": 0.0},
                 "compile_time_s": 0.0,
-                "error": str(e),
+                "error": f"{type(e).__name__}: {e}",
             }
         )
 
@@ -76,8 +78,8 @@ def _measure_extended_baselines(payload: dict, torch, measure, get_reference) ->
 
 
 def main() -> None:
-    payload = json.loads(sys.stdin.read())
     try:
+        payload = json.loads(sys.stdin.read())  # 不正 JSON も構造化エラーにする
         import torch
 
         from forge.benchmark.timer import measure
@@ -148,7 +150,8 @@ def main() -> None:
             result["baseline_name"] = baseline_name(op_type)
 
         print(json.dumps(result))
-    except (RuntimeError, OSError, ValueError, ImportError, AttributeError) as e:
+    except Exception as e:  # SystemExit / KeyboardInterrupt は BaseException なので素通り
+        # TypeError・KeyError・Triton CompilationError 等も構造化 JSON で親に返す
         import traceback
 
         error_type = "cuda_oom" if type(e).__name__ == "OutOfMemoryError" else type(e).__name__

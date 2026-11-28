@@ -1,16 +1,18 @@
 """scaled_dot_product_attention op の統合ユニットテスト（CPU / GPU 不要）。
 
 test_codegen.py / test_validation.py / test_search.py に分散した SDPA テストを補完し、
-OP_INFO・runtime/reference の未カバー領域を埋める専用ファイル。
+OP_REGISTRY・runtime/reference の未カバー領域を埋める専用ファイル。
 """
 
 from __future__ import annotations
 
+import pytest
 import torch
 
 from forge.ir.kernel_spec import KernelSpec
 from forge.ir.tensor_spec import TensorSpec
-from forge.ops import OP_INFO, get_op_info, is_matmul
+from forge.ops import is_matmul
+from forge.ops.registry import OP_REGISTRY
 from forge.runtime.reference import (
     BASELINE_IMPLS,
     REFERENCE_IMPLS,
@@ -19,6 +21,7 @@ from forge.runtime.reference import (
     get_reference,
     sdpa_reference,
 )
+from forge.search._base_generator import block_ok
 from forge.search.params import SearchParams
 from forge.search.space import SearchSpace
 from forge.validation.test_cases import correctness_cases, primary_input
@@ -51,18 +54,18 @@ def _flash(block_size: int = 64, num_warps: int = 4, num_stages: int = 1) -> Sea
     )
 
 
-class TestOpInfo:
+class TestOpRegistry:
     def test_op_registered(self) -> None:
-        assert OP in OP_INFO
+        assert OP in OP_REGISTRY
 
     def test_kind_is_matmul(self) -> None:
-        assert get_op_info(OP).kind == "matmul"
+        assert OP_REGISTRY[OP].kind == "matmul"
 
     def test_is_matmul_helper(self) -> None:
         assert is_matmul(OP)
 
     def test_n_tensor_inputs_is_3(self) -> None:
-        assert get_op_info(OP).n_tensor_inputs == 3
+        assert OP_REGISTRY[OP].n_tensor_inputs == 3
 
 
 class TestSearchSpace:
@@ -114,6 +117,14 @@ class TestSearchSpace:
         assert params
         for p in params:
             assert p.block_size <= 16
+
+    @pytest.mark.parametrize("s", [1, 2, 8, 15])
+    def test_tiny_seq_len_fallback_respects_dot_min_tile(self, s: int) -> None:
+        # S < 16 でも tl.dot の最小タイル (16) を割らない（block_ok と同じ規則）。#502
+        params = list(SearchSpace().enumerate(_sdpa_spec(s=s), "8.9"))
+        assert params
+        for p in params:
+            assert block_ok(p.block_size, p.variant, 64)
 
     def test_head_dim_not_multiple_of_16_yields_nothing(self) -> None:
         params = list(SearchSpace().enumerate(_sdpa_spec(d=65), "8.9"))

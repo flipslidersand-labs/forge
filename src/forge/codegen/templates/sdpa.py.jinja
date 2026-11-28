@@ -74,7 +74,7 @@ def _sdpa_kernel(
 
     # Store output [BLOCK_S, HEAD_DIM]
     out_ptrs = out_ptr + batch * stride_ob + offs_qs[:, None] * stride_os + offs_d[None, :] * stride_od
-    tl.store(out_ptrs, acc.to({{ out_tl }}), mask=q_mask[:, None])
+    tl.store(out_ptrs, acc.to(tl.{{ out_tl }}), mask=q_mask[:, None])
 
 
 def kernel_fn(q, k, v, scale=None, is_causal=False):

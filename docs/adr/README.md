@@ -13,6 +13,7 @@
 | [ADR-005: LLM には自由コード生成ではなく構造化命令を出させる](ADR-005-structured-llm-generation.md) | 状態: Accepted | 既存記録を保持 |
 | [ADR-006: 探索戦略の二層分離 — 生成器（Bayesian TPE）と実行戦略（Successive Halving）](ADR-006-search-strategy.md) | 状態: Accepted | 既存記録を保持 |
 | [ADR-011: コスト考慮型探索 (Cost-Aware Multiobjective Search)](ADR-011-cost-aware-search.md) | 本文参照（この整備では変更しない） | 既存記録を保持 |
+| [ADR-012: 開発の指針と採用基準](ADR-012-development-direction.md) | 状態: Accepted | 2026-11-28 に追加。判断が割れたときの優先順と、採用基準・キャッシュの信頼・リポの役割などの決定 |
 
 ### 今回の補完範囲と残る確認
 

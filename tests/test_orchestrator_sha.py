@@ -7,14 +7,17 @@ run_in_worker をモックして Successive Halving のラウンド制御・絞�
 from __future__ import annotations
 
 import tempfile
+import threading
 import warnings
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import torch
 
 from forge.benchmark.statistics import BenchmarkResult
-from forge.cache.repository import KernelRepository
+from forge.cache.key import CacheKey
+from forge.cache.repository import CachedKernel, KernelRepository
 from forge.ir.kernel_spec import KernelSpec
 from forge.ir.tensor_spec import TensorSpec
 from forge.orchestrator import Orchestrator
@@ -112,6 +115,41 @@ class TestOptimizeSHACPU:
 
             assert second.cache_hit
             assert second.best_params == first.best_params
+            repo.close()
+
+    def test_cache_hit_ignores_entry_slower_than_eager(self):
+        """eager より遅い (0.9x < min_speedup) 保存済みエントリは HIT せず再探索する (#526)。"""
+        with tempfile.TemporaryDirectory() as d:
+            repo = KernelRepository(Path(d) / "c.db")
+            orch = Orchestrator(repo=repo)
+            spec = _rmsnorm_spec()
+            key = CacheKey.from_spec_and_env(spec)
+            repo.put(
+                key,
+                CachedKernel(
+                    cache_key=key,
+                    params={
+                        "block_size": 256,
+                        "num_warps": 2,
+                        "num_stages": 1,
+                        "acc_dtype": "fp32",
+                    },
+                    kernel_code="# stale",
+                    benchmark_json=BenchmarkResult(
+                        median_us=10.0, p20_us=10.0, p80_us=10.0
+                    ).to_dict(),
+                    created_at=datetime.now(UTC),
+                    baseline_us=9.0,
+                ),
+            )
+            with patch(
+                "forge.orchestrator.run_in_worker", return_value=_ok_result()
+            ) as mock_worker:
+                result = orch.optimize_sha(
+                    spec, initial_budget=4, halving_rounds=1, search=_tiny_grid()
+                )
+            assert not result.cache_hit
+            mock_worker.assert_called()
             repo.close()
 
     def test_all_fail_returns_no_best(self):
@@ -342,3 +380,128 @@ class TestOptimizeSHACPU:
         assert result.incorrect_count == len(result.experiments)
         assert result.failed_count == 0
         repo.close()
+
+    def test_cancel_at_first_candidate_of_round2_keeps_round1_best(self):
+        """ラウンド 2 の 1 件目で打ち切られても、ラウンド 1 の best を捨てない。
+
+        回帰テスト: ラウンド先頭で round_results を空に再初期化していたため、
+        ラウンド 2 で有効結果が 0 件だと best_params=None になっていた。
+        """
+        cancel_event = threading.Event()
+
+        def _progress(event):  # type: ignore[no-untyped-def]
+            # ラウンド 2 の開始ログ直後（候補ループ先頭の _should_stop 前）にキャンセル
+            if "[SHA round 2/" in event.label:
+                cancel_event.set()
+
+        notifier = MagicMock()
+        with tempfile.TemporaryDirectory() as d:
+            repo = KernelRepository(Path(d) / "c.db")
+            orch = Orchestrator(
+                repo=repo, cancel_event=cancel_event, notifier=notifier, progress=_progress
+            )
+
+            with patch("forge.orchestrator.run_in_worker", return_value=_ok_result(10.0)) as mock:
+                result = orch.optimize_sha(
+                    _rmsnorm_spec(), initial_budget=4, halving_rounds=3, search=_tiny_grid()
+                )
+
+            assert mock.call_count == 4  # ラウンド 1 の 4 候補のみ
+            assert result.best_params is not None
+            assert result.best_benchmark is not None
+            assert result.best_benchmark.median_us == 10.0
+            best = [e for e in result.experiments if e.is_best]
+            assert len(best) == 1
+            assert result.experiments.index(best[0]) < 4
+            notifier.send_failure.assert_not_called()
+            repo.close()
+
+    def test_round2_all_failed_falls_back_to_round1_best(self):
+        """ラウンド 2 が全件失敗でも、ラウンド 1 の best にフォールバックする。"""
+
+        def _worker(*args, **kwargs):  # type: ignore[no-untyped-def]
+            if kwargs.get("warmup") == 5:
+                return _ok_result(10.0)
+            return _fail_result()
+
+        with tempfile.TemporaryDirectory() as d:
+            repo = KernelRepository(Path(d) / "c.db")
+            orch = Orchestrator(repo=repo)
+
+            with patch("forge.orchestrator.run_in_worker", side_effect=_worker):
+                result = orch.optimize_sha(
+                    _rmsnorm_spec(), initial_budget=4, halving_rounds=3, search=_tiny_grid()
+                )
+
+            assert result.best_params is not None
+            assert result.best_benchmark is not None
+            assert result.best_benchmark.median_us == 10.0
+            best = [e for e in result.experiments if e.is_best]
+            assert len(best) == 1
+            assert result.experiments.index(best[0]) < 4
+            repo.close()
+
+    def test_partial_round2_does_not_override_complete_round1(self):
+        """ラウンド 2 が途中で打ち切られたら、その部分結果は前ラウンドの完全な結果を上書きしない (#503)。
+
+        ラウンド 2 の 1 件目だけ評価してキャンセルし、その 1 件がラウンド 1 の best より
+        遅い。忠実度（warmup/repeat）が違うので直接比べず、完全なラウンド 1 の best と、
+        それを測ったときの baseline を採る。
+        """
+        cancel_event = threading.Event()
+        logs: list[str] = []
+        calls = {"n": 0}
+
+        def _worker(*args, **kwargs):  # type: ignore[no-untyped-def]
+            calls["n"] += 1
+            if kwargs.get("warmup") == 5:  # ラウンド 1: 候補ごとに 10, 11, 12, 13us / baseline 20us
+                return _ok_result(10.0 + (calls["n"] - 1))
+            # ラウンド 2 の 1 件目で打ち切る。部分結果は 15us / baseline 40us
+            cancel_event.set()
+            bench = BenchmarkResult(median_us=15.0, p20_us=14.0, p80_us=16.0)
+            baseline = BenchmarkResult(median_us=40.0, p20_us=39.0, p80_us=41.0)
+            return WorkerResult(
+                success=True, correct=True, candidate=bench, baseline=baseline, baseline_name="F"
+            )
+
+        with tempfile.TemporaryDirectory() as d:
+            repo = KernelRepository(Path(d) / "c.db")
+            orch = Orchestrator(
+                repo=repo,
+                cancel_event=cancel_event,
+                progress=lambda ev: logs.append(ev.label),
+            )
+            with patch("forge.orchestrator.run_in_worker", side_effect=_worker) as mock:
+                result = orch.optimize_sha(
+                    _rmsnorm_spec(), initial_budget=4, halving_rounds=3, search=_tiny_grid()
+                )
+
+            assert mock.call_count == 5  # ラウンド 1 の 4 件 + ラウンド 2 の 1 件
+            assert result.best_benchmark is not None
+            assert result.best_benchmark.median_us == 10.0
+            assert result.baseline_benchmark is not None
+            assert result.baseline_benchmark.median_us == 20.0
+            assert result.adopted is True  # 10us vs 20us = 2x
+            best = [e for e in result.experiments if e.is_best]
+            assert len(best) == 1
+            assert result.experiments.index(best[0]) < 4
+            assert any("partial" in m and "round 1" in m for m in logs)
+            repo.close()
+
+    def test_is_best_marks_final_round_experiment(self):
+        """正常終了時、is_best は最終ラウンド（高忠実度）の実験に付く。"""
+        with tempfile.TemporaryDirectory() as d:
+            repo = KernelRepository(Path(d) / "c.db")
+            orch = Orchestrator(repo=repo)
+
+            with patch("forge.orchestrator.run_in_worker", return_value=_ok_result(10.0)):
+                result = orch.optimize_sha(
+                    _rmsnorm_spec(), initial_budget=4, halving_rounds=3, search=_tiny_grid()
+                )
+
+            exps = result.experiments
+            assert len(exps) == 7  # 4 (r1) + 2 (r2) + 1 (r3)
+            best_idx = [i for i, e in enumerate(exps) if e.is_best]
+            assert best_idx == [6]
+            assert exps[6].params == result.best_params
+            repo.close()

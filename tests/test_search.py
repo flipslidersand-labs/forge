@@ -73,6 +73,25 @@ class TestSearchSpaceBlocks:
         assert params and all(p.block_size <= 4096 for p in params)
         assert any(p.block_size < 4096 for p in params)
 
+    @pytest.mark.parametrize("n", [64, 256, 511])
+    def test_two_pass_not_offered_below_min_tile(self, n: int) -> None:
+        # N < 512 では 512 のタイルを出さない（block_ok が two_pass の block > N を拒否するため）。
+        # tile >= N の two_pass はループが 1 周で single_row と同じ。
+        assert list(single("two_pass").enumerate(spec(n), "8.9")) == []
+
+    @pytest.mark.parametrize("n", [64, 256, 511, 512, 600, 4096])
+    def test_enumerated_blocks_pass_block_ok(self, n: int) -> None:
+        from forge.search._base_generator import block_ok
+
+        params = list(SearchSpace().enumerate(spec(n), "8.9"))
+        assert params
+        assert all(block_ok(p.block_size, p.variant, n) for p in params)
+
+    def test_small_n_still_has_other_variants(self) -> None:
+        variants = {p.variant for p in SearchSpace().enumerate(spec(256), "8.9")}
+        assert "two_pass" not in variants
+        assert {"single_row", "multi_row"} <= variants
+
     def test_multi_row_has_rows_gt_1(self) -> None:
         params = list(single("multi_row").enumerate(spec(4096), "8.9"))
         assert params and {p.rows_per_program for p in params} == {2, 4, 8, 16}

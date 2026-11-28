@@ -8,7 +8,8 @@ from forge.codegen.triton_codegen import generate
 from forge.ir.kernel_spec import KernelSpec
 from forge.ir.tensor_spec import TensorSpec
 from forge.lowering import identify
-from forge.ops import OP_INFO, get_op_info, is_gemm
+from forge.ops import is_gemm
+from forge.ops.registry import OP_REGISTRY
 from forge.runtime.reference import BASELINE_IMPLS, REFERENCE_IMPLS, baseline_name
 from forge.search.params import SearchParams
 from forge.search.space import SearchSpace
@@ -43,18 +44,18 @@ def _gemm_params(block_size: int = 128, num_warps: int = 4) -> SearchParams:
     )
 
 
-class TestOpInfo:
+class TestOpRegistry:
     def test_op_registered(self) -> None:
-        assert OP in OP_INFO
+        assert OP in OP_REGISTRY
 
     def test_kind_is_gemm(self) -> None:
-        assert get_op_info(OP).kind == "gemm"
+        assert OP_REGISTRY[OP].kind == "gemm"
 
     def test_is_gemm_helper(self) -> None:
         assert is_gemm(OP)
 
     def test_n_tensor_inputs(self) -> None:
-        assert get_op_info(OP).n_tensor_inputs == 3
+        assert OP_REGISTRY[OP].n_tensor_inputs == 3
 
 
 class TestLowering:

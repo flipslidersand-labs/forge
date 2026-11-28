@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 from forge.ir.kernel_spec import KernelSpec
 
-from .candidate import HistoryEntry
+from .candidate import NOT_EVALUATED_OUTCOMES, HistoryEntry
 from .llm_generator import LLMGenerator, TokenUsage
 from .params import SearchParams
 
@@ -124,7 +124,7 @@ def _curate_history(history: list[HistoryEntry], top_k: int) -> list[HistoryEntr
         [h for h in history if h.correct and h.median_us is not None],
         key=lambda h: h.median_us,  # type: ignore[arg-type]
     )
-    failed = [h for h in history if not h.correct]
+    failed = [h for h in history if not h.correct and h.outcome not in NOT_EVALUATED_OUTCOMES]
     return correct[:top_k] + failed[-top_k:]
 
 
@@ -142,7 +142,7 @@ def build_feedback_prompt(history: list[HistoryEntry], top_k: int = 3) -> str:
         [h for h in history if h.correct and h.median_us is not None],
         key=lambda h: h.median_us,  # type: ignore[arg-type]
     )
-    failed = [h for h in history if not h.correct]
+    failed = [h for h in history if not h.correct and h.outcome not in NOT_EVALUATED_OUTCOMES]
 
     lines: list[str] = []
     if correct:

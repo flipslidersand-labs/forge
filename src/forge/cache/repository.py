@@ -194,6 +194,11 @@ class KernelRepository:
         各行を fetchall() で一括展開せず、カーソルを逐次イテレートしながら
         JSON デシリアライズを行う。raw 行と KernelSummary を同時にメモリに
         保持しないため、エントリ数が多い場合のピーク使用量を削減できる。
+
+        壊れた行（不正 JSON・旧スキーマでフィールド欠落・JSON として正しいが dict でない
+        null / [] など）はスキップして警告ログを 1 行出す。
+        1 行の破損で一覧全体を失敗させない（#487）。
+        壊れた行は `forge cache prune` / `clear` で掃除できる。
         """
         summaries: list[KernelSummary] = []
         with self._lock:
@@ -202,13 +207,31 @@ class KernelRepository:
                 "FROM kernels ORDER BY created_at DESC"
             )
             for key_hash, key_json, bench_json, baseline_us, created_at in cur:
-                cache_key = CacheKey.from_json(key_json)
-                bench = json.loads(bench_json)
-                median = bench.get("median_us")
-                median_us = float(median) if median is not None else None
+                try:
+                    key_data = json.loads(key_json)
+                    bench = json.loads(bench_json)
+                    if not isinstance(key_data, dict):
+                        raise TypeError(f"cache_key_json is {type(key_data).__name__}, not dict")
+                    if not isinstance(bench, dict):
+                        raise TypeError(f"benchmark_json is {type(bench).__name__}, not dict")
+                    cache_key = CacheKey.from_dict(key_data)
+                    median = bench.get("median_us")
+                    median_us = float(median) if median is not None else None
+                    # baseline_us は REAL 列だが、SQLite は数値に直せない文字列もそのまま保存する
+                    baseline = float(baseline_us) if baseline_us is not None else None
+                except (KeyError, TypeError, ValueError) as e:
+                    # JSONDecodeError は ValueError のサブクラス
+                    _log.warning(
+                        "キャッシュ行 %s を読めないためスキップします (%s: %s)。"
+                        "`forge cache prune` / `clear` で削除できます",
+                        key_hash,
+                        type(e).__name__,
+                        e,
+                    )
+                    continue
                 speedup: float | None = None
-                if baseline_us is not None and median_us is not None and median_us > 0:
-                    speedup = float(baseline_us) / median_us
+                if baseline is not None and median_us is not None and median_us > 0:
+                    speedup = baseline / median_us
                 summaries.append(
                     KernelSummary(
                         cache_key_hash=key_hash,

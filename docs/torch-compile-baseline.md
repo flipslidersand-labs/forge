@@ -69,7 +69,7 @@ ratio < 0.95             → ⚠️ 遅延
 **実装状況**:
 
 - ✅ `backend="eager"` — 実装済み（比較基準用）
-- ❌ `backend="inductor"` — GTX 1080 未サポート（cc6.1）
+- ❌ `backend="inductor"` — GTX 1080 では使えない（cc6.1）。PyTorch が cc7.0 未満を `GPUTooOldForTriton` で拒否するため。Triton のカーネル自体は同じ GPU で動く
 - ❌ `backend="xpu"` — Intel GPU 環境なし
 
 **設計**: eager backend は torch.compile の最小オーバーヘッド版として機能。本来の JIT 最適化（inductor）は環境制約で未測定。

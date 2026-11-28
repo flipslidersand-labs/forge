@@ -74,8 +74,51 @@ def test_build_passes_value_to_orchestrator_without_second_warning(
     monkeypatch.setattr(decorator_mod, "Orchestrator", FakeOrchestrator)
     with warnings.catch_warnings():
         warnings.simplefilter("error", DeprecationWarning)
-        out = decorator_mod._build(
-            lambda x: x, "elementwise", [torch.zeros(4)], {}, 1, None, None, 1.03, "/x/python", None
+        config = decorator_mod._BuildConfig(
+            budget=1,
+            repo=None,
+            search=None,
+            min_speedup=1.03,
+            python_executable="/x/python",
+            progress=None,
         )
+        out = decorator_mod._build(lambda x: x, "elementwise", [torch.zeros(4)], {}, config)
     assert out is None  # best_params なし -> eager フォールバック
     assert seen["python_executable"] == "/x/python"
+
+
+def test_build_forwards_all_config_fields_to_orchestrator(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_BuildConfig の各フィールドが Orchestrator(コンストラクタ/optimize)へ渡る（#357）。"""
+    seen: dict[str, object] = {}
+    repo, search, progress = object(), object(), print
+
+    class FakeOrchestrator:
+        python_executable: str | None = None
+
+        def __init__(self, **kw: object) -> None:
+            seen["init"] = kw
+
+        def __enter__(self) -> FakeOrchestrator:
+            return self
+
+        def __exit__(self, *_a: object) -> None:
+            pass
+
+        def optimize(self, _spec: object, **kw: object) -> object:
+            seen["optimize"] = kw
+            return type("R", (), {"best_params": None})()
+
+    monkeypatch.setattr(decorator_mod, "Orchestrator", FakeOrchestrator)
+    config = decorator_mod._BuildConfig(
+        budget=7,
+        repo=repo,  # type: ignore[arg-type]
+        search=search,  # type: ignore[arg-type]
+        min_speedup=1.5,
+        python_executable=None,
+        progress=progress,
+    )
+    assert decorator_mod._build(lambda x: x, "elementwise", [torch.zeros(4)], {}, config) is None
+    assert seen["init"] == {"repo": repo, "min_speedup": 1.5, "progress": progress}
+    assert seen["optimize"] == {"budget": 7, "search": search}

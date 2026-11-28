@@ -112,7 +112,11 @@ class BudgetTracker:
         self._start = time.monotonic()
 
     def record(self, bench_ms: float) -> None:
-        """1 候補の実測時間を記録する（API 互換性のため保持）。"""
+        """何もしない（API 互換性のために残している）。
+
+        引数は使われない。経過時間は ``elapsed_s``（``time.monotonic()`` 基準の
+        壁時計）から算出され、この呼び出しでは変化しない。
+        """
 
     @property
     def elapsed_s(self) -> float:

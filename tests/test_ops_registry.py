@@ -68,3 +68,17 @@ def test_op_info_derived_from_registry() -> None:
         info = OP_INFO[op]
         assert info.kind == defn.kind, f"{op}: kind mismatch"
         assert info.n_tensor_inputs == defn.n_tensor_inputs, f"{op}: n_tensor_inputs mismatch"
+
+
+def test_get_op_info_emits_deprecation_warning() -> None:
+    """非推奨シム get_op_info() は DeprecationWarning を出しつつ従来の値を返す (#363)。"""
+    import pytest
+
+    from forge.ops import get_op_info
+    from forge.ops.registry import OP_REGISTRY
+
+    op, defn = next(iter(OP_REGISTRY.items()))
+    with pytest.warns(DeprecationWarning, match="get_op_info"):
+        info = get_op_info(op)
+    assert info.kind == defn.kind
+    assert info.n_tensor_inputs == defn.n_tensor_inputs
