@@ -338,7 +338,7 @@
 ### 🐛 Bug Fixes
 
 * **cache:** from_dict に template_hash を追加 — [#116](https://github.com/flipslidersand/forge/issues/116) マージ後の TypeError を修正 ([#119](https://github.com/flipslidersand/forge/issues/119)) ([13ee1cd](https://github.com/flipslidersand/forge/commit/13ee1cd097d9324af27ef115fc766724e5e061e1)), closes [#109](https://github.com/flipslidersand/forge/issues/109)
-* **ci:** arc-dev-nodee → ubuntu-latest（lint/test/typecheck） ([#66](https://github.com/flipslidersand/forge/issues/66)) ([3aff784](https://github.com/flipslidersand/forge/commit/3aff78491389bb8b4d5c93c5793f3c6e9dde1d0e))
+* **ci:** self-hosted runner → ubuntu-latest（lint/test/typecheck） ([#66](https://github.com/flipslidersand/forge/issues/66)) ([3aff784](https://github.com/flipslidersand/forge/commit/3aff78491389bb8b4d5c93c5793f3c6e9dde1d0e))
 * cross-round dedup と per-spec token_usage リセット ([#16](https://github.com/flipslidersand/forge/issues/16) [#17](https://github.com/flipslidersand/forge/issues/17)) ([69c7982](https://github.com/flipslidersand/forge/commit/69c79829f2845e6b0d4b72ffd88b7a0bae9420f9))
 * gelu correctness_cases の入力生成を _gelu_inputs に分離 ([#97](https://github.com/flipslidersand/forge/issues/97)) ([c14b1a4](https://github.com/flipslidersand/forge/commit/c14b1a4b6f76a2980b36afb76603bb86b9bac705)), closes [#68](https://github.com/flipslidersand/forge/issues/68)
 * graph_hash をテンプレート内容ハッシュに変更 ([#104](https://github.com/flipslidersand/forge/issues/104)) ([493334c](https://github.com/flipslidersand/forge/commit/493334cf65f2d86fce5332a4b31b4c7b32bb53b4)), closes [#93](https://github.com/flipslidersand/forge/issues/93) [#93](https://github.com/flipslidersand/forge/issues/93) [#93](https://github.com/flipslidersand/forge/issues/93)
